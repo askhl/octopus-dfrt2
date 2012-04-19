@@ -214,11 +214,6 @@ subroutine X(eigensolver_cg2) (gr, st, hm, pre, tol, niter, converged, ik, diff)
 
   end do eigenfunction_loop
 
-  print*, "eigs"
-  do p = 1, st%nst
-     print*, st%eigenval(p, ik)
-  end do
-
   ! Deallocation of variables
   SAFE_DEALLOCATE_A(h_psi)
   SAFE_DEALLOCATE_A(g)
