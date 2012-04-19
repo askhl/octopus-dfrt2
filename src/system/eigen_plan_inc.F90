@@ -147,13 +147,13 @@ subroutine X(eigensolver_plan) (gr, st, hm, pre, tol, niter, converged, ik, diff
       ortho: do
         if(ist>d2) exit ortho
         do ii = 1, nec
-          av(ii, 1, d1 + 1) = X(mf_dotp)(gr%mesh, dim, eigenvec(:, :, ii), vv(:, :, ist))
+          av(ii, 1, d1 + 1) = X(mf_dotp)(gr%mesh, dim, eigenvec(:, :, ii), vv(:, :, ist), dotu = st%d%cmplxscl)
           do idim = 1, dim
             call lalg_axpy(gr%mesh%np, -av(ii, 1, d1 + 1), eigenvec(:, idim, ii), vv(:, idim, ist))
           end do
         end do
         do ii = 1, ist - 1
-          av(ii, 1, d1 + 1) = X(mf_dotp)(gr%mesh, dim, vv(:, :, ii), vv(:, :, ist))
+          av(ii, 1, d1 + 1) = X(mf_dotp)(gr%mesh, dim, vv(:, :, ii), vv(:, :, ist), dotu = st%d%cmplxscl)
           do idim = 1, dim
             call lalg_axpy(gr%mesh%np, -av(ii, 1, d1 + 1), vv(:, idim, ii), vv(:, idim, ist))
           end do
@@ -190,7 +190,7 @@ subroutine X(eigensolver_plan) (gr, st, hm, pre, tol, niter, converged, ik, diff
       ! part of the matrix since it is symmetric (LAPACK routine only needs the upper triangle).
       do ist = d1 + 1, d2
         do ii = 1, ist
-          ham(ii, ist) = X(mf_dotp)(gr%mesh, dim, vv(:, :, ii), av(:, :, ist))
+          ham(ii, ist) = X(mf_dotp)(gr%mesh, dim, vv(:, :, ii), av(:, :, ist), dotu = st%d%cmplxscl)
         end do
       end do
 
@@ -245,7 +245,7 @@ subroutine X(eigensolver_plan) (gr, st, hm, pre, tol, niter, converged, ik, diff
         ! Forms the first winsiz rows of H = V^T A V
         do ist = 1, winsiz
           do ii = 1, ist
-            ham(ii, ist) = X(mf_dotp)(gr%mesh, dim, vv(:, :, ii), av(:, :, ist))
+            ham(ii, ist) = X(mf_dotp)(gr%mesh, dim, vv(:, :, ii), av(:, :, ist), dotu = st%d%cmplxscl)
           end do
         end do
         d1 = winsiz
