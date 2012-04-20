@@ -617,7 +617,7 @@ contains
       st%priv%wfs_type = TYPE_CMPLX
       !Allocate imaginary parts of the eigenvalues
       SAFE_ALLOCATE(st%zeigenval%Im(1:st%nst, 1:st%d%nik))
-      st%zeigenval%Im = huge(st%zeigenval%Im)      
+      st%zeigenval%Im = M_ZERO
     end if
     SAFE_ALLOCATE(st%zeigenval%Re(1:st%nst, 1:st%d%nik))
     st%zeigenval%Re = huge(st%zeigenval%Re)
@@ -1890,7 +1890,7 @@ contains
       print *, "remember that I am here"
       SAFE_ALLOCATE(cmplxsclevals(st%nst,st%d%nik))
       emin = minval(st%zeigenval%Re)
-!       cmplxsclevals = (st%zeigenval%Re - emin)**2 + st%zeigenval%Im**2
+      !cmplxsclevals = (st%zeigenval%Re - emin)**2 + st%zeigenval%Im**2
       cmplxsclevals = (st%zeigenval%Re)**2 + st%zeigenval%Im**2
       call smear_find_fermi_energy(st%smear, cmplxsclevals, st%occ, st%qtot, &
         st%d%nik, st%nst, st%d%kweights)
@@ -1898,6 +1898,8 @@ contains
       call smear_fill_occupations(st%smear, cmplxsclevals, st%occ, &
         st%d%nik, st%nst)
       SAFE_DEALLOCATE_A(cmplxsclevals)
+
+      print*, st%smear%e_fermi
       
     else
       
