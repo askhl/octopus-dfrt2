@@ -479,6 +479,7 @@ subroutine X(states_orthogonalize_single)(st, mesh, nst, iqn, phi, normalize, ma
   logical :: normalize_
   integer :: ist, idim
   FLOAT   :: nrm2
+  CMPLX   :: cnrm2 ! cmplxscl
   R_TYPE, allocatable  :: ss(:), psi(:, :)
   type(profile_t), save :: prof
   type(profile_t), save :: reduce_prof
@@ -500,7 +501,7 @@ subroutine X(states_orthogonalize_single)(st, mesh, nst, iqn, phi, normalize, ma
     end if
           
     call states_get_state(st, mesh, ist, iqn, psi)
-    ss(ist) = X(mf_dotp)(mesh, st%d%dim, psi, phi, reduce = .false.)
+    ss(ist) = X(mf_dotp)(mesh, st%d%dim, psi, phi, reduce = .false., dotu = st%d%cmplxscl)
   end do
     
   if(mesh%parallel_in_domains) then
@@ -540,10 +541,18 @@ subroutine X(states_orthogonalize_single)(st, mesh, nst, iqn, phi, normalize, ma
   end if
 
   if(normalize_) then
-    nrm2 = X(mf_nrm2)(mesh, st%d%dim, phi)
-    do idim = 1, st%d%dim
-      call lalg_scal(mesh%np, M_ONE/nrm2, phi(:, idim))
-    end do
+    if (st%d%cmplxscl) then 
+       ! XXXXXXX fix sqrt branch
+      cnrm2 = sqrt(X(mf_dotp)(mesh, st%d%dim, phi, phi, dotu = .true.))
+      do idim = 1, st%d%dim
+         phi(:, idim) = phi(:, idim) * M_z1 / cnrm2
+      end do
+    else
+      nrm2 = X(mf_nrm2)(mesh, st%d%dim, phi)
+      do idim = 1, st%d%dim
+         call lalg_scal(mesh%np, M_ONE/nrm2, phi(:, idim))
+      end do
+    end if
   end if
 
   if(present(overlap)) then
