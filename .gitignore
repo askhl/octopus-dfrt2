@@ -4,6 +4,7 @@ script
 testsuite/oct-run_testsuite
 stamp-h1
 build/octopus.spec
+aclocal.m4
 
 # Use wildcards as well
 *.o
@@ -12,7 +13,6 @@ build/octopus.spec
 Makefile*
 *.a
 config*
-*.m4
 src/utils/oct*
 src/main/oct*
 share/vari*
