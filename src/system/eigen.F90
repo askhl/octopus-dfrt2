@@ -93,8 +93,11 @@ module eigensolver_m
        RS_EVO     =  9,         &
        RS_LOBPCG  =  8,         &
        RS_RMMDIIS = 10,         &
-       RS_BICG    = 12,         &
-       RS_DIRECT  = 13
+      #if defined(HAVE_ARPACK) 
+       RS_ARPACK  = 12,         &  
+     	#endif
+       RS_BICG    = 13,         &
+       RS_DIRECT  = 14
 
 contains
 
@@ -143,8 +146,11 @@ contains
     !% are required (around 10-20% of the number of occupied states).
     !%Option multigrid 7
     !% (Experimental) Multigrid eigensolver.
-    !%Option bicg 12
-    !% (Experimental) Non-Hermitian eigensolver using the biconjugate gradient
+    !%Option arpack 12
+    !% Implicitly Restarted Arnoldi Method. Requires the ARPACK package. 
+    !% method.
+    !%Option bicg 13
+    !% (Experimental) biconjugate gradient method.
     !% method.
     !%End
 
@@ -214,6 +220,31 @@ contains
       call parse_integer(datasets_check('EigensolverMinimizationIter'), 5, eigens%rmmdiis_minimization_iter)
 
       if(gr%mesh%use_curvilinear) call messages_experimental("RMMDIIS eigensolver for curvilinear coordinates")
+
+#if defined(HAVE_ARPACK) 
+    case(RS_ARPACK) 
+      	 	 
+      !%Variable EigenSolverArnoldiVectors 
+      !%Type integer 
+      !%Default 20 
+      !%Section SCF::EigenSolver 
+      !%Description 
+      !% This indicates how many Arnoldi vectors are generated 
+      !% It must satisfy EigenSolverArnoldiVectors - Number Of Eigenvectors >= 2. 
+      !% See the ARPACK documentation for more details. It will default to  
+      !% twice the number of eigenvectors (which is the number of states) 
+      !%End 
+      call parse_integer(datasets_check('EigenSolverArnoldiVectors'), 2*st%nst, eigens%arnoldi_vectors) 
+      if(eigens%arnoldi_vectors-st%nst < 2) call input_error('EigenSolverArnoldiVectors') 
+      	 	 
+      ! Arpack is not working in some cases, so let us check. 
+      if(st%d%ispin .eq. SPINORS) then 
+        write(message(1), '(a)') 'The ARPACK diagonalizer does not handle spinors (yet).' 
+        write(message(2), '(a)') 'Please provide a different EigenSolver.' 
+        call messages_fatal(2) 
+      end if 
+#endif 
+
     case default
       call input_error('Eigensolver')
     end select
@@ -369,6 +400,11 @@ contains
             call deigensolver_rmmdiis(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
               eigens%converged(ik), ik, eigens%diff(:, ik), hm%d%block_size)
           end if
+#if defined(HAVE_ARPACK) 
+ 	      case(RS_ARPACK) 
+ 	        call deigen_solver_arpack(gr, st, hm, eigens%tolerance, maxiter, eigens%arnoldi_vectors, & 
+ 	             eigens%converged(ik), ik, eigens%diff(:,ik)) 
+#endif 
         end select
 
         if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS) then
@@ -405,7 +441,7 @@ contains
           else
             call zeigensolver_rmmdiis(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
               eigens%converged(ik), ik,  eigens%diff(:, ik), hm%d%block_size)
-          end if
+          end if         
         end select
 
         if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and.eigens%es_type /= RS_DIRECT ) then
@@ -502,6 +538,15 @@ contains
 #include "eigen_mg_inc.F90"
 #include "eigen_plan_inc.F90"
 #include "eigen_evolution_inc.F90"
+
+#if defined(HAVE_ARPACK) 
+#include "undef.F90" 
+#include "real.F90" 
+#include "eigen_arpack_inc.F90" 
+#include "undef.F90" 
+#include "complex.F90" 
+#include "eigen_arpack_inc.F90" 
+#endif 
 
 end module eigensolver_m
 

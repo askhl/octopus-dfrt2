@@ -1,6 +1,4 @@
-dnl Available from the GNU Autoconf Macro Archive at:
-dnl http://www.gnu.org/software/ac-archive/htmldoc/acx_arpack.html
-dnl
+dnl looks for libarpack.a
 AC_DEFUN([ACX_ARPACK], [
 AC_REQUIRE([ACX_BLAS])
 acx_arpack_ok=no
@@ -10,9 +8,9 @@ if test "x$acx_blas_ok" != xyes; then
   acx_arpack_ok=noblas
 fi
 
-dnl Get fortran linker name of ARPACK function to check for.
-dnl if not compiling with fortran, convert the names
-m4_if(_AC_LANG, Fortran, [dnaupd=dnaupd], [AC_F77_FUNC(dnaupd)])
+dnl Backup LIBS 
+acx_arpack_save_LIBS="$LIBS"
+
 
 dnl Check if the library was given in the command line
 if test $acx_arpack_ok = no; then
@@ -25,14 +23,16 @@ if test $acx_arpack_ok = no; then
   esac
 fi
 
-dnl Backup LIBS 
-acx_arpack_save_LIBS="$LIBS"
-LIBS="$LIBS_ARPACK $LIBS_BLAS $LIBS $FLIBS"
+
 
 dnl First, check LIBS_ARPACK environment variable
 if test $acx_arpack_ok = no; then
-  AC_MSG_CHECKING([for $dnaupd in $LIBS_ARPACK])
-  AC_LINK_IFELSE($dnaupd, [acx_arpack_ok=yes], [])
+  LIBS="$LIBS_ARPACK $LIBS_LAPACK $LIBS_BLAS $acx_arpack_save_LIBS $FLIBS"
+  AC_MSG_CHECKING([for arpack library])
+  AC_LINK_IFELSE([
+	    program main
+	    call dsaupd
+	    end program main], [acx_arpack_ok=yes], [])
   if test $acx_arpack_ok = no; then
     AC_MSG_RESULT([$acx_arpack_ok])
   else
@@ -40,13 +40,21 @@ if test $acx_arpack_ok = no; then
   fi
 fi
 
-dnl Generic ARPACK library?
-for arpack in arpack parpack; do
+if test $acx_arpack_ok = no; then
+  LIBS="$LIBS_ARPACK -larpack $LIBS_LAPACK $LIBS_BLAS $acx_arpack_save_LIBS $FLIBS"
+  AC_MSG_CHECKING([for arpack library with -larpack])
+  AC_LINK_IFELSE([
+    program main
+    call dsaupd
+    end program main
+], [acx_arpack_ok=yes; LIBS_ARPACK="$LIBS_ARPACK -larpack"], [])
   if test $acx_arpack_ok = no; then
-    AC_CHECK_LIB($arpack, $dnaupd,
-      [acx_arpack_ok=yes; LIBS_ARPACK="$LIBS_ARPACK -l$arpack"], [], [$FLIBS])
+    AC_MSG_RESULT([$acx_arpack_ok])
+  else
+    AC_MSG_RESULT([$acx_arpack_ok ($LIBS_ARPACK)])
   fi
-done
+fi
+
 
 AC_SUBST(LIBS_ARPACK)
 LIBS="$acx_arpack_save_LIBS"
