@@ -32,7 +32,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   FLOAT, allocatable :: ax(:), d(:, :), resid(:), v(:, :),   &
     workd(:), workev(:), workl(:)
   integer :: ldv, nev, iparam(11), ipntr(14), ido, n, lworkl, info, ierr, &
-    i, j, ishfts, maxitr, mode1
+    i, j, ishfts, maxitr, mode1, ist
   FLOAT :: tol, sigmar, sigmai
 	
 	!!!!WARNING: No support for spinors, yet. No support for complex wavefunctions.
@@ -69,7 +69,8 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   info = 1
 	
   do i = 1, gr%mesh%np
-    resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(i))
+     resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))
+!                 sqrt(gr%mesh%vol_pp(i))
   end do
 	
   ishfts = 1
@@ -106,12 +107,13 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 
   ! This sets the number of converged eigenvectors.
   converged =  iparam(5)
-  !call dmout(6, converged, 3, d, ncv, -6, 'Ritz values (Real, Imag) and residual residuals')
+  call dmout(6, converged, 3, d, ncv, -6, 'Ritz values (Real, Imag) and residual residuals')
   ! This sets niter to the number of matrix-vector operations.
   niter = iparam(9)
   do j = 1, min(st%nst, converged)
     do i = 1, gr%mesh%np
-      st%X(psi)(i, 1, j, ik) = v(i, j)/sqrt(gr%mesh%vol_pp(i))
+      st%X(psi)(i, 1, j, ik) = v(i, j)
+!       /sqrt(gr%mesh%vol_pp(i))
     end do
     st%eigenval(j, ik) = d(j, 1)
     if(workl(ipntr(11)+j-1)< M_EPSILON) then
@@ -143,23 +145,26 @@ contains
     R_TYPE, allocatable :: psi(:, :), hpsi(:, :)
     
     NP = gr%mesh%np
-    NP = gr%mesh%np_part
+    NP_PART = gr%mesh%np_part
 
-    SAFE_ALLOCATE(psi(NP_PART, 1))
-    SAFE_ALLOCATE(hpsi(NP_PART, 1))
+    SAFE_ALLOCATE(psi(NP_PART, hm%d%dim))
+    SAFE_ALLOCATE(hpsi(NP_PART, hm%d%dim))
 
     do i = 1, NP
-      psi(i, 1) = v(i)/sqrt(gr%mesh%vol_pp(i))
+!       print *,i, NP, NP_PART, ist
+      psi(i, 1) = v(i)
+!       /sqrt(gr%mesh%vol_pp(i))
     end do
     do i = NP+1, NP_PART
       psi(i, 1) = M_ZERO
     end do
     
-    call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, st%nst, ik)
+    call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, 1, ik)
     
         
     do i = 1, NP
-      w(i) = hpsi(i, 1)*sqrt(gr%mesh%vol_pp(i))
+      w(i) = hpsi(i, 1)
+!       sqrt(gr%mesh%vol_pp(i))
     end do
 
 

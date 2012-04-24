@@ -93,9 +93,7 @@ module eigensolver_m
        RS_EVO     =  9,         &
        RS_LOBPCG  =  8,         &
        RS_RMMDIIS = 10,         &
-      #if defined(HAVE_ARPACK) 
        RS_ARPACK  = 12,         &  
-     	#endif
        RS_BICG    = 13,         &
        RS_DIRECT  = 14
 
@@ -407,7 +405,7 @@ contains
 #endif 
         end select
 
-        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS) then
+        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and. eigens%es_type /= RS_ARPACK) then
           call dsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%eigenval(:, ik), diff = eigens%diff(:, ik))
         end if
 
