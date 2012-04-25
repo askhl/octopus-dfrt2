@@ -182,6 +182,7 @@ contains
 ! psi(1:NP,1) = v(:)
 ! psi(NP+1:NP_PART,1) = M_ZERO
     
+    
     call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, 1, ik)
     
 ! w(:) = hpsi(1:NP,1)
