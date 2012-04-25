@@ -29,12 +29,14 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   FLOAT,     optional, intent(out)   :: diff(1:st%nst)
 	
   logical, allocatable :: select(:)
-  FLOAT, allocatable :: ax(:), d(:, :), resid(:), v(:, :),   &
-    workd(:), workev(:), workl(:)
+  R_TYPE, allocatable :: ax(:), d(:, :), resid(:), v(:, :),   &
+                         workd(:), workev(:), workl(:)
+                     
   integer :: ldv, nev, iparam(11), ipntr(14), ido, n, lworkl, info, ierr, &
-    i, j, ishfts, maxitr, mode1, ist
+             i, j, ishfts, maxitr, mode1, ist
   FLOAT :: tol, sigmar, sigmai
-	
+  FLOAT, allocatable :: rwork(:) 
+  CMPLX :: sigma 	
 	!!!!WARNING: No support for spinors, yet. No support for complex wavefunctions.
   PUSH_SUB('eigen_arpack.eigen_solver_arpack')
 	
@@ -62,6 +64,9 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   SAFE_ALLOCATE(workev(3*ncv))
   SAFE_ALLOCATE(workl(lworkl))
   SAFE_ALLOCATE(select(ncv))
+#if defined(R_TCOMPLEX)
+  SAFE_ALLOCATE(rwork(ncv))
+#endif
 	
   select = .true.
   tol    = tol_
@@ -69,9 +74,9 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   info = 1
 	
   do i = 1, gr%mesh%np
-     resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))
-!                 sqrt(gr%mesh%vol_pp(i))
+     resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
   end do
+
 	
   ishfts = 1
   maxitr = niter
@@ -81,8 +86,16 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   iparam(7) = mode1
 	
   do
-    call dnaupd ( ido, 'I', n, 'SR', nev, tol, resid, ncv, &
-      v, ldv, iparam, ipntr, workd, workl, lworkl, info )
+#if defined(R_TCOMPLEX)      
+    call znaupd  ( ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+               v, ldv, iparam, ipntr, workd, workl, lworkl, &
+               rwork,info )
+#else 
+    call dnaupd  ( ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+               v, ldv, iparam, ipntr, workd, workl, lworkl, & 
+               info )
+#endif      
+      
     if( abs(ido).ne.1) exit
     call av (n, workd(ipntr(1)), workd(ipntr(2)))
   end do
@@ -93,12 +106,19 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
     write(message(2),'(a)')    'Check the documentation of _naupd.'
     call messages_fatal(2)
   end if
-	
-  call dneupd ( .true., 'A', select, d, d(1,2), v, ldv, &
-    sigmar, sigmai, workev, 'I', n, 'SR', nev, tol, &
-    resid, ncv, v, ldv, iparam, ipntr, workd, workl, &
-  lworkl, ierr )
 
+#if defined(R_TCOMPLEX) 
+  call zneupd  (.true., 'A', select, d, v, ldv, sigma, &
+        workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
+        v, ldv, iparam, ipntr, workd, workl, lworkl, &
+        rwork, ierr)
+#else	
+  call dneupd ( .true., 'A', select, d, d(1,2), v, ldv, &
+       sigmar, sigmai, workev, 'I', n, 'SR', nev, tol, &
+       resid, ncv, v, ldv, iparam, ipntr, workd, workl, &
+       lworkl, ierr )
+#endif
+       
   if(ierr .ne. 0) then
     write(message(1),'(a,i5)') 'Error with ARPACK _neupd, info = ', info
     write(message(2),'(a)')    'Check the documentation of _neupd.'
@@ -112,11 +132,10 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   niter = iparam(9)
   do j = 1, min(st%nst, converged)
     do i = 1, gr%mesh%np
-      st%X(psi)(i, 1, j, ik) = v(i, j)
-!       /sqrt(gr%mesh%vol_pp(i))
+      st%X(psi)(i, 1, j, ik) = v(i, j)/sqrt(gr%mesh%vol_pp(1))
     end do
     st%eigenval(j, ik) = d(j, 1)
-    if(workl(ipntr(11)+j-1)< M_EPSILON) then
+    if(abs(workl(ipntr(11)+j-1))< M_EPSILON) then
       diff(j) = M_ZERO
     else
       diff(j) = workl(ipntr(11)+j-1)
@@ -131,6 +150,9 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   SAFE_DEALLOCATE_A(workev)
   SAFE_DEALLOCATE_A(workl)
   SAFE_DEALLOCATE_A(select)
+#if defined(R_TCOMPLEX)
+  SAFE_DEALLOCATE_A(rwork)
+#endif
 
 
 
@@ -140,7 +162,7 @@ contains
   ! ---------------------------------------------------------
   subroutine av (n, v, w)
     integer :: n
-    FLOAT :: v(n), w(n)
+    R_TYPE :: v(n), w(n)
     integer :: i, NP, NP_PART
     R_TYPE, allocatable :: psi(:, :), hpsi(:, :)
     
@@ -152,19 +174,20 @@ contains
 
     do i = 1, NP
 !       print *,i, NP, NP_PART, ist
-      psi(i, 1) = v(i)
-!       /sqrt(gr%mesh%vol_pp(i))
+      psi(i, 1) = v(i)/sqrt(gr%mesh%vol_pp(1))
     end do
     do i = NP+1, NP_PART
       psi(i, 1) = M_ZERO
     end do
+! psi(1:NP,1) = v(:)
+! psi(NP+1:NP_PART,1) = M_ZERO
     
     call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, 1, ik)
     
+! w(:) = hpsi(1:NP,1)
         
     do i = 1, NP
-      w(i) = hpsi(i, 1)
-!       sqrt(gr%mesh%vol_pp(i))
+      w(i) = hpsi(i, 1)*sqrt(gr%mesh%vol_pp(1))
     end do
 
 

@@ -440,9 +440,14 @@ contains
             call zeigensolver_rmmdiis(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
               eigens%converged(ik), ik,  eigens%diff(:, ik), hm%d%block_size)
           end if         
+#if defined(HAVE_ARPACK) 
+       	case(RS_ARPACK) 
+ 	        call zeigen_solver_arpack(gr, st, hm, eigens%tolerance, maxiter, eigens%arnoldi_vectors, & 
+ 	             eigens%converged(ik), ik, eigens%diff(:,ik)) 
+#endif 
         end select
 
-        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and.eigens%es_type /= RS_DIRECT ) then
+        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and.eigens%es_type /= RS_ARPACK ) then
           if(hm%cmplxscl) then
             call zsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), &
                    eigens%diff(:, ik))
