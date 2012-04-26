@@ -237,7 +237,7 @@ subroutine eigensolver_bicg (gr, st, hm, pre, tol, niter, converged, ik, diff)
 
       if(gr%mesh%parallel_in_domains) call comm_allreduce(gr%mesh%vp%comm, es, dim = 2)
 
-      es(1) = es(1)/es(2)
+      es(1) = es(1)/es(2) ! 1/alpha_k
 
       do idim = 1, st%d%dim
          ! the REAL below was R_TOPREC
