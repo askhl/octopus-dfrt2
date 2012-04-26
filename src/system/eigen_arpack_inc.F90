@@ -29,13 +29,13 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   FLOAT,     optional, intent(out)   :: diff(1:st%nst)
 	
   logical, allocatable :: select(:)
-  R_TYPE, allocatable :: ax(:), d(:, :), resid(:), v(:, :),   &
+  R_TYPE, allocatable :: ax(:),  resid(:), v(:, :),   &
                          workd(:), workev(:), workl(:), zd(:)
                      
   integer :: ldv, nev, iparam(11), ipntr(14), ido, n, lworkl, info, ierr, &
              i, j, ishfts, maxitr, mode1, ist
   FLOAT :: tol, sigmar, sigmai
-  FLOAT, allocatable :: rwork(:) 
+  FLOAT, allocatable :: rwork(:), d(:, :) 
   CMPLX :: sigma 	
 	!!!!WARNING: No support for spinors, yet. No support for complex wavefunctions.
   PUSH_SUB('eigen_arpack.eigen_solver_arpack')
@@ -73,7 +73,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   tol    = tol_
   ido    = 0
   info = 1
-	
+  
   do i = 1, gr%mesh%np
      resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
   end do
@@ -115,6 +115,8 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
         rwork, ierr)
         d(:,1)=real(zd(:))
         d(:,2)=aimag(zd(:))
+        d(:,3)=M_ZERO
+        
 #else	
   call dneupd ( .true., 'A', select, d, d(1,2), v, ldv, &
        sigmar, sigmai, workev, 'I', n, 'SR', nev, tol, &
@@ -131,7 +133,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   ! This sets the number of converged eigenvectors.
   converged =  iparam(5)
 
-  call dmout(6, converged, 3, d, ncv, -6, 'Ritz values (Real, Imag) and residual residuals')
+  call dmout(6, converged, 3, d, ncv+1, -6, 'Ritz values (Real, Imag) and residual residuals')
 
   ! This sets niter to the number of matrix-vector operations.
   niter = iparam(9)
