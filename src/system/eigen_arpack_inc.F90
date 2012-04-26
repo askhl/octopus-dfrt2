@@ -57,7 +57,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   nev = st%nst
   lworkl  = 3*ncv**2+6*ncv
   SAFE_ALLOCATE(ax(ldv))
-  SAFE_ALLOCATE(d(ncv, 3))
+  SAFE_ALLOCATE(d(ncv+1, 3))
   SAFE_ALLOCATE(resid(ldv))
   SAFE_ALLOCATE(v(ldv, ncv))
   SAFE_ALLOCATE(workd(3*ldv))
@@ -66,7 +66,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   SAFE_ALLOCATE(select(ncv))
 #if defined(R_TCOMPLEX)
   SAFE_ALLOCATE(rwork(ncv))
-  SAFE_ALLOCATE(zd(ncv))
+  SAFE_ALLOCATE(zd(ncv+1))
 #endif
 	
   select = .true.
@@ -113,6 +113,8 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
         workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
         v, ldv, iparam, ipntr, workd, workl, lworkl, &
         rwork, ierr)
+        d(:,1)=real(zd(:))
+        d(:,2)=aimag(zd(:))
 #else	
   call dneupd ( .true., 'A', select, d, d(1,2), v, ldv, &
        sigmar, sigmai, workev, 'I', n, 'SR', nev, tol, &
@@ -129,11 +131,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   ! This sets the number of converged eigenvectors.
   converged =  iparam(5)
 
-#if defined(R_TCOMPLEX)
-  call dmout(6, converged, 3, zd, ncv, -6, 'Ritz values (Real, Imag) and residual residuals')
-#else
   call dmout(6, converged, 3, d, ncv, -6, 'Ritz values (Real, Imag) and residual residuals')
-#endif
 
   ! This sets niter to the number of matrix-vector operations.
   niter = iparam(9)
@@ -141,17 +139,12 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
     do i = 1, gr%mesh%np
       st%X(psi)(i, 1, j, ik) = v(i, j)/sqrt(gr%mesh%vol_pp(1))
     end do
-#if defined(R_TCOMPLEX)    
-    st%eigenval(j, ik) = real(zd(j))
-    if(associated(st%zeigenval%Im))then 
-      st%zeigenval%Im(j, ik) = aimag(zd(j))
-    end if
-#else
+
     st%eigenval(j, ik) = d(j, 1)
     if(associated(st%zeigenval%Im))then 
       st%zeigenval%Im(j, ik) = d(j, 2)
     end if
-#endif    
+
     if(abs(workl(ipntr(11)+j-1))< M_EPSILON) then
       diff(j) = M_ZERO
     else
