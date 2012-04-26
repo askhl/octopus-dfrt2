@@ -1886,22 +1886,19 @@ contains
 
     PUSH_SUB(states_fermi)
 
-    if(st%d%cmplxscl) then
-      print *, "remember that I am here"
-      SAFE_ALLOCATE(cmplxsclevals(st%nst,st%d%nik))
-      emin = minval(st%zeigenval%Re)
-      !cmplxsclevals = (st%zeigenval%Re - emin)**2 + st%zeigenval%Im**2
-      cmplxsclevals = (st%zeigenval%Re)**2 + st%zeigenval%Im**2
-      call smear_find_fermi_energy(st%smear, cmplxsclevals, st%occ, st%qtot, &
-        st%d%nik, st%nst, st%d%kweights)
-
-      call smear_fill_occupations(st%smear, cmplxsclevals, st%occ, &
-        st%d%nik, st%nst)
-      SAFE_DEALLOCATE_A(cmplxsclevals)
-
-      print*, st%smear%e_fermi
-      
-    else
+!     if(st%d%cmplxscl) then
+!       print *, "remember that I am here"
+!       SAFE_ALLOCATE(cmplxsclevals(st%nst,st%d%nik))
+!       emin = minval(st%zeigenval%Re)
+!       !cmplxsclevals = (st%zeigenval%Re - emin)**2 + st%zeigenval%Im**2
+!       cmplxsclevals = (st%zeigenval%Re)**2 + st%zeigenval%Im**2
+!       call smear_find_fermi_energy(st%smear, cmplxsclevals, st%occ, st%qtot, &
+!         st%d%nik, st%nst, st%d%kweights)
+! 
+!       call smear_fill_occupations(st%smear, cmplxsclevals, st%occ, &
+!         st%d%nik, st%nst)
+!       SAFE_DEALLOCATE_A(cmplxsclevals)      
+!     else
       
       call smear_find_fermi_energy(st%smear, st%eigenval, st%occ, st%qtot, &
         st%d%nik, st%nst, st%d%kweights)
@@ -1909,7 +1906,7 @@ contains
       call smear_fill_occupations(st%smear, st%eigenval, st%occ, &
         st%d%nik, st%nst)
         
-    end if
+!     end if
     
     ! check if everything is OK
     charge = M_ZERO
