@@ -86,12 +86,12 @@ contains
     h_rr=M_z0
     psi=M_z0
 
-    kinetic_phase = exp(-2.0 * M_zI * hm%cmplxscl_th)
+    kinetic_phase = exp(-M_TWO * M_zI * hm%cmplxscl_th)
     
     spacingsquared = (gr%mesh%spacing(1) * gr%mesh%spacing(1))
 
-    fdkinetic = .false.
-    !fdkinetic = .true.
+    !fdkinetic = .false.
+    fdkinetic = .true.
 
     if (.not.fdkinetic) then
        do ib = 1, gr%mesh%np
@@ -99,9 +99,9 @@ contains
              tmp = 0
              do p = 1, (gr%mesh%np - 1) / 2
                 tmp2 = p * M_PI / (gr%mesh%np * gr%mesh%spacing(1))
-                tmp = tmp + cos((p*2*M_PI*(ib-jb))/gr%mesh%np)*2*tmp2*tmp2
+                tmp = tmp + cos((p*M_TWO*M_PI*(ib-jb))/gr%mesh%np)*2*tmp2*tmp2
              end do
-             h_rr(jb, ib) = tmp * 2 * kinetic_phase / gr%mesh%np
+             h_rr(jb, ib) = tmp * M_TWO * kinetic_phase / gr%mesh%np
           end do
        end do
     end if
@@ -109,13 +109,13 @@ contains
     do ib = 1, gr%mesh%np
        ! kinetic fd stencil
        if (fdkinetic) then
-          h_rr(ib, ib) = (1.0, 0.0) / spacingsquared * kinetic_phase
+          h_rr(ib, ib) = M_ONE / spacingsquared * kinetic_phase
           if (ib > 1) then
-             h_rr(ib, ib - 1) = (-0.5, 0.0) / spacingsquared * kinetic_phase
-             h_rr(ib - 1, ib) = (-0.5, 0.0) / spacingsquared * kinetic_phase
+             h_rr(ib, ib - 1) = -M_HALF / spacingsquared * kinetic_phase
+             h_rr(ib - 1, ib) = -M_HALF / spacingsquared * kinetic_phase
           end if
        end if
-       h_rr(ib, ib) = h_rr(ib, ib) + hm%hm_base%potential(ib, 1) + (0.0, 1.0) * hm%hm_base%Impotential(ib, 1)
+       h_rr(ib, ib) = h_rr(ib, ib) + hm%hm_base%potential(ib, 1) + M_zI * hm%hm_base%Impotential(ib, 1)
     end do
 
     cL_rr = h_rr
@@ -132,8 +132,8 @@ contains
     
     !sortkey(:) = -imag(manyzeigenval(:))
     !sortkey(:) = real(manyzeigenval(:)) - imag(manyzeigenval(:))
-    !sortkey(:) = real(manyzeigenval(:))
-    sortkey(:) = abs(manyzeigenval(:))
+    sortkey(:) = real(manyzeigenval(:))
+!     sortkey(:) = abs(manyzeigenval(:))
     call sort(sortkey, sortindices)
     
     do p = 1, st%nst
@@ -150,6 +150,9 @@ contains
     end do
 
     if (present(diff)) diff = M_ZERO
+    
+    converged = st%nst
+    niter = huge(1)
 
     SAFE_DEALLOCATE_A(psi)
     SAFE_DEALLOCATE_A(h_psi)

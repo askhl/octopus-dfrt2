@@ -447,7 +447,8 @@ contains
 #endif 
         end select
 
-        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and.eigens%es_type /= RS_ARPACK ) then
+        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and.eigens%es_type /= RS_ARPACK &
+          .and.eigens%es_type /= RS_DIRECT ) then
           if(hm%cmplxscl) then
             call zsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), &
                    eigens%diff(:, ik))
