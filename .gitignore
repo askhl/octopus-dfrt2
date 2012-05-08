@@ -12,6 +12,7 @@ aclocal.m4
 *.mod
 Makefile*
 *.a
+*.f90
 config*
 src/utils/oct*
 src/main/oct*
