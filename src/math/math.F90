@@ -165,7 +165,7 @@ module math_m
   end interface
 
   interface matrix_sort
-    module procedure dmatrix_sort, zmatrix_sort, matrix_sort_complex
+    module procedure dmatrix_sort, zmatrix_sort
   end interface
 
   interface log2
@@ -1223,9 +1223,6 @@ subroutine sort_complex(vec, Imvec, reorder)
     print *, "--->", i ,vec(i), Imvec(i), reorder(i)
   end do
   
-
-  
-  
   
   SAFE_DEALLOCATE_A(tempI)  
   SAFE_DEALLOCATE_A(temp)
@@ -1234,35 +1231,6 @@ subroutine sort_complex(vec, Imvec, reorder)
   POP_SUB(sort_complex)
 end subroutine sort_complex
 
-
-! ---------------------------------------------------------
-! sort the eigenvectors according to eigenvalues complex 
-! ordering
-subroutine matrix_sort_complex(np, matrix, eigenvals, Imeigenvals)
-  integer, intent(in)    :: np
-  CMPLX,  intent(inout)  :: matrix(:, :)
-  FLOAT,  intent(inout)  :: eigenvals(:)
-  FLOAT,  intent(inout)  :: Imeigenvals(:)
-
-  integer              :: i
-  CMPLX, allocatable  :: unsorted_matrix(:, :)
-  integer, allocatable :: index(:)
-
-  PUSH_SUB(matrix_sort_complex)
-
-  SAFE_ALLOCATE( index(1:np) )
-  SAFE_ALLOCATE( unsorted_matrix(1:np, 1:np) )
-
-  unsorted_matrix(:, :) = matrix(:, :)
-  call sort_complex(eigenvals, Imeigenvals, index)
-  do i=1, np
-    matrix(:, i) = unsorted_matrix(:, index(i))
-  end do
-  SAFE_DEALLOCATE_A(index)
-  SAFE_DEALLOCATE_A(unsorted_matrix)
-
-  POP_SUB(matrix_sort_complex)
-end subroutine matrix_sort_complex
 
 
 #include "undef.F90"
