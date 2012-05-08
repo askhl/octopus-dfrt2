@@ -76,7 +76,7 @@ contains
     SAFE_ALLOCATE(  psi(1:gr%mesh%np, 1:st%d%dim))
     SAFE_ALLOCATE(h_psi(1:gr%mesh%np, 1:st%d%dim))
     SAFE_ALLOCATE(h_rr(1:gr%mesh%np, 1:gr%mesh%np))
-    SAFE_ALLOCATE(cL_rr(1:gr%mesh%np, 1:gr%mesh%np))
+    SAFE_ALLOCATE(cL_rr(1:2, 1:2))
     SAFE_ALLOCATE(cR_rr(1:gr%mesh%np, 1:gr%mesh%np))
     SAFE_ALLOCATE(zeigenval(1:st%nst))
     SAFE_ALLOCATE(manyzeigenval(1:gr%mesh%np))
@@ -88,62 +88,110 @@ contains
 
     kinetic_phase = exp(-M_TWO * M_zI * hm%cmplxscl_th)
     
+    print *,"theta",hm%cmplxscl_th
+    
     spacingsquared = (gr%mesh%spacing(1) * gr%mesh%spacing(1))
 
-    !fdkinetic = .false.
-    fdkinetic = .true.
+    fdkinetic = .false.
+!     fdkinetic = .true.
+    
+!     if (.not.fdkinetic) then
+!        do ib = 1, gr%mesh%np
+!           do jb = 1, gr%mesh%np
+!              tmp = 0
+!              do p = 1, (gr%mesh%np - 1) / 2
+!                 tmp2 = p * M_PI / (gr%mesh%np * gr%mesh%spacing(1))
+!                 tmp = tmp + cos((p*M_TWO*M_PI*(ib-jb))/gr%mesh%np)*2*tmp2*tmp2
+!              end do
+!              h_rr(jb, ib) = tmp * M_TWO * kinetic_phase / gr%mesh%np
+!              if(jb==ib) then
+!                h_rr(ib, ib) = h_rr(ib, ib) + hm%hm_base%potential(ib, 1) + M_zI * hm%hm_base%Impotential(ib, 1)
+!              end if
+!           end do
+!        end do
+!     end if
 
     if (.not.fdkinetic) then
+      tmp2 = M_z0
        do ib = 1, gr%mesh%np
           do jb = 1, gr%mesh%np
-             tmp = 0
+             tmp = M_z0
              do p = 1, (gr%mesh%np - 1) / 2
-                tmp2 = p * M_PI / (gr%mesh%np * gr%mesh%spacing(1))
-                tmp = tmp + cos((p*M_TWO*M_PI*(ib-jb))/gr%mesh%np)*2*tmp2*tmp2
+               tmp = tmp + cos((p*M_TWO*M_PI*(ib-jb))/gr%mesh%np)*M_TWO*&
+                 (((M_PI*p)/(gr%mesh%np * gr%mesh%spacing(1)))**2);
              end do
              h_rr(jb, ib) = tmp * M_TWO * kinetic_phase / gr%mesh%np
+             if(jb==ib) then
+               h_rr(ib, ib) = h_rr(ib, ib) + hm%hm_base%potential(ib, 1) + M_zI * hm%hm_base%Impotential(ib, 1)
+               tmp2= tmp2 + h_rr(ib, ib)
+             end if
           end do
        end do
     end if
 
-    do ib = 1, gr%mesh%np
-       ! kinetic fd stencil
-       if (fdkinetic) then
-          h_rr(ib, ib) = M_ONE / spacingsquared * kinetic_phase
-          if (ib > 1) then
-             h_rr(ib, ib - 1) = -M_HALF / spacingsquared * kinetic_phase
-             h_rr(ib - 1, ib) = -M_HALF / spacingsquared * kinetic_phase
-          end if
-       end if
-       h_rr(ib, ib) = h_rr(ib, ib) + hm%hm_base%potential(ib, 1) + M_zI * hm%hm_base%Impotential(ib, 1)
-    end do
+    if (fdkinetic) then
+      do ib = 1, gr%mesh%np
+         ! kinetic fd stencil
+            h_rr(ib, ib) = M_ONE / spacingsquared * kinetic_phase
+            if (ib > 1) then
+               h_rr(ib, ib - 1) = -(M_HALF / spacingsquared) * kinetic_phase
+               h_rr(ib - 1, ib) = -(M_HALF / spacingsquared) * kinetic_phase
+            end if
+         h_rr(ib, ib) = h_rr(ib, ib) + hm%hm_base%potential(ib, 1) + M_zI * hm%hm_base%Impotential(ib, 1)
+      end do
+    end if
 
-    cL_rr = h_rr
+   
+    cL_rr (1,1) = M_z0 
+    cL_rr (2,2) = M_z0
+    cL_rr (1,2) = M_z1 * kinetic_phase
+    cL_rr (2,1) = M_z1 * kinetic_phase
+        
+    call zmout(6, 2, 2, cL_rr, 2, -6, 'pauli scaled')
+    
+    call lalg_eigensolve_nonh(2, cL_rr, manyzeigenval, errcode, 'R')
+    if (errcode.ne.0) then
+       print*, 'something went wrong, errcode', errcode
+    end if
+    
+    print *,"eigs", manyzeigenval(1:2)
+    call zmout(6, 2, 2, cL_rr, 2, -6, 'pauli scaled vecs')
+
+!     cL_rr = h_rr
     cR_rr = h_rr
+    
+    call zmout(6, st%nst, st%nst, h_rr, gr%mesh%np, -6, 'HRR')
     
     call lalg_eigensolve_nonh(gr%mesh%np, cR_rr, manyzeigenval, errcode, 'R')
     if (errcode.ne.0) then
        print*, 'something went wrong, errcode', errcode
     end if
-    call lalg_eigensolve_nonh(gr%mesh%np, cL_rr, manyzeigenval, errcode, 'L')
-    if (errcode.ne.0) then
-       print*, 'something went wrong, errcode', errcode
-    end if
+!     call lalg_eigensolve_nonh(gr%mesh%np, cL_rr, manyzeigenval, errcode, 'L')
+!     if (errcode.ne.0) then
+!        print*, 'something went wrong, errcode', errcode
+!     end if
     
+!     call zmout(6, gr%mesh%np, 1, manyzeigenval, gr%mesh%np, -6, 'zeigenval')
+     
+    tmp = sum(manyzeigenval(:))
+    print *, "the trace vals!!", tmp, "the trace H", tmp2
+
     !sortkey(:) = -imag(manyzeigenval(:))
     !sortkey(:) = real(manyzeigenval(:)) - imag(manyzeigenval(:))
     sortkey(:) = real(manyzeigenval(:))
 !     sortkey(:) = abs(manyzeigenval(:))
+
     call sort(sortkey, sortindices)
     
     do p = 1, st%nst
        zeigenval(p) = manyzeigenval(sortindices(p))
+       print *, p, zeigenval(p)
     end do
     
     do p = 1, st%nst
        do ib = 1, gr%mesh%np
-          st%psi%zL(ib, 1, p, 1) = cL_rr(ib, p)
-          st%psi%zR(ib, 1, p, 1) = cR_rr(ib, p)
+!           st%psi%zL(ib, 1, p, 1) = cL_rr(ib, sortindices(p))
+           st%psi%zR(ib, 1, p, 1) = cR_rr(ib, sortindices(p))
        end do
        st%zeigenval%Re(p, ik) = real(zeigenval(p))
        st%zeigenval%Im(p, ik) = aimag(zeigenval(p))

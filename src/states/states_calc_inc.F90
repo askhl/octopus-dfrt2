@@ -478,8 +478,7 @@ subroutine X(states_orthogonalize_single)(st, mesh, nst, iqn, phi, normalize, ma
 
   logical :: normalize_
   integer :: ist, idim
-  FLOAT   :: nrm2
-  CMPLX   :: cnrm2 ! cmplxscl
+  R_TYPE  :: nrm2
   R_TYPE, allocatable  :: ss(:), psi(:, :)
   type(profile_t), save :: prof
   type(profile_t), save :: reduce_prof
@@ -543,9 +542,9 @@ subroutine X(states_orthogonalize_single)(st, mesh, nst, iqn, phi, normalize, ma
   if(normalize_) then
     if (st%d%cmplxscl) then 
        ! XXXXXXX fix sqrt branch
-      cnrm2 = sqrt(X(mf_dotp)(mesh, st%d%dim, phi, phi, dotu = .true.))
+      nrm2 = sqrt(X(mf_dotp)(mesh, st%d%dim, phi, phi, dotu = .true.))
       do idim = 1, st%d%dim
-         phi(:, idim) = phi(:, idim) * M_z1 / cnrm2
+         phi(:, idim) = phi(:, idim) / nrm2
       end do
     else
       nrm2 = X(mf_nrm2)(mesh, st%d%dim, phi)

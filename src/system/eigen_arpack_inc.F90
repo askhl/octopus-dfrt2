@@ -75,7 +75,8 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   info = 1
   
   do i = 1, gr%mesh%np
-     resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
+!      resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
+      resid(i) = R_TOTYPE(M_ONE)
   end do
 
 	

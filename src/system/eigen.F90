@@ -461,7 +461,15 @@ contains
 
       eigens%matvec = eigens%matvec + maxiter
     end do ik_loop
-
+    
+    ! If we complex scale H the eigenstates need to be otrhonormalized with respect to the c-product.
+    ! Moreover the eigenvalues ordering need to be imposed as there is no eigensolver 
+    ! supporting this ordering (yet).
+    if(hm%cmplxscl) then !cmplxscl
+      call states_orthogonalize_cproduct(st, gr%mesh)
+      call states_sort_complex(st, gr%mesh)
+    end if
+    
     if(mpi_grp_is_root(mpi_world) .and. eigensolver_has_progress_bar(eigens)) then
       write(stdout, '(1x)')
     end if
