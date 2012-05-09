@@ -233,7 +233,7 @@ contains
       !% twice the number of eigenvectors (which is the number of states) 
       !%End 
       call parse_integer(datasets_check('EigenSolverArnoldiVectors'), 2*st%nst, eigens%arnoldi_vectors) 
-      if(eigens%arnoldi_vectors-st%nst < 2) call input_error('EigenSolverArnoldiVectors') 
+      if(eigens%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigenSolverArnoldiVectors') 
       	 	 
       ! Arpack is not working in some cases, so let us check. 
       if(st%d%ispin .eq. SPINORS) then 

@@ -90,10 +90,15 @@ module v_ks_m
     FLOAT,                pointer :: a_ind(:, :)
     FLOAT,                pointer :: b_ind(:, :)
     logical                       :: calc_energy
-    !complex quantities 
+
+    !cmplxscl
     FLOAT,                pointer :: Imdensity(:, :)
     FLOAT,                pointer :: Imtotal_density(:)
     FLOAT,                pointer :: Imvxc(:, :)
+    FLOAT,                pointer :: Imvtau(:, :)
+    FLOAT,                pointer :: Imaxc(:, :, :)
+    FLOAT,                pointer :: Imvberry(:, :)
+    
   end type v_ks_calc_t
 
   type v_ks_t
@@ -429,10 +434,13 @@ contains
     
     type(profile_t), save :: prof
     type(energy_t), pointer :: energy
+    logical  :: cmplxscl
 
     PUSH_SUB(v_ks_calc_start)
     call profiling_in(prof, "KOHN_SHAM_CALC")
 
+    cmplxscl = hm%cmplxscl
+   
     ASSERT(.not. ks%calc%calculating)
     ks%calc%calculating = .true.
 
@@ -446,13 +454,16 @@ contains
     ks%calc%calc_energy = optional_default(calc_energy, .true.)
 
     nullify(ks%calc%vberry)
+    nullify(ks%calc%Imvberry) !cmplxscl
     if(associated(hm%vberry)) then
       SAFE_ALLOCATE(ks%calc%vberry(1:ks%gr%mesh%np, 1:hm%d%nspin))
+      SAFE_ALLOCATE(ks%calc%Imvberry(1:ks%gr%mesh%np, 1:hm%d%nspin)) !cmplxscl
       if(optional_default(calc_berry, .true.)) then
         call berry_potential(st, ks%gr%mesh, hm%ep%E_field, ks%calc%vberry)
       else
         ! before wfns are initialized, cannot calculate this term
         ks%calc%vberry(1:ks%gr%mesh%np, 1:hm%d%nspin) = M_ZERO
+        ks%calc%Imvberry(1:ks%gr%mesh%np, 1:hm%d%nspin) = M_ZERO !cmplxscl
       endif
     endif
 
@@ -468,13 +479,19 @@ contains
     call energy_copy(hm%energy, ks%calc%energy)
     
     energy%intnvxc = M_ZERO
-
+    energy%Imintnvxc = M_ZERO !cmplxscl
+    
     ! check whether we should introduce the Amaldi SIC correction
     ks%calc%amaldi_factor = M_ONE
     if(ks%sic_type == SIC_AMALDI) ks%calc%amaldi_factor = (st%qtot - M_ONE)/st%qtot
 
     nullify(ks%calc%density, ks%calc%total_density)
     nullify(ks%calc%vxc, ks%calc%vtau, ks%calc%axc)
+    !cmplxscl
+    nullify(ks%calc%Imdensity, ks%calc%Imtotal_density)
+    nullify(ks%calc%Imvxc, ks%calc%Imvtau, ks%calc%Imaxc)
+    
+    
     if(ks%theory_level /= INDEPENDENT_PARTICLES .and. ks%calc%amaldi_factor /= M_ZERO) then
 
       call calculate_density()
@@ -516,8 +533,12 @@ contains
 
       ! get density taking into account non-linear core corrections
       SAFE_ALLOCATE(ks%calc%density(1:ks%gr%fine%mesh%np, 1:st%d%nspin))
-      call states_total_density(st, ks%gr%fine%mesh, ks%calc%density)
-
+      if (.not. cmplxscl) then
+        call states_total_density(st, ks%gr%fine%mesh, ks%calc%density)
+      else 
+        call states_total_density(st, ks%gr%fine%mesh, ks%calc%density, ks%calc%Imdensity)
+      end if
+      
       ! Amaldi correction
       if(ks%sic_type == SIC_AMALDI) &
         ks%calc%density = ks%calc%amaldi_factor*ks%calc%density
@@ -787,6 +808,12 @@ contains
       hm%energy%hartree     = M_ZERO
       hm%energy%exchange    = M_ZERO
       hm%energy%correlation = M_ZERO
+      !cmplxscl
+      hm%Imvhxc = M_ZERO
+      hm%energy%Imintnvxc     = M_ZERO
+      hm%energy%Imhartree     = M_ZERO
+      hm%energy%Imexchange    = M_ZERO
+      hm%energy%Imcorrelation = M_ZERO
 
     else
 

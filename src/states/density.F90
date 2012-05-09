@@ -507,30 +507,58 @@ contains
   !> this routine calculates the total electronic density,
   !! which is the sum of the part coming from the orbitals, the
   !! non-linear core corrections and the frozen orbitals
-  subroutine states_total_density(st, mesh, rho)
-    type(states_t), intent(in)  :: st
-    type(mesh_t),   intent(in)  :: mesh
-    FLOAT,          intent(out) :: rho(:,:)
+  subroutine states_total_density(st, mesh, rho, Imrho)
+    type(states_t),  intent(in)  :: st
+    type(mesh_t),    intent(in)  :: mesh
+    FLOAT,           intent(out) :: rho(:,:)
+    FLOAT, optional, intent(out) :: Imrho(:,:)
 
     integer :: is, ip
+    logical :: cmplxscl
+    
+    cmplxscl = .false.
+    if(present(Imrho)) cmplxscl = .true.
 
     PUSH_SUB(states_total_density)
 
-    forall(ip = 1:mesh%np, is = 1:st%d%nspin)
-      rho(ip, is) = st%rho(ip, is)
-    end forall
-
-    if(associated(st%rho_core)) then
-      forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
-        rho(ip, is) = rho(ip, is) + st%rho_core(ip)/st%d%nspin
+    if(.not. cmplxscl) then
+      forall(ip = 1:mesh%np, is = 1:st%d%nspin)
+        rho(ip, is) = st%rho(ip, is)
       end forall
-    end if
 
-    ! Add, if it exists, the frozen density from the inner orbitals.
-    if(associated(st%frozen_rho)) then
-      forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
-        rho(ip, is) = rho(ip, is) + st%frozen_rho(ip, is)
+      if(associated(st%rho_core)) then
+        forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
+          rho(ip, is) = rho(ip, is) + st%rho_core(ip)/st%d%nspin
+        end forall
+      end if
+
+      ! Add, if it exists, the frozen density from the inner orbitals.
+      if(associated(st%frozen_rho)) then
+        forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
+          rho(ip, is) = rho(ip, is) + st%frozen_rho(ip, is)
+        end forall
+      end if
+  
+    else
+
+      forall(ip = 1:mesh%np, is = 1:st%d%nspin)
+        rho(ip, is) = st%rho(ip, is)
+        Imrho(ip, is) = st%zrho%Im(ip, is)
       end forall
+
+      if(associated(st%rho_core)) then
+        forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
+          rho(ip, is) = rho(ip, is) + st%rho_core(ip)/st%d%nspin
+        end forall
+      end if
+
+      ! Add, if it exists, the frozen density from the inner orbitals.
+      if(associated(st%frozen_rho)) then
+        forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
+          rho(ip, is) = rho(ip, is) + st%frozen_rho(ip, is)
+        end forall
+      end if
+      
     end if
 
     POP_SUB(states_total_density)
