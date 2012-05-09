@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: calc_mode.F90 8829 2012-01-31 17:28:45Z joseba $
+!! $Id: calc_mode.F90 9046 2012-04-29 13:57:22Z xavier $
 
 #include "global.h"
 
@@ -31,12 +31,15 @@ module calc_mode_m
        calc_mode_parallel_mask,         &
        calc_mode_default_parallel_mask, &
        calc_mode_set_scalapack_compat,  &
-       calc_mode_scalapack_compat
+       calc_mode_scalapack_compat,      &
+       calc_mode_set_extra_states
 
   type calc_mode_t
+    private
     integer :: par_mask
     integer :: def_par_mask
     logical :: scalapack_compat
+    logical :: extra_states
   end type calc_mode_t
 
   type(calc_mode_t) :: this
@@ -57,6 +60,8 @@ module calc_mode_m
       this%def_par_mask = ibset(this%def_par_mask, P_STRATEGY_DOMAINS - 1)
 
       this%scalapack_compat = .false.
+
+      this%extra_states = .true.
     end subroutine calc_mode_init
 
     ! -----------------------------------------------------
@@ -112,6 +117,21 @@ module calc_mode_m
 
       POP_SUB(calc_mode_default_parallel_mask)
     end function calc_mode_default_parallel_mask
+
+    ! -----------------------------------------------------
+
+    subroutine calc_mode_set_extra_states(set)
+      logical, intent(in) :: set
+
+      this%extra_states = set
+    end subroutine calc_mode_set_extra_states
+
+    ! -----------------------------------------------------
+
+    logical pure function calc_mode_extra_states() result(extra_states)
+      
+      extra_states = this%extra_states
+    end function calc_mode_extra_states
 
 end module calc_mode_m
 

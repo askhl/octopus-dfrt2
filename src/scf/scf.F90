@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: scf.F90 8857 2012-02-17 10:51:41Z jrfsousa $
+!! $Id: scf.F90 9062 2012-05-09 14:21:00Z umberto $
 
 #include "global.h"
 
@@ -109,12 +109,13 @@ module scf_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine scf_init(scf, gr, geo, st, hm)
+  subroutine scf_init(scf, gr, geo, st, hm, conv_force)
     type(scf_t),         intent(inout) :: scf
     type(grid_t),        intent(inout) :: gr
     type(geometry_t),    intent(in)    :: geo
     type(states_t),      intent(in)    :: st
     type(hamiltonian_t), intent(inout) :: hm
+    FLOAT, optional,     intent(in)    :: conv_force
 
     FLOAT :: rmin
     integer :: mixdefault
@@ -209,11 +210,13 @@ contains
     !%Default 0.0
     !%Section SCF::Convergence
     !%Description
-    !% Absolute convergence of the forces: 
-    !% maximum variation of any component of the ionic forces in consecutive iterations.
-    !% A zero value (the default) means do not use this criterion.
+    !% Absolute convergence of the forces: maximum variation of any
+    !% component of the ionic forces in consecutive iterations.  A
+    !% zero value means do not use this criterion. The default is
+    !% zero, except for geometry optimization, which sets a default of
+    !% 1e-8.
     !%End
-    call parse_float(datasets_check('ConvForce'), M_ZERO, scf%conv_abs_force)
+    call parse_float(datasets_check('ConvForce'), optional_default(conv_force, M_ZERO), scf%conv_abs_force)
     scf%conv_abs_force = units_to_atomic(units_inp%force, scf%conv_abs_force)
 
     if(scf%max_iter < 0 .and. &
@@ -542,10 +545,9 @@ contains
       ! compute output density, potential (if needed) and eigenvalues sum
       if(cmplxscl) then
         call density_calc(st, gr, st%zrho%Re, st%zrho%Im)
-        print *,"8=====>--3 Density integral", sum(st%zrho%Re(:,1) + M_zI * st%zrho%Im(:,1))*gr%mesh%volume_element
+        print *,"Density integral", sum(st%zrho%Re(:,1) + M_zI * st%zrho%Im(:,1))*gr%mesh%volume_element
       else
         call density_calc(st, gr, st%rho)
-         print *,"8=====>--3 Density integral", sum(st%rho(:,1) )*gr%mesh%volume_element
       end if
       
       
@@ -569,11 +571,6 @@ contains
       SAFE_ALLOCATE(tmp(1:gr%fine%mesh%np))
       do is = 1, nspin
         do idim = 1, scf%mixdim2
-          !FIXME:REMOVE THIS
-          call dio_function_output(1, "./", "rhoin", gr%fine%mesh, rhoin(:, idim, is), unit_one, err)
-          call dio_function_output(1, "./", "rhoout", gr%fine%mesh, rhoout(:, idim, is), unit_one, err)
-
-                    
           tmp = abs(rhoin(1:gr%fine%mesh%np, idim, is) - rhoout(1:gr%fine%mesh%np, idim, is))
           scf%abs_dens = scf%abs_dens + dmf_integrate(gr%fine%mesh, tmp)
         end do

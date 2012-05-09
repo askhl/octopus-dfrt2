@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states.F90 9017 2012-04-17 03:05:01Z xavier $
+!! $Id: states.F90 9062 2012-05-09 14:21:00Z umberto $
 
 #include "global.h"
 
@@ -890,10 +890,12 @@ contains
     type(states_t), intent(inout) :: st
     FLOAT,          intent(in)    :: excess_charge
 
-    integer :: ik, ist, ispin, nspin, ncols, el_per_state
+    integer :: ik, ist, ispin, nspin, ncols, el_per_state, icol, start_pos
     type(block_t) :: blk
     FLOAT :: rr, charge
     logical :: integral_occs
+    FLOAT, allocatable :: read_occs(:, :)
+    FLOAT :: charge_in_block
 
     PUSH_SUB(states_read_initial_occs)
 
@@ -986,20 +988,42 @@ contains
         else
           el_per_state = M_ONE
         endif
+     
+        SAFE_ALLOCATE(read_occs(1:ncols, 1:st%d%nik))
+ 
+        do ik = 1, st%d%nik
+          do icol = 1, ncols
+            call parse_block_float(blk, ik - 1, icol - 1, read_occs(icol, ik))
+          end do
+        end do
+
+        charge_in_block = sum(read_occs)
+
+        start_pos = int((st%qtot - charge_in_block)/(el_per_state*st%d%nik))
 
         do ik = 1, st%d%nik
-          do ist = 1, st%nst - ncols
+          do ist = 1, start_pos
             st%occ(ist, ik) = el_per_state
           end do
         end do
+
         do ik = 1, st%d%nik
-          do ist = st%nst - ncols + 1, st%nst
-            call parse_block_float(blk, ik-1, ist-1-(st%nst-ncols), st%occ(ist, ik))
+          do ist = start_pos + 1, start_pos + ncols
+            st%occ(ist, ik) = read_occs(ist - start_pos, ik)
             integral_occs = integral_occs .and. &
               abs((st%occ(ist, ik) - el_per_state) * st%occ(ist, ik)) .le. M_EPSILON
           end do
         end do
+
+        do ik = 1, st%d%nik
+          do ist = start_pos + ncols + 1, st%nst
+             st%occ(ist, ik) = M_ZERO
+          end do
+        end do
+        
         call parse_block_end(blk)
+
+        SAFE_DEALLOCATE_A(read_occs)
 
       else
         st%fixed_occ = .false.
@@ -1887,7 +1911,7 @@ contains
     PUSH_SUB(states_fermi)
 
     if(st%d%cmplxscl) then
-      print *, "remember that I am here"
+!       print *, "remember that I am here"
       call smear_find_fermi_energy(st%smear, st%zeigenval%Re, st%occ, st%qtot, &
         st%d%nik, st%nst, st%d%kweights, st%zeigenval%Im)
         print *, "Efermi", st%smear%e_fermi, st%smear%Ime_fermi

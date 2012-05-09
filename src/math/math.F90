@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: math.F90 8934 2012-03-27 21:05:42Z dstrubbe $
+!! $Id: math.F90 9062 2012-05-09 14:21:00Z umberto $
 
 #include "global.h"
 

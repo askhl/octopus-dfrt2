@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: epot.F90 9007 2012-04-10 07:15:42Z umberto $
+!! $Id: epot.F90 9062 2012-05-09 14:21:00Z umberto $
 
 #include "global.h"
 

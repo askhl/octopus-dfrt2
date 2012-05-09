@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: ground_state.F90 8826 2012-01-31 05:54:45Z dstrubbe $
+!! $Id: ground_state.F90 9046 2012-04-29 13:57:22Z xavier $
 
 #include "global.h"
 
@@ -61,6 +61,7 @@ contains
     call calc_mode_set_parallelization(P_STRATEGY_STATES, default = .false.)
 #endif
     call calc_mode_set_scalapack_compat()
+    call calc_mode_set_extra_states(.true.)
 
     POP_SUB(ground_state_run_init)
   end subroutine ground_state_run_init

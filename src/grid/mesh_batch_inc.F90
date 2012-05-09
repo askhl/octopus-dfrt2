@@ -17,15 +17,13 @@
 !!
 !! $Id: mesh_batch_inc.F90 8967 2012-04-02 22:23:32Z xavier $
 
-subroutine X(mesh_batch_dotp_matrix)(mesh, aa, bb, dot, symm, reduce, cproduct)   
-type(mesh_t),      intent(in)    :: mesh   
-type(batch_t),     intent(in)    :: aa   
-type(batch_t),     intent(in)    :: bb   
-R_TYPE,            intent(inout) :: dot(:, :)
-logical, optional, intent(in)    :: symm !for the moment it is ignored   
-logical, optional, intent(in)    :: reduce
-logical, optional, intent(in)    :: cproduct     ! c dot product (psi_i,psi_j) = int psi_i(r) * psi_j(r)
-
+subroutine X(mesh_batch_dotp_matrix)(mesh, aa, bb, dot, symm, reduce)
+  type(mesh_t),      intent(in)    :: mesh
+  type(batch_t),     intent(in)    :: aa
+  type(batch_t),     intent(in)    :: bb
+  R_TYPE,            intent(inout) :: dot(:, :)
+  logical, optional, intent(in)    :: symm         !for the moment it is ignored
+  logical, optional, intent(in)    :: reduce
 
   integer :: ist, jst, idim, sp, block_size, ep, ip, ldaa, ldbb, indb, jndb, eff_size
   R_TYPE :: ss, tmp1, tmp2
@@ -61,22 +59,15 @@ logical, optional, intent(in)    :: cproduct     ! c dot product (psi_i,psi_j) =
 
     if(use_blas) then
       call profiling_in(profgemm, "DOTP_BATCH_GEMM")
+
       ldaa = size(aa%X(psicont), dim = 1)
       ldbb = size(bb%X(psicont), dim = 1)
-      
-      if(optional_default(cproduct,.false.)) then
-        call blas_gemm('t', 'n', aa%nst, bb%nst, mesh%np, &
-          R_TOTYPE(mesh%volume_element), &
-          aa%X(psicont)(1, 1, 1), ldaa, &
-          bb%X(psicont)(1, 1, 1), ldbb, &
-          R_TOTYPE(M_ZERO), dd(1, 1), aa%nst)
-      else
-        call blas_gemm('c', 'n', aa%nst, bb%nst, mesh%np, &
-          R_TOTYPE(mesh%volume_element), &
-          aa%X(psicont)(1, 1, 1), ldaa, &
-          bb%X(psicont)(1, 1, 1), ldbb, &
-          R_TOTYPE(M_ZERO), dd(1, 1), aa%nst)
-      end if
+      call blas_gemm('c', 'n', aa%nst, bb%nst, mesh%np, &
+        R_TOTYPE(mesh%volume_element), &
+        aa%X(psicont)(1, 1, 1), ldaa, &
+        bb%X(psicont)(1, 1, 1), ldbb, &
+        R_TOTYPE(M_ZERO), dd(1, 1), aa%nst)
+
     else
 
       dd = R_TOTYPE(M_ZERO)
