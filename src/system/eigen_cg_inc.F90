@@ -41,7 +41,7 @@ subroutine X(eigensolver_cg2) (gr, st, hm, pre, tol, niter, converged, ik, diff)
   maxter = niter
   niter = 0
 
-  SAFE_ALLOCATE(  psi(1:gr%mesh%np_part, 1:st%d%dim))
+  SAFE_ALLOCATE(psi(1:gr%mesh%np_part, 1:st%d%dim))
   SAFE_ALLOCATE(h_psi(1:gr%mesh%np_part, 1:st%d%dim))
   SAFE_ALLOCATE(   cg(1:gr%mesh%np_part, 1:st%d%dim))
   SAFE_ALLOCATE(    g(1:gr%mesh%np_part, 1:st%d%dim))
@@ -201,7 +201,7 @@ subroutine X(eigensolver_cg2) (gr, st, hm, pre, tol, niter, converged, ik, diff)
     end do iter_loop
 
     call states_set_state(st, gr%mesh, p, ik, psi)
-    
+
     niter = niter + iter + 1
 
     if(present(diff)) then
@@ -307,8 +307,6 @@ subroutine X(eigensolver_cg2_new) (gr, st, hm, tol, niter, converged, ik, diff)
 
       ! Check convergence
       res = X(states_residue)(gr%mesh, dim, phi, lambda, psi)
-      print*, "res"
-      print*, res
       if(present(diff)) diff(ist) = res
       if(res < tol) then
         conv = conv + 1

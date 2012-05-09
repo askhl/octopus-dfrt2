@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc.F90 8961 2012-04-01 23:40:53Z xavier $
+!! $Id: states_calc.F90 9062 2012-05-09 14:21:00Z umberto $
 
 #include "global.h"
 
@@ -196,6 +196,50 @@ contains
   end subroutine states_orthogonalize_cproduct
 
   ! ---------------------------------------------------------
+  subroutine reorder(x, args)
+    implicit none
+
+    ! change x to be type(states_t)
+    ! and use copying
+    complex, allocatable, intent(inout) :: x(:)
+    integer, allocatable, intent(in) :: args(:)
+
+    integer :: N, i, j, k
+    real :: buf
+    logical, allocatable :: ok(:)
+    integer, allocatable :: rank(:)
+
+    N = size(x, 1)
+
+    allocate(ok(N))
+    allocate(rank(N))
+
+    do i = 1, N
+       ok(i) = .false.
+       rank(args(i)) = i
+    end do
+
+    do i = 1, N
+       if ((args(i) /= i).and.(.not.(ok(i)))) then
+          buf = x(i)
+          k = i
+          do
+             j = args(k)
+             if (j.eq.i) then
+                x(rank(j)) = buf
+                ok(rank(j)) = .true.
+                exit
+             end if
+             x(k) = x(j)
+             ok(k) = .true.
+             k = j
+          end do
+       end if
+    end do
+
+    deallocate(ok)
+    deallocate(rank)
+  end subroutine reorder
 
   subroutine states_sort_complex(st, mesh)
     type(states_t),    intent(inout) :: st
@@ -208,8 +252,7 @@ contains
     PUSH_SUB(states_sort_complex)
     
     SAFE_ALLOCATE(index(st%nst))
-
-
+    
     do ik = st%d%kpt%start, st%d%kpt%end
 
     call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)

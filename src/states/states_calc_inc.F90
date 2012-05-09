@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc_inc.F90 8969 2012-04-03 01:27:07Z xavier $
+!! $Id: states_calc_inc.F90 9062 2012-05-09 14:21:00Z umberto $
 
 
 ! ---------------------------------------------------------
@@ -541,7 +541,6 @@ subroutine X(states_orthogonalize_single)(st, mesh, nst, iqn, phi, normalize, ma
 
   if(normalize_) then
     if (st%d%cmplxscl) then 
-       ! XXXXXXX fix sqrt branch
       nrm2 = sqrt(X(mf_dotp)(mesh, st%d%dim, phi, phi, dotu = .true.))
       do idim = 1, st%d%dim
          phi(:, idim) = phi(:, idim) / nrm2

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: run.F90 8971 2012-04-03 16:32:55Z jrfsousa $
+!! $Id: run.F90 9046 2012-04-29 13:57:22Z xavier $
 
 #include "global.h"
 
@@ -256,7 +256,7 @@ contains
       PUSH_SUB(calc_mode_init)
 
       select case(calc_mode_id)
-      case(CM_GS)
+      case(CM_GS, CM_GEOM_OPT)
         call ground_state_run_init()
       case(CM_TD)
         call td_run_init()

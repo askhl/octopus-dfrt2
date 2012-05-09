@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: geometry.F90 8979 2012-04-05 19:03:48Z dstrubbe $
+!! $Id: geometry.F90 9049 2012-05-02 07:59:06Z joseba $
 
 #include "global.h"
 
@@ -715,7 +715,7 @@ contains
   end subroutine geometry_end
 
   ! ---------------------------------------------------------
-  ! This function returns .true. if two atoms are too close.
+  !> This function returns .true. if two atoms are too close.
   logical function geometry_atoms_are_too_close(geo) result(too_close)
     type(geometry_t), intent(in) :: geo
 

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: v_ks.F90 8971 2012-04-03 16:32:55Z jrfsousa $
+!! $Id: v_ks.F90 9062 2012-05-09 14:21:00Z umberto $
 
 #include "global.h"
  

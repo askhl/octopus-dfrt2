@@ -15,7 +15,7 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: configure.ac 8975 2012-04-04 02:59:35Z xavier $
+## $Id: configure.ac 9062 2012-05-09 14:21:00Z umberto $
 
 AC_PREREQ(2.59)
 AC_INIT([Octopus],[nocturnus],[octopus-devel@tddft.org],[octopus])

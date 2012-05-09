@@ -19,14 +19,13 @@
 
 ! ---------------------------------------------------------
 !> This routine diagonalises the Hamiltonian in the subspace defined by the states.
-subroutine X(subspace_diag)(this, der, st, hm, ik, eigenval, Imeigenval, diff)
+subroutine X(subspace_diag)(this, der, st, hm, ik, eigenval, diff)
   type(subspace_t),       intent(in)    :: this
   type(derivatives_t),    intent(in)    :: der
   type(states_t), target, intent(inout) :: st
   type(hamiltonian_t),    intent(in)    :: hm
   integer,                intent(in)    :: ik
   FLOAT,                  intent(out)   :: eigenval(:)
-  FLOAT, optional,        intent(out)   :: Imeigenval(:)
   FLOAT, optional,        intent(out)   :: diff(:)
 
   R_TYPE, allocatable :: hmss(:, :), rdiff(:)
@@ -34,7 +33,6 @@ subroutine X(subspace_diag)(this, der, st, hm, ik, eigenval, Imeigenval, diff)
   type(profile_t),     save    :: diagon_prof
   type(batch_t) :: hpsib
   R_TYPE, pointer :: psi(:, :, :)
-  CMPLX, allocatable :: zeigenval(:)
 
   PUSH_SUB(X(subspace_diag))
   call profiling_in(diagon_prof, "SUBSPACE_DIAG")
@@ -49,62 +47,27 @@ subroutine X(subspace_diag)(this, der, st, hm, ik, eigenval, Imeigenval, diff)
 
     SAFE_ALLOCATE(hmss(1:st%nst, 1:st%nst))
 
-    if(hm%cmplxscl) then
-      ! complex scaling deal only with complex quantities
-#ifdef R_TCOMPLEX      
-      SAFE_ALLOCATE(zeigenval(1:st%nst))
-      
-      do ib = st%block_start, st%block_end
-        call batch_copy(st%psib(ib, ik), hpsib, reference = .false.)
+    do ib = st%block_start, st%block_end
+      call batch_copy(st%psib(ib, ik), hpsib, reference = .false.)
 
-        call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hpsib, ik)
+      call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hpsib, ik)
 
-        do jb = st%block_start, st%block_end
-          call X(mesh_batch_dotp_matrix)(der%mesh, hpsib, st%psib(jb, ik), hmss, cproduct = .true.)
-        end do
-
-        call batch_end(hpsib, copy = .false.)
-     
+      do jb = ib, st%block_end
+        call X(mesh_batch_dotp_matrix)(der%mesh, hpsib, st%psib(jb, ik), hmss)
       end do
 
-      ! Diagonalize the non-Hermitian Hamiltonian
-      call lalg_eigensolve_nonh(st%nst, hmss, zeigenval, side='R')
-      call matrix_sort(st%nst, hmss, zeigenval)
-      eigenval   = real(zeigenval)
-      Imeigenval = aimag(zeigenval)
-
-      ! Calculate the new eigenfunctions as a linear combination of the
-      ! old ones.
-      call X(states_rotate_in_place)(der%mesh, st, hmss, ik)
-      
-      SAFE_DEALLOCATE_A(zeigenval)      
-#endif
-      
-    else
-
-      do ib = st%block_start, st%block_end
-        call batch_copy(st%psib(ib, ik), hpsib, reference = .false.)
-
-        call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hpsib, ik)
-
-        do jb = ib, st%block_end
-          call X(mesh_batch_dotp_matrix)(der%mesh, hpsib, st%psib(jb, ik), hmss)
-        end do
-
-        call batch_end(hpsib, copy = .false.)
+      call batch_end(hpsib, copy = .false.)
      
-      end do
+    end do
 
-      ! only half of hmss has the matrix, but this is what Lapack needs
+    ! only half of hmss has the matrix, but this is what Lapack needs
 
-      ! Diagonalize the Hamiltonian in the subspace.
-      call lalg_eigensolve(st%nst, hmss, eigenval(:))
+    ! Diagonalize the Hamiltonian in the subspace.
+    call lalg_eigensolve(st%nst, hmss, eigenval(:))
 
-      ! Calculate the new eigenfunctions as a linear combination of the
-      ! old ones.
-      call X(states_rotate_in_place)(der%mesh, st, hmss, ik)
-      
-    end if
+    ! Calculate the new eigenfunctions as a linear combination of the
+    ! old ones.
+    call X(states_rotate_in_place)(der%mesh, st, hmss, ik)
 
     ! Recalculate the residues if requested by the diff argument.
     if(present(diff)) then 

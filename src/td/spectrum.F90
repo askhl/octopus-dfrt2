@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: spectrum.F90 8939 2012-03-28 01:54:00Z xavier $
+!! $Id: spectrum.F90 9048 2012-05-01 13:10:57Z xavier $
 
 #include "global.h"
 
@@ -150,15 +150,15 @@ contains
 
     !%Variable SpectrumSignalNoise
     !%Type float
-    !%Default 3e-4 au
+    !%Default 0.0
     !%Section Utilities::oct-propagation_spectrum
     !%Description
     !% For compressed sensing, the signal to process, the
     !% time-dependent dipole in this case, is assumed to have some
     !% noise that is given by this quantity. The default value is
-    !% 3.0e-4. This value is always assumed to be in atomic units.
+    !% 0.0, this value is unitless.
     !%End
-    call parse_float(datasets_check('SpectrumSignalNoise'), CNST(3.0e-4), spectrum%noise)
+    call parse_float(datasets_check('SpectrumSignalNoise'), CNST(0.0), spectrum%noise)
 
     if(spectrum%method == SPECTRUM_COMPRESSED_SENSING) then
       call messages_experimental('compressed sensing')
@@ -488,8 +488,8 @@ contains
 
     character(len=20) :: header_string
     integer :: nspin, ref_nspin, lmax, ref_lmax, time_steps, &
-               ref_time_steps, istart, iend, ntiter, it, ii, isp, no_e, ie, idir, trash
-    FLOAT   :: dt, ref_dt, dump, energy, ewsum, polsum
+               ref_time_steps, istart, iend, ntiter, it, ii, isp, no_e, ie, idir
+    FLOAT   :: dt, ref_dt, energy, ewsum, polsum
     type(kick_t) :: kick, ref_kick
     FLOAT, allocatable :: dipole(:, :, :), ref_dipole(:, :, :), sigma(:, :, :), sf(:, :)
     type(unit_system_t) :: file_units, ref_file_units
@@ -514,7 +514,7 @@ contains
     end if
 
     ! Now we cannot process files that do not contain the dipole, or that contain more than the dipole.
-    if(lmax.ne.1) then
+    if(lmax /= 1) then
       message(1) = 'Multipoles file should contain the dipole -- and only the dipole.'
       call messages_fatal(1)
     end if
@@ -522,42 +522,12 @@ contains
     ! Find out the iteration numbers corresponding to the time limits.
     call spectrum_fix_time_limits(time_steps, dt, spectrum%start_time, spectrum%end_time, istart, iend, ntiter)
 
-    ! Read the dipole.
-    call io_skip_header(in_file)
-
     SAFE_ALLOCATE(dipole(0:time_steps, 1:3, 1:nspin))
-
-    do it = 0, time_steps
-      select case(nspin)
-      case(1)
-        read(in_file, *) trash, dump, dump, dipole(it, 1:3, 1)
-      case(2)
-        read(in_file, *) trash, dump, dump, dipole(it, 1:3, 1), dump, dipole(it, 1:3, 2)
-      case(4)
-        read(in_file, *) &
-          trash, dump, dump, dipole(it, 1:3, 1), dump, dipole(it, 1:3, 2), dump, dipole(it, 1:3, 3), dump, dipole(it, 1:3, 4)
-      end select
-
-      dipole(it, 1:3, :) = units_to_atomic(file_units%length, dipole(it, 1:3, :))
-      
-    end do
+    call spectrum_read_dipole(in_file, dipole)
 
     if(present(ref_file)) then
-      call io_skip_header(ref_file)
       SAFE_ALLOCATE(ref_dipole(0:time_steps, 1:3, 1:nspin))
-      do it = 0, time_steps
-        select case(nspin)
-        case(1)
-          read(ref_file, *) trash, dump, dump, ref_dipole(it, 1:3, 1)
-        case(2)
-          read(ref_file, *) trash, dump, dump, ref_dipole(it, 1:3, 1), dump, ref_dipole(it, 1:3, 2)
-        case(4)
-          read(ref_file, *) &
-            trash, dump, dump, ref_dipole(it, 1:3, 1), dump, ref_dipole(it, 1:3, 2), &
-            dump, ref_dipole(it, 1:3, 3), dump, ref_dipole(it, 1:3, 4)
-        end select
-        ref_dipole(it, 1:3, :) = units_to_atomic(file_units%length, ref_dipole(it, 1:3, :))
-      end do
+      call spectrum_read_dipole(ref_file, ref_dipole)
     end if
 
     ! Now subtract the initial dipole.
@@ -664,6 +634,46 @@ contains
     POP_SUB(spectrum_cross_section)
   end subroutine spectrum_cross_section
 
+  ! ---------------------------------------------------------
+
+  subroutine spectrum_read_dipole(in_file, dipole)
+    integer,           intent(in)    :: in_file
+    FLOAT,             intent(out)   :: dipole(0:, 1:, 1:)
+
+    integer :: nspin, lmax, time_steps, trash, it
+    FLOAT   :: dt,  dump
+    type(kick_t) :: kick
+    type(unit_system_t) :: file_units, ref_file_units
+    type(batch_t) :: dipoleb, sigmab
+
+    PUSH_SUB(spectrum_read_dipole)
+
+    ! This function gives us back the unit connected to the "multipoles" file, the header information,
+    ! the number of time steps, and the time step.
+    call spectrum_mult_info(in_file, nspin, kick, time_steps, dt, file_units, lmax = lmax)
+
+    ! Read the dipole.
+    call io_skip_header(in_file)
+
+    do it = 0, time_steps
+      select case(nspin)
+      case(1)
+        read(in_file, *) trash, dump, dump, dipole(it, 1:3, 1)
+      case(2)
+        read(in_file, *) trash, dump, dump, dipole(it, 1:3, 1), dump, dipole(it, 1:3, 2)
+      case(4)
+        read(in_file, *) &
+          trash, dump, dump, dipole(it, 1:3, 1), dump, dipole(it, 1:3, 2), dump, dipole(it, 1:3, 3), dump, dipole(it, 1:3, 4)
+      end select
+
+      dipole(it, 1:3, 1:nspin) = units_to_atomic(file_units%length, dipole(it, 1:3, 1:nspin))
+
+    end do
+
+    POP_SUB(spectrum_read_dipole)
+
+  end subroutine spectrum_read_dipole
+  
   ! ---------------------------------------------------------
   subroutine spectrum_dyn_structure_factor(in_file_sin, in_file_cos, out_file, spectrum)
     integer,      intent(in)    :: in_file_sin, in_file_cos
@@ -1851,18 +1861,23 @@ contains
 
   ! -------------------------------------------------------
 
-  subroutine signal_damp(damp_type, damp_factor, time_start, time_end, time_step, time_function)
-    integer,         intent(in)    :: damp_type
-    FLOAT,           intent(in)    :: damp_factor    
-    integer,         intent(in)    :: time_start
-    integer,         intent(in)    :: time_end
-    FLOAT,           intent(in)    :: time_step
-    type(batch_t),   intent(inout) :: time_function
+  subroutine signal_damp(damp_type, damp_factor, time_start, time_end, time_step, time_function, window)
+    integer,            intent(in)    :: damp_type
+    FLOAT,              intent(in)    :: damp_factor    
+    integer,            intent(in)    :: time_start
+    integer,            intent(in)    :: time_end
+    FLOAT,              intent(in)    :: time_step
+    type(batch_t),      intent(inout) :: time_function
+    logical, optional,  intent(in)    :: window
 
     integer :: itime, ii
     FLOAT   :: total_time, time, weight
+    logical :: window_
+
 
     PUSH_SUB(signal_damp)
+
+    window_ = optional_default(window, .false.)
 
     ASSERT(batch_is_ok(time_function))
     ASSERT(batch_status(time_function) == BATCH_NOT_PACKED)
@@ -1871,6 +1886,8 @@ contains
 
     do itime = time_start, time_end
       time = time_step*(itime - time_start)
+
+      if(window_) time = abs(2*time - total_time)
 
       ! Gets the damp function
       select case(damp_type)
@@ -2007,7 +2024,7 @@ contains
     case(SPECTRUM_COMPRESSED_SENSING)
 
       call compressed_sensing_init(cs, transform, &
-        time_end -time_start + 1, time_step, time_step*(time_start - 1) - t0, &
+        time_end - time_start + 1, time_step, time_step*(time_start - 1) - t0, &
         energy_end - energy_start + 1, energy_step, energy_step*(energy_start - 1), noise)
 
       do ii = 1, time_function%nst_linear

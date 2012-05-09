@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: pes.F90 8901 2012-03-05 21:58:04Z dstrubbe $
+!! $Id: pes.F90 9042 2012-04-27 11:46:33Z umberto $
 
 #include "global.h"
 
@@ -132,6 +132,7 @@ module PES_m
     integer          :: enlarge_nfft           !< NFFT space enlargement
     integer          :: llr(MAX_DIM)           !< the size of the rescaled cubic mesh
        
+    FLOAT :: start_time              !< the time we switch on the photoelectron detector   
     FLOAT :: energyMax 
     FLOAT :: energyStep 
 
