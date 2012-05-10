@@ -1196,6 +1196,7 @@ subroutine sort_complex(vec, Imvec, reorder)
   
   do i = 1, n0
     vec  (i) = temp (n2 + i)
+    print *, i , n0 , n2 ,idx0(i)
     Imvec(i) = tempI(table(n2 + idx0(i)))
     reorder(i) = table(n2 + idx0(i))
 !     print *, "zero", reorder(i)

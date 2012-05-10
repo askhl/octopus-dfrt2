@@ -511,13 +511,16 @@ contains
     type(states_t),  intent(in)  :: st
     type(mesh_t),    intent(in)  :: mesh
     FLOAT,           intent(out) :: rho(:,:)
-    FLOAT, optional, intent(out) :: Imrho(:,:)
+    FLOAT, optional, pointer, intent(out) :: Imrho(:,:)
 
     integer :: is, ip
     logical :: cmplxscl
     
     cmplxscl = .false.
-    if(present(Imrho)) cmplxscl = .true.
+    if(present(Imrho)) then
+      ASSERT(associated(Imrho))
+      cmplxscl = .true.
+    end if
 
     PUSH_SUB(states_total_density)
 
@@ -542,13 +545,13 @@ contains
     else
 
       forall(ip = 1:mesh%np, is = 1:st%d%nspin)
-        rho(ip, is) = st%rho(ip, is)
+        rho(ip, is)   = st%zrho%Re(ip, is)
         Imrho(ip, is) = st%zrho%Im(ip, is)
       end forall
 
       if(associated(st%rho_core)) then
         forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
-          rho(ip, is) = rho(ip, is) + st%rho_core(ip)/st%d%nspin
+          rho(ip, is)   = rho(ip, is)   + st%rho_core(ip)/st%d%nspin
           Imrho(ip, is) = Imrho(ip, is) + st%Imrho_core(ip)/st%d%nspin          
         end forall
       end if

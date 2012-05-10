@@ -536,6 +536,7 @@ contains
       if (.not. cmplxscl) then
         call states_total_density(st, ks%gr%fine%mesh, ks%calc%density)
       else 
+        SAFE_ALLOCATE(ks%calc%Imdensity(1:ks%gr%fine%mesh%np, 1:st%d%nspin))
         call states_total_density(st, ks%gr%fine%mesh, ks%calc%density, ks%calc%Imdensity)
       end if
       
@@ -548,6 +549,7 @@ contains
         ks%calc%total_density_alloc = .true.
 
         SAFE_ALLOCATE(ks%calc%total_density(1:ks%gr%fine%mesh%np))
+        if(cmplxscl) SAFE_ALLOCATE(ks%calc%Imtotal_density(1:ks%gr%fine%mesh%np))
 
         forall(ip = 1:ks%gr%fine%mesh%np)
           ks%calc%total_density(ip) = sum(ks%calc%density(ip, 1:hm%d%spin_channels))
@@ -562,6 +564,7 @@ contains
       else
         ks%calc%total_density_alloc = .false.
         ks%calc%total_density => ks%calc%density(:, 1)
+        if (cmplxscl) ks%calc%Imtotal_density => ks%calc%Imdensity(:, 1)
       end if
 
       POP_SUB(v_ks_calc_start.calculate_density)
@@ -846,16 +849,19 @@ contains
       end if
 
       hm%energy%hartree = M_ZERO
+      hm%energy%Imhartree = M_ZERO
       call v_ks_hartree(ks, hm)
 
       ! Build Hartree + XC potential
       forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, 1) = hm%vxc(ip, 1) + hm%vhartree(ip)
+      if (hm%cmplxscl) forall(ip = 1:ks%gr%mesh%np) hm%Imvhxc(ip, 1) = hm%Imvxc(ip, 1) + hm%Imvhartree(ip)
       if(associated(hm%vberry)) then
         forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, 1) = hm%vhxc(ip, 1) + hm%vberry(ip, 1)
       endif
       
       if(hm%d%ispin > UNPOLARIZED) then
         forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, 2) = hm%vxc(ip, 2) + hm%vhartree(ip)
+        if (hm%cmplxscl) forall(ip = 1:ks%gr%mesh%np) hm%Imvhxc(ip, 2) = hm%Imvxc(ip, 2) + hm%Imvhartree(ip)
         if(associated(hm%vberry)) then
           forall(ip = 1:ks%gr%mesh%np) hm%vhxc(ip, 2) = hm%vhxc(ip, 2) + hm%vberry(ip, 2)
         endif
@@ -863,6 +869,7 @@ contains
       
       if(hm%d%ispin == SPINORS) then
         forall(ispin = 3:4, ip = 1:ks%gr%mesh%np) hm%vhxc(ip, ispin) = hm%vxc(ip, ispin)
+        if (hm%cmplxscl) forall(ispin = 3:4, ip = 1:ks%gr%mesh%np) hm%Imvhxc(ip, ispin) = hm%Imvxc(ip, ispin)
       end if
 
       if(ks%theory_level == HARTREE .or. ks%theory_level == HARTREE_FOCK) then
@@ -889,8 +896,10 @@ contains
     end if
 
     SAFE_DEALLOCATE_P(ks%calc%density)
+    SAFE_DEALLOCATE_P(ks%calc%Imdensity)
     if(ks%calc%total_density_alloc) then
       SAFE_DEALLOCATE_P(ks%calc%total_density)
+      SAFE_DEALLOCATE_P(ks%calc%Imtotal_density)
     end if
     nullify(ks%calc%total_density)
 
@@ -907,7 +916,7 @@ contains
     type(v_ks_t),        intent(inout) :: ks
     type(hamiltonian_t), intent(inout) :: hm
 
-    FLOAT, pointer :: pot(:)
+    FLOAT, pointer :: pot(:), Impot(:)
 
     PUSH_SUB(v_ks_hartree)
 
@@ -915,22 +924,40 @@ contains
 
     if(.not. ks%gr%have_fine_mesh) then
       pot => hm%vhartree
+      if (hm%cmplxscl) Impot => hm%Imvhartree
     else
       SAFE_ALLOCATE(pot(1:ks%gr%fine%mesh%np_part))
       pot = M_ZERO
+      if(hm%cmplxscl) then
+        SAFE_ALLOCATE(Impot(1:ks%gr%fine%mesh%np_part))
+        Impot = M_ZERO
+      end if
     end if
 
     if(.not. poisson_is_async(ks%hartree_solver)) then
       ! solve the Poisson equation
       call dpoisson_solve(ks%hartree_solver, pot, ks%calc%total_density)
+      if (hm%cmplxscl) then 
+        ! Solve the Poisson equation for the Imaginary part of the density and 
+        ! apply the rotation on the complex plane 
+        call dpoisson_solve(ks%hartree_solver, Impot, ks%calc%Imtotal_density)
+        pot   =   pot *  real(exp(-M_zI*hm%cmplxscl_th))
+        Impot = Impot * aimag(exp(-M_zI*hm%cmplxscl_th))
+      end if
     else
       ! The calculation was started by v_ks_calc_start.
       call dpoisson_solve_finish(ks%hartree_solver, pot)
+      if(hm%cmplxscl) then
+        call dpoisson_solve_finish(ks%hartree_solver, Impot)
+        pot   =   pot *  real(exp(-M_zI*hm%cmplxscl_th))
+        Impot = Impot * aimag(exp(-M_zI*hm%cmplxscl_th))
+      end if
     end if
 
     if(ks%calc%calc_energy) then
       ! Get the Hartree energy
       hm%energy%hartree = M_HALF*dmf_dotp(ks%gr%fine%mesh, ks%calc%total_density, pot)
+      if(hm%cmplxscl) hm%energy%Imhartree = M_HALF*dmf_dotp(ks%gr%fine%mesh, ks%calc%Imtotal_density, Impot)
     end if
 
     if(ks%gr%have_fine_mesh) then
@@ -938,14 +965,17 @@ contains
       ! restriction since the boundary conditions are not zero for the
       ! Hartree potential (and for some XC functionals).
       call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, pot, hm%vhartree, INJECTION)
+      if(hm%cmplxscl) call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, Impot, hm%Imvhartree, INJECTION)
       ! some debugging output that I will keep here for the moment, XA
       !      call dio_function_output(1, "./", "vh_fine", ks%gr%fine%mesh, pot, unit_one, is)
       !      call dio_function_output(1, "./", "vh_coarse", ks%gr%mesh, hm%vhartree, unit_one, is)
       SAFE_DEALLOCATE_P(pot)
+      SAFE_DEALLOCATE_P(Impot)
     end if
 
     if (ks%calc%calc_energy .and. poisson_get_solver(ks%hartree_solver) == POISSON_SETE) then !SEC
       hm%energy%hartree = hm%energy%hartree + poisson_energy(ks%hartree_solver)
+      ASSERT(.not. hm%cmplxscl) ! Don't know how to procede here with cmplxscl
       ! can not find any reference to unit 89 anywhere else in the code forgotten debug write?
       !write(89,*) hm%energy%hartree*CNST(2.0)*CNST(13.60569193), &
       !  poisson_energy(ks%hartree_solver)*CNST(2.0)*CNST(13.60569193), &
