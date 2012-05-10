@@ -196,50 +196,51 @@ contains
   end subroutine states_orthogonalize_cproduct
 
   ! ---------------------------------------------------------
-  subroutine reorder(x, args)
+  subroutine reorder_states_by_args(st, mesh, args, idim, ik)
+    ! Reorder the states in st so that the order corresponds to
+    ! the indices given in args (args could come from an argsort)
     implicit none
 
-    ! change x to be type(states_t)
-    ! and use copying
-    complex, allocatable, intent(inout) :: x(:)
+    type(states_t),    intent(inout) :: st
+    type(mesh_t),         intent(in) :: mesh
     integer, allocatable, intent(in) :: args(:)
+    integer,              intent(in) :: idim, ik
 
-    integer :: N, i, j, k
-    real :: buf
+    integer :: ist, jst, kst
+    complex, allocatable :: buf(:)
     logical, allocatable :: ok(:)
     integer, allocatable :: rank(:)
 
-    N = size(x, 1)
+    allocate(ok(st%nst))
+    allocate(rank(st%nst))
+    allocate(buf(mesh%np_part))
 
-    allocate(ok(N))
-    allocate(rank(N))
-
-    do i = 1, N
-       ok(i) = .false.
-       rank(args(i)) = i
+    do ist = 1, st%nst
+       ok(ist) = .false.
+       rank(args(ist)) = ist
     end do
 
-    do i = 1, N
-       if ((args(i) /= i).and.(.not.(ok(i)))) then
-          buf = x(i)
-          k = i
+    do ist = 1, st%nst
+       if ((args(ist) /= ist).and.(.not.(ok(ist)))) then
+          buf(:) = st%psi%zR(:, idim, ist, ik)
+          kst = ist
           do
-             j = args(k)
-             if (j.eq.i) then
-                x(rank(j)) = buf
-                ok(rank(j)) = .true.
+             jst = args(kst)
+             if (jst.eq.ist) then
+                st%psi%zR(:, idim, rank(jst), ik) = buf(:)
+                ok(rank(jst)) = .true.
                 exit
              end if
-             x(k) = x(j)
-             ok(k) = .true.
-             k = j
+             st%psi%zR(:, idim, kst, ik) = st%psi%zR(:, idim, jst, ik)
+             ok(kst) = .true.
+             kst = jst
           end do
        end if
     end do
 
     deallocate(ok)
     deallocate(rank)
-  end subroutine reorder
+  end subroutine reorder_states_by_args
 
   subroutine states_sort_complex(st, mesh)
     type(states_t),    intent(inout) :: st
@@ -257,19 +258,19 @@ contains
 
     call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
     
-    call states_copy(st_copy, st)  !OK This is very unefficient 
-      
+    !call states_copy(st_copy, st)  !OK This is very unefficient 
       do idim =1, st%d%dim
-        do ist = 1 , st%nst - 1
+         call reorder_states_by_args(st, mesh, index, idim, ik)
+        !do ist = 1 , st%nst - 1
 !           I keep this here as reference for the implemention of some in-place sorting 
 !           call lalg_swap(mesh%np, st%psi%zR(:, idim, ist, ik), st%psi%zR(:, idim, index(ist), ik))
 !           call lalg_swap(mesh%np, st%psi%zL(:, idim, ist, ik), st%psi%zL(:, idim, index(ist), ik))
-           st%psi%zR(:, idim, ist, ik) =  st_copy%psi%zR(:, idim, index(ist), ik)          
-        end do
+           !st%psi%zR(:, idim, ist, ik) =  st_copy%psi%zR(:, idim, index(ist), ik)          
+        !end do
       end do
     end do
     
-    call states_end(st_copy)
+    !call states_end(st_copy)
     
     SAFE_DEALLOCATE_A(index)
     
