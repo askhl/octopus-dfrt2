@@ -500,7 +500,7 @@ contains
         call dpoisson_solve_start(ks%hartree_solver, ks%calc%total_density)
       end if
 
-      if(ks%theory_level .ne. HARTREE) call v_a_xc(geo)
+      if(ks%theory_level .ne. HARTREE) call v_a_xc(geo, hm%cmplxscl)
     end if
 
     nullify(ks%calc%hf_st)
@@ -571,25 +571,42 @@ contains
     end subroutine calculate_density
 
     ! ---------------------------------------------------------
-    subroutine v_a_xc(geo)
+    subroutine v_a_xc(geo, cmplxscl_)
       type(geometry_t), optional, intent(in) :: geo
-      type(profile_t), save :: prof
-      
+      logical, optional, intent(in) :: cmplxscl_
 
+      type(profile_t), save :: prof
+      logical :: cmplxscl
+      
       PUSH_SUB(v_ks_calc_start.v_a_xc)
       call profiling_in(prof, "XC")
 
+      cmplxscl = optional_default(cmplxscl_, .false.)
+      
       energy%exchange = M_ZERO
       energy%correlation = M_ZERO
       energy%xc_j = M_ZERO
+      !cmplxscl
+      energy%Imexchange = M_ZERO
+      energy%Imcorrelation = M_ZERO
+      energy%Imxc_j = M_ZERO
+
 
       SAFE_ALLOCATE(ks%calc%vxc(1:ks%gr%fine%mesh%np, 1:st%d%nspin))
       ks%calc%vxc = M_ZERO
+      if(cmplxscl) then
+        SAFE_ALLOCATE(ks%calc%Imvxc(1:ks%gr%fine%mesh%np, 1:st%d%nspin))
+        ks%calc%Imvxc = M_ZERO
+      end if
 
       nullify(ks%calc%vtau)
       if(iand(hm%xc_family, XC_FAMILY_MGGA) .ne. 0) then
         SAFE_ALLOCATE(ks%calc%vtau(1:ks%gr%fine%mesh%np, 1:st%d%nspin))
         ks%calc%vtau = M_ZERO
+        if(cmplxscl) then
+          SAFE_ALLOCATE(ks%calc%Imvtau(1:ks%gr%fine%mesh%np, 1:st%d%nspin))
+          ks%calc%Imvtau = M_ZERO
+        end if
       end if
 
       ! Get the *local* XC term
@@ -831,21 +848,29 @@ contains
             !          call dio_function_output(1, "./", "vxc_coarse", ks%gr%mesh, hm%vxc(:, ispin), unit_one, ierr)
           end do
           SAFE_DEALLOCATE_P(ks%calc%vxc)
+          SAFE_DEALLOCATE_P(ks%calc%vxc) !cmplxscl
         else
           ! just change the pointer to avoid the copy
           SAFE_DEALLOCATE_P(hm%vxc)
           hm%vxc => ks%calc%vxc
+          if(hm%cmplxscl) then
+            SAFE_DEALLOCATE_P(hm%Imvxc)
+            hm%Imvxc => ks%calc%Imvxc
+          end if
         end if
 
         if(iand(hm%xc_family, XC_FAMILY_MGGA) .ne. 0) then
           do ispin = 1, hm%d%nspin
             call lalg_copy(ks%gr%fine%mesh%np, ks%calc%vtau(:, ispin), hm%vtau(:, ispin))
+            if(hm%cmplxscl) call lalg_copy(ks%gr%fine%mesh%np, ks%calc%Imvtau(:, ispin), hm%Imvtau(:, ispin))
           end do
           SAFE_DEALLOCATE_P(ks%calc%vtau)
+          SAFE_DEALLOCATE_P(ks%calc%Imvtau)          
         end if
 
       else
         hm%vxc = M_ZERO
+        if(hm%cmplxscl) hm%Imvxc = M_ZERO
       end if
 
       hm%energy%hartree = M_ZERO
