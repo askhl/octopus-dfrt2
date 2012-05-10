@@ -28,17 +28,13 @@
     integer :: is, err, idir
     character(len=80) :: fname
     FLOAT, allocatable :: v0(:,:), nxc(:)
-    CMPLX, allocatable :: ztmp(:,:)
     
     PUSH_SUB(output_hamiltonian)
-    if (hm%cmplxscl) then
-      SAFE_ALLOCATE(ztmp(1:der%mesh%np, 1:hm%d%dim))
-    end if
 
     if(iand(outp%what, C_OUTPUT_POTENTIAL).ne.0) then
       if(hm%cmplxscl) then
-        ztmp(1:der%mesh%np, 1) = hm%ep%vpsl(1:der%mesh%np) + M_zI*hm%ep%Imvpsl(1:der%mesh%np)
-        call zio_function_output(outp%how, dir, "v0", der%mesh, ztmp(:, 1), units_out%energy, err, geo = geo)
+        call zio_function_output(outp%how, dir, "v0", der%mesh,&
+           hm%ep%vpsl + M_zI*hm%ep%Imvpsl, units_out%energy, err, geo = geo)
       else  
         SAFE_ALLOCATE(v0(1:der%mesh%np, 1:hm%d%dim))
         v0(1:der%mesh%np, 1) = hm%ep%vpsl(1:der%mesh%np)
@@ -54,8 +50,8 @@
         if (.not. hm%cmplxscl) then 
           call dio_function_output(outp%how, dir, 'vh', der%mesh, hm%vhartree, units_out%energy, err, geo = geo)
         else
-          ztmp(:,1) = hm%vhartree(:) + M_zI* hm%Imvhartree(:)
-          call zio_function_output(outp%how, dir, 'vh', der%mesh, ztmp(:,1), units_out%energy, err, geo = geo)
+          call zio_function_output(outp%how, dir, 'vh', der%mesh, & 
+            hm%vhartree + M_zI* hm%Imvhartree, units_out%energy, err, geo = geo)
         end if
         do is = 1, min(hm%d%ispin, 2)
           if(hm%d%ispin == 1) then
@@ -66,9 +62,10 @@
           if(.not. hm%cmplxscl) then
             call dio_function_output(outp%how, dir, fname, der%mesh, hm%vxc(:, is), units_out%energy, err, geo = geo)
           else
-            ztmp(:,1) =  hm%vxc(:, is) + M_zI *  hm%vxc(:, is)
-            call zio_function_output(outp%how, dir, fname, der%mesh, ztmp(:,1), units_out%energy, err, geo = geo)
+            call zio_function_output(outp%how, dir, fname, der%mesh, &
+               hm%vxc(:, is) + M_zI *  hm%vxc(:, is), units_out%energy, err, geo = geo)
           end if
+          
           ! finally the full KS potential (without non-local PP contributions)
           if(hm%d%ispin == 1) then
             write(fname, '(a)') 'vks'
@@ -79,8 +76,13 @@
             call dio_function_output(outp%how, dir, fname, der%mesh, &
               hm%ep%vpsl + hm%ep%Vclassical + hm%vhxc(:, is), units_out%energy, err, geo = geo)
           else
-            call dio_function_output(outp%how, dir, fname, der%mesh, &
-              hm%ep%vpsl + hm%vhxc(:, is), units_out%energy, err, geo = geo)
+            if(.not. hm%cmplxscl) then
+              call dio_function_output(outp%how, dir, fname, der%mesh, &
+                hm%ep%vpsl + hm%vhxc(:, is), units_out%energy, err, geo = geo)
+            else
+              call zio_function_output(outp%how, dir, fname, der%mesh, &
+                hm%ep%vpsl +M_zI * hm%ep%Imvpsl+ hm%vhxc(:, is) + M_zI * hm%vhxc(:, is), units_out%energy, err, geo = geo)
+            end if
           end if
         end do
       end if
@@ -122,9 +124,6 @@
       SAFE_DEALLOCATE_A(nxc)
     end if
 
-    if(hm%cmplxscl) then
-      SAFE_DEALLOCATE_A(ztmp)
-    end if
 
     POP_SUB(output_hamiltonian)
   end subroutine output_hamiltonian

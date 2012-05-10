@@ -548,6 +548,7 @@ contains
         print *,"Density integral", sum(st%zrho%Re(:,1) + M_zI * st%zrho%Im(:,1))*gr%mesh%volume_element
       else
         call density_calc(st, gr, st%rho)
+        print *,"Density integral", sum(st%rho(:,1))*gr%mesh%volume_element
       end if
       
       
