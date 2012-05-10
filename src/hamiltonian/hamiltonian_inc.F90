@@ -250,6 +250,7 @@ subroutine X(hamiltonian_external)(this, mesh, psib, vpsib)
   type(batch_t),               intent(inout) :: vpsib
 
   integer :: ii, ip
+  logical :: cmplxscl 
 #ifdef HAVE_OPENCL
   integer :: pnp, iprange
   type(opencl_mem_t) :: vext_buff
@@ -257,18 +258,35 @@ subroutine X(hamiltonian_external)(this, mesh, psib, vpsib)
 
   PUSH_SUB(X(hamiltonian_external))
 
+  cmplxscl = this%cmplxscl
+  
   select case(batch_status(psib))
   case(BATCH_NOT_PACKED)
     do ii = 1, psib%nst
       vpsib%states_linear(ii)%X(psi)(1:mesh%np) = vpsib%states_linear(ii)%X(psi)(1:mesh%np) + &
         this%ep%vpsl(1:mesh%np)*psib%states_linear(ii)%X(psi)(1:mesh%np)
     end do
+#ifdef R_TCOMPLEX    
+    if(cmplxscl) then
+      do ii = 1, psib%nst
+        vpsib%states_linear(ii)%X(psi)(1:mesh%np) = vpsib%states_linear(ii)%X(psi)(1:mesh%np) + &
+          M_zI * this%ep%Imvpsl(1:mesh%np)*psib%states_linear(ii)%X(psi)(1:mesh%np)
+      end do      
+    end if 
+#endif    
   case(BATCH_PACKED)
     do ip = 1, mesh%np
       do ii = 1, psib%nst
         vpsib%pack%X(psi)(ii, ip) = vpsib%pack%X(psi)(ii, ip) + this%ep%vpsl(ip)*psib%pack%X(psi)(ii, ip)
       end do
     end do
+#ifdef R_TCOMPLEX    
+    if(cmplxscl) then
+      do ii = 1, psib%nst
+        vpsib%pack%X(psi)(ii, ip) = vpsib%pack%X(psi)(ii, ip) + M_zI * this%ep%Imvpsl(ip)*psib%pack%X(psi)(ii, ip)
+      end do      
+    end if 
+#endif    
   case(BATCH_CL_PACKED)
 #ifdef HAVE_OPENCL
     pnp = opencl_padded_size(mesh%np)
