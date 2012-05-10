@@ -549,6 +549,7 @@ contains
       if(associated(st%rho_core)) then
         forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
           rho(ip, is) = rho(ip, is) + st%rho_core(ip)/st%d%nspin
+          Imrho(ip, is) = Imrho(ip, is) + st%Imrho_core(ip)/st%d%nspin          
         end forall
       end if
 
@@ -556,6 +557,7 @@ contains
       if(associated(st%frozen_rho)) then
         forall(ip = 1:mesh%np, is = 1:st%d%spin_channels)
           rho(ip, is) = rho(ip, is) + st%frozen_rho(ip, is)
+          Imrho(ip, is) = Imrho(ip, is) + st%Imfrozen_rho(ip, is)
         end forall
       end if
       

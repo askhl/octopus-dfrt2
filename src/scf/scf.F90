@@ -737,11 +737,17 @@ contains
 
         write(str, '(a,i5)') 'SCF CYCLE ITER #' ,iter
         call messages_print_stress(stdout, trim(str))
-
-        write(message(1),'(a,es15.8,2(a,es9.2))') ' etot = ', units_from_atomic(units_out%energy, hm%energy%total), &
-             ' abs_ev   = ', units_from_atomic(units_out%energy, scf%abs_ev), ' rel_ev   = ', scf%rel_ev
-        write(message(2),'(23x,2(a,es9.2))') &
-             ' abs_dens = ', scf%abs_dens, ' rel_dens = ', scf%rel_dens
+        if(cmplxscl) then
+          write(message(1),'(a,es15.8,2(a,es9.2))') ' Re(etot) = ', units_from_atomic(units_out%energy, hm%energy%total), &
+               ' abs_ev   = ', units_from_atomic(units_out%energy, scf%abs_ev), ' rel_ev   = ', scf%rel_ev
+          write(message(2),'(a,es15.8,2(a,es9.2))') ' Im(etot) = ', units_from_atomic(units_out%energy, hm%energy%Imtotal), &
+               ' abs_dens = ', scf%abs_dens, ' rel_dens = ', scf%rel_dens
+        else
+          write(message(1),'(a,es15.8,2(a,es9.2))') ' etot = ', units_from_atomic(units_out%energy, hm%energy%total), &
+               ' abs_ev   = ', units_from_atomic(units_out%energy, scf%abs_ev), ' rel_ev   = ', scf%rel_ev
+          write(message(2),'(23x,2(a,es9.2))') &
+               ' abs_dens = ', scf%abs_dens, ' rel_dens = ', scf%rel_dens
+        end if      
         ! write info about forces only if they are used as convergence criteria
         if (scf%conv_abs_force > M_ZERO) then
           write(message(3),'(23x,a,es9.2)') &
@@ -850,6 +856,12 @@ contains
           call messages_info(1, iunit)
         endif
         write(iunit, '(1x)')
+
+        if(cmplxscl .and. hm%energy%Imtotal < M_ZERO) then
+          write(message(1), '(3a,es18.6), ')'Lifetime [',trim(units_abbrev(units_out%time)), '] = ', & 
+            units_from_atomic(units_out%time, - M_ONE/(M_TWO * hm%energy%Imtotal))
+          call messages_info(1, iunit)
+        end if
 
         write(iunit, '(3a)') 'Energy [', trim(units_abbrev(units_out%energy)), ']:'
       else

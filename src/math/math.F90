@@ -1171,7 +1171,7 @@ subroutine sort_complex(vec, Imvec, reorder)
   n1 = 0
   temp = vec
   do i = 1, dim
-    if (abs(Imvec(i)) <= CNST(1E-13)) then
+    if (abs(Imvec(i)) < M_EPSILON) then
       n0 = n0 + 1 
     else if (Imvec(i) <  0) then 
       n1 = n1 + 1

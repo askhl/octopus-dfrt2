@@ -94,6 +94,7 @@ module eigensolver_m
        RS_LOBPCG  =  8,         &
        RS_RMMDIIS = 10,         &
        RS_ARPACK  = 12,         &  
+       RS_BICG    = 13,         &
        RS_DIRECT  = 14
 
 contains
@@ -146,6 +147,9 @@ contains
     !%Option arpack 12
     !% Implicitly Restarted Arnoldi Method. Requires the ARPACK package. 
     !% method.
+    !%Option bicg 13
+    !% (Experimental) biconjugate gradient method.
+    !% method.
     !%End
 
     if(st%parallel_in_states) then
@@ -182,6 +186,7 @@ contains
     case(RS_MG)
     case(RS_CG)
     case(RS_PLAN)
+    case(RS_BICG)
     case(RS_DIRECT)
     case(RS_EVO)
       !%Variable EigensolverImaginaryTime
@@ -280,7 +285,7 @@ contains
     end if
     
     select case(eigens%es_type)
-    case(RS_PLAN, RS_CG, RS_DIRECT, RS_LOBPCG, RS_RMMDIIS)
+    case(RS_PLAN, RS_CG, RS_BICG, RS_DIRECT, RS_LOBPCG, RS_RMMDIIS)
       call preconditioner_init(eigens%pre, gr)
     case default
       call preconditioner_null(eigens%pre)
@@ -309,7 +314,7 @@ contains
     call subspace_end(eigens%sdiag)
 
     select case(eigens%es_type)
-    case(RS_PLAN, RS_CG, RS_LOBPCG, RS_RMMDIIS)
+    case(RS_PLAN, RS_CG, RS_BICG, RS_LOBPCG, RS_RMMDIIS)
       call preconditioner_end(eigens%pre)
     end select
 
@@ -411,6 +416,8 @@ contains
           call zeigensolver_cg2_new(gr, st, hm, eigens%tolerance, maxiter, eigens%converged(ik), ik, eigens%diff(:, ik))
         case(RS_CG)
           call zeigensolver_cg2(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, eigens%converged(ik), ik, eigens%diff(:, ik))
+        case(RS_BICG)
+           call eigensolver_bicg(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, eigens%converged(ik), ik, eigens%diff(:, ik))
         case(RS_DIRECT)
            call eigensolver_direct(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, eigens%converged(ik), ik, eigens%diff(:, ik))
         case(RS_PLAN)
@@ -440,10 +447,10 @@ contains
 #endif 
         end select
 
-        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and. eigens%es_type /= RS_ARPACK &
-          .and. eigens%es_type /= RS_DIRECT ) then
-        
-          call zsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))  
+        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and.eigens%es_type /= RS_ARPACK &
+          .and.eigens%es_type /= RS_DIRECT ) then
+          call zsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
+         
         end if
 
       end if
@@ -455,7 +462,7 @@ contains
     ! Moreover the eigenvalues ordering need to be imposed as there is no eigensolver 
     ! supporting this ordering (yet).
     if(hm%cmplxscl) then !cmplxscl
-      call states_orthogonalize_cproduct(st, gr%mesh)
+!       call states_orthogonalize_cproduct(st, gr%mesh)
       call states_sort_complex(st, gr%mesh)
     end if
     

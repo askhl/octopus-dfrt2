@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: v_ks.F90 9062 2012-05-09 14:21:00Z umberto $
+!! $Id: v_ks.F90 8971 2012-04-03 16:32:55Z jrfsousa $
 
 #include "global.h"
  
@@ -809,12 +809,13 @@ contains
       hm%energy%exchange    = M_ZERO
       hm%energy%correlation = M_ZERO
       !cmplxscl
-      hm%Imvhxc = M_ZERO
-      hm%energy%Imintnvxc     = M_ZERO
-      hm%energy%Imhartree     = M_ZERO
-      hm%energy%Imexchange    = M_ZERO
-      hm%energy%Imcorrelation = M_ZERO
-
+      if(hm%cmplxscl) then
+        hm%Imvhxc = M_ZERO
+        hm%energy%Imintnvxc     = M_ZERO
+        hm%energy%Imhartree     = M_ZERO
+        hm%energy%Imexchange    = M_ZERO
+        hm%energy%Imcorrelation = M_ZERO
+      end if
     else
 
       if(ks%theory_level /= HARTREE) then
