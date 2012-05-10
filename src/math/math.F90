@@ -1191,12 +1191,12 @@ subroutine sort_complex(vec, Imvec, reorder)
   !first zero img parts
   if (n0 > 0) then
      SAFE_ALLOCATE(idx0(n0))
-     call sort(temp(n2+1:n0),idx0(:))
+     call sort(temp(n2+1:n2+n0),idx0(:))
   end if
   
   do i = 1, n0
     vec  (i) = temp (n2 + i)
-    print *, i , n0 , n2 ,idx0(i)
+!     print *, i , n0 , n2 ,idx0(i)
     Imvec(i) = tempI(table(n2 + idx0(i)))
     reorder(i) = table(n2 + idx0(i))
 !     print *, "zero", reorder(i)
