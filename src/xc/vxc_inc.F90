@@ -18,7 +18,7 @@
 !! $Id: vxc_inc.F90 8658 2011-12-06 00:35:11Z dstrubbe $
 
 ! ---------------------------------------------------------
-subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau)
+subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau, Imrho, Imvxc, Imvtau, cmplxscl_th)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
   type(states_t),       intent(in)    :: st              !< State of the system (wavefunction,eigenvalues...)
@@ -30,6 +30,10 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vt
   FLOAT, optional,      intent(inout) :: ec              !< Correlation energy.
   FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
   FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
+  FLOAT, optional,      intent(in)    :: Imrho(:, :)     !< cmplxscl: Electronic density 
+  FLOAT, optional,      intent(inout) :: Imvxc(:,:)      !< cmplxscl: XC potential
+  FLOAT, optional,      intent(inout) :: Imvtau(:,:)     !< cmplxscl: Derivative wrt (two times kinetic energy density)
+  FLOAT, optional,      intent(in)    :: cmplxscl_th     !< complex scaling angle
 
   integer :: n_block
 
