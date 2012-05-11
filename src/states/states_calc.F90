@@ -186,7 +186,7 @@ contains
         end if    
         st%psi%zR(:,:,ist,ik) = st%psi%zR(:,:,ist,ik)/cnorm
 
-        print *,"cnorm", ist, cnorm, abs(cnorm), atan2 (aimag(cnorm), real(cnorm) )
+!         print *,"cnorm", ist, cnorm, abs(cnorm), atan2 (aimag(cnorm), real(cnorm) )
         
       end do
     end do
