@@ -1176,10 +1176,10 @@ subroutine sort_complex(vec, Imvec, reorder)
     else if (Imvec(i) <  0) then 
       n1 = n1 + 1
     end if
-    print *, "---", i ,vec(i), Imvec(i)
     vec(i)     = temp(table(dim - i + 1))
     Imvec(i)   = tempI(dim - i + 1)
     reorder(i) = table(dim - i + 1)
+    print *, "---", i ,vec(i), Imvec(i)
   end do
   n2 = dim - n0 - n1 
   print *,n1, n0, n2 
@@ -1196,7 +1196,7 @@ subroutine sort_complex(vec, Imvec, reorder)
   
   do i = 1, n0
     vec  (i) = temp (n2 + i)
-!     print *, i , n0 , n2 ,idx0(i)
+     print *, i , n0 , n2 ,idx0(i)
     Imvec(i) = tempI(table(n2 + idx0(i)))
     reorder(i) = table(n2 + idx0(i))
 !     print *, "zero", reorder(i)

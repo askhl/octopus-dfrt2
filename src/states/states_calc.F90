@@ -183,8 +183,8 @@ contains
         else
         ! Normalize the first eigenstate  
           cnorm = sqrt(zmf_dotp(mesh, st%d%dim, psi, psi, dotu = .true.))
-          st%psi%zR(:,:,ist,ik) = st%psi%zR(:,:,ist,ik)/cnorm
         end if    
+        st%psi%zR(:,:,ist,ik) = st%psi%zR(:,:,ist,ik)/cnorm
 
         print *,"cnorm", ist, cnorm, abs(cnorm), atan2 (aimag(cnorm), real(cnorm) )
         

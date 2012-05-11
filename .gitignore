@@ -17,6 +17,7 @@ config*
 src/utils/oct*
 src/main/oct*
 share/vari*
+._*
 
 # Can also ignore all directories and files in a directory.
 .svn/*
