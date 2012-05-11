@@ -63,7 +63,7 @@
             call dio_function_output(outp%how, dir, fname, der%mesh, hm%vxc(:, is), units_out%energy, err, geo = geo)
           else
             call zio_function_output(outp%how, dir, fname, der%mesh, &
-               hm%vxc(:, is) + M_zI *  hm%vxc(:, is), units_out%energy, err, geo = geo)
+               hm%vxc(:, is) + M_zI *  hm%Imvxc(:, is), units_out%energy, err, geo = geo)
           end if
           
           ! finally the full KS potential (without non-local PP contributions)
