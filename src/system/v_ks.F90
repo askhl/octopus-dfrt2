@@ -424,7 +424,7 @@ contains
 
   subroutine v_ks_calc_start(ks, hm, st, geo, time, calc_berry, calc_energy) 
     type(v_ks_t),                      intent(inout) :: ks 
-    type(hamiltonian_t),     target,   intent(in)    :: hm !< This MUST be intent(in), changes to hm are done in v_ks_calc_finish.
+    type(hamiltonian_t),     target,   intent(inout)    :: hm !< This MUST be intent(in), changes to hm are done in v_ks_calc_finish.
     type(states_t),                    intent(inout) :: st
     type(geometry_t) ,       optional, intent(in)    :: geo
     FLOAT,                   optional, intent(in)    :: time 
@@ -573,7 +573,7 @@ contains
     ! ---------------------------------------------------------
     subroutine v_a_xc(geo, hm)
       type(geometry_t),     intent(in) :: geo
-      type(hamiltonian_t),  intent(in) :: hm 
+      type(hamiltonian_t),  intent(inout) :: hm 
 
       type(profile_t), save :: prof
       logical :: cmplxscl
@@ -625,10 +625,26 @@ contains
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
               ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc)
           else
-            call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-              ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, &
-              Imrho = ks%calc%Imdensity, Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
+            if(iand(hm%xc_family, XC_FAMILY_LDA) .ne. 0) then
+!               call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+!                 st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+!                 ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc)
+!               call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+!                 st, ks%calc%Imdensity, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+!                 ex = energy%Imexchange, ec = energy%Imcorrelation, vxc = ks%calc%Imvxc)
+                print *, "LDA calc energy exc"
+                call v_ks_hartree(ks, hm)
+                ks%calc%vxc(:,1) = M_HALF * hm%vhartree(:)
+                ks%calc%Imvxc(:,1) = M_HALF * hm%Imvhartree(:)
+                
+!                 ks%calc%vxc = ks%calc%vxc * real(exp(-M_zI*hm%cmplxscl_th))
+!                 ks%calc%Imvxc = ks%calc%Imvxc * aimag(exp(-M_zI*hm%cmplxscl_th))
+            else
+              call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+                st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+                ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, &
+                Imrho = ks%calc%Imdensity, Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
+            end if
           end if
         end if
       else
@@ -643,9 +659,21 @@ contains
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
               vxc = ks%calc%vxc)
           else
-            call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-              vxc = ks%calc%vxc, Imrho = ks%calc%Imdensity, Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
+            if(iand(hm%xc_family, XC_FAMILY_LDA) .ne. 0) then
+              call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+                st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+                vxc = ks%calc%vxc)
+              call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+                st, ks%calc%Imdensity, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+                vxc = ks%calc%Imvxc)
+                print *, "LDA calc pot"
+!                 ks%calc%vxc = ks%calc%vxc * real(exp(-M_zI*hm%cmplxscl_th))
+!                 ks%calc%Imvxc = ks%calc%Imvxc * aimag(exp(-M_zI*hm%cmplxscl_th))
+            else
+              call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+                st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+                vxc = ks%calc%vxc, Imrho = ks%calc%Imdensity, Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
+            end if
           end if
         end if
       end if

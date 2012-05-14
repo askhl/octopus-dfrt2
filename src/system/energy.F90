@@ -113,6 +113,7 @@ contains
     case(HARTREE)
       hm%energy%total = hm%ep%eii + M_HALF * (hm%energy%eigenvalues + hm%energy%kinetic + hm%energy%extern)
       if (cmplxscl) hm%energy%Imtotal = M_HALF * (hm%energy%Imeigenvalues + hm%energy%Imkinetic + hm%energy%Imextern)
+      
     case(HARTREE_FOCK)
       hm%energy%total = hm%ep%eii + &
         M_HALF*(hm%energy%eigenvalues + hm%energy%kinetic + hm%energy%extern - hm%energy%intnvxc - evxctau) + hm%energy%correlation
@@ -140,6 +141,7 @@ contains
     else
       hm%energy%TS = st%smear%dsmear * hm%energy%entropy
     endif
+    hm%energy%ImTS = M_ZERO
 
     if(gauge_field_is_applied(hm%ep%gfield)) then
       hm%energy%total = hm%energy%total + gauge_field_get_energy(hm%ep%gfield, gr%sb)
@@ -180,7 +182,6 @@ contains
       if(cmplxscl) write(message(6), '(a, es18.6)') trim(message(6)), units_from_atomic(units_out%energy, hm%energy%Imcorrelation)
       write(message(7), '(6x,a, f18.8)')'Entropy     = ', hm%energy%entropy ! the dimensionless sigma of Kittel&Kroemer
       write(message(8), '(6x,a, f18.8)')'-TS         = ', -units_from_atomic(units_out%energy, hm%energy%TS)
-      if(cmplxscl) write(message(8), '(a, es18.6)') trim(message(8)), -units_from_atomic(units_out%energy, hm%energy%ImTS)
       call messages_info(8, iunit)
       if(full_) then
         write(message(1), '(6x,a, f18.8)')'Kinetic     = ', units_from_atomic(units_out%energy, hm%energy%kinetic)
