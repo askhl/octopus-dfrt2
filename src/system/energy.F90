@@ -116,8 +116,8 @@ contains
     case(HARTREE_FOCK)
       hm%energy%total = hm%ep%eii + &
         M_HALF*(hm%energy%eigenvalues + hm%energy%kinetic + hm%energy%extern - hm%energy%intnvxc - evxctau) + hm%energy%correlation
-      if (cmplxscl) hm%energy%Imtotal =  &
-        M_HALF*(hm%energy%Imeigenvalues + hm%energy%Imkinetic + hm%energy%Imextern - hm%energy%Imintnvxc - Imevxctau) + hm%energy%Imcorrelation
+      if (cmplxscl) hm%energy%Imtotal =  M_HALF*(hm%energy%Imeigenvalues + hm%energy%Imkinetic + & 
+        hm%energy%Imextern - hm%energy%Imintnvxc - Imevxctau) + hm%energy%Imcorrelation
 
     case(KOHN_SHAM_DFT)
       hm%energy%total = hm%ep%eii + hm%energy%eigenvalues &
@@ -172,7 +172,8 @@ contains
       write(message(3), '(6x,a, f18.8)')'Hartree     = ', units_from_atomic(units_out%energy, hm%energy%hartree)
       if(cmplxscl) write(message(3), '(a, es18.6)') trim(message(3)), units_from_atomic(units_out%energy, hm%energy%Imhartree)
       write(message(4), '(6x,a, f18.8)')'Int[n*v_xc] = ', units_from_atomic(units_out%energy, hm%energy%intnvxc + evxctau)
-      if(cmplxscl) write(message(4), '(a, es18.6)') trim(message(4)), units_from_atomic(units_out%energy, hm%energy%Imintnvxc + Imevxctau)
+      if(cmplxscl) write(message(4), '(a, es18.6)') trim(message(4)),&
+                     units_from_atomic(units_out%energy, hm%energy%Imintnvxc + Imevxctau)
       write(message(5), '(6x,a, f18.8)')'Exchange    = ', units_from_atomic(units_out%energy, hm%energy%exchange)
       if(cmplxscl) write(message(5), '(a, es18.6)') trim(message(5)), units_from_atomic(units_out%energy, hm%energy%Imexchange)
       write(message(6), '(6x,a, f18.8)')'Correlation = ', units_from_atomic(units_out%energy, hm%energy%correlation)
