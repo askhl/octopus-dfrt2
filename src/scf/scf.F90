@@ -411,6 +411,8 @@ contains
     FLOAT, allocatable :: rhoout(:,:,:), rhoin(:,:,:), rhonew(:,:,:)
     FLOAT, allocatable :: vout(:,:,:), vin(:,:,:), vnew(:,:,:)
     FLOAT, allocatable :: forceout(:,:), forcein(:,:), forcediff(:), tmp(:)
+    FLOAT, allocatable :: Imrhoout(:,:,:), Imrhoin(:,:,:), Imrhonew(:,:,:)
+    FLOAT, allocatable :: Imvout(:,:,:), Imvin(:,:,:), Imvnew(:,:,:)
     character(len=8) :: dirname
     logical :: finish, forced_finish, gs_run_, berry_conv, cmplxscl
     integer :: verbosity_
@@ -455,6 +457,14 @@ contains
     rhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
     rhoout = M_ZERO
 
+    if(cmplxscl) then
+      SAFE_ALLOCATE(Imrhoout(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+      SAFE_ALLOCATE(Imrhoin (1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+
+      Imrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
+      Imrhoout = M_ZERO
+    end if
+
     if (st%d%cdft) then
       rhoin(1:gr%fine%mesh%np, 2:scf%mixdim2, 1:nspin) = st%current(1:gr%fine%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
     end if
@@ -468,8 +478,18 @@ contains
       vin(1:gr%mesh%np, 1, 1:nspin) = hm%vhxc(1:gr%mesh%np, 1:nspin)
       vout = M_ZERO
       if (st%d%cdft) vin(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = hm%axc(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
+      if(cmplxscl) then
+        SAFE_ALLOCATE(Imvout(1:gr%mesh%np, 1:scf%mixdim2, 1:nspin))
+        SAFE_ALLOCATE( Imvin(1:gr%mesh%np, 1:scf%mixdim2, 1:nspin))
+        SAFE_ALLOCATE(Imvnew(1:gr%mesh%np, 1:scf%mixdim2, 1:nspin))
+
+        Imvin(1:gr%mesh%np, 1, 1:nspin) = hm%Imvhxc(1:gr%mesh%np, 1:nspin)
+        Imvout = M_ZERO
+      end if
     case(MIXDENS)
       SAFE_ALLOCATE(rhonew(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+      if(cmplxscl) SAFE_ALLOCATE(Imrhonew(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+      
     end select
 
     evsum_in = states_eigenvalues_sum(st)
@@ -553,6 +573,8 @@ contains
       
       
       rhoout(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
+      if(cmplxscl) Imrhoout(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
+      
       if (hm%d%cdft) then
         call calc_physical_current(gr%der, st, st%current)
         rhoout(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = st%current(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
@@ -560,6 +582,7 @@ contains
       if (scf%mix_field == MIXPOT) then
         call v_ks_calc(ks, hm, st, geo)
         vout(1:gr%mesh%np, 1, 1:nspin) = hm%vhxc(1:gr%mesh%np, 1:nspin)
+        if(cmplxscl) Imvout(1:gr%mesh%np, 1, 1:nspin) = hm%Imvhxc(1:gr%mesh%np, 1:nspin)
         if (hm%d%cdft) vout(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = hm%axc(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
       end if
       evsum_out = states_eigenvalues_sum(st)
@@ -573,6 +596,7 @@ contains
       do is = 1, nspin
         do idim = 1, scf%mixdim2
           tmp = abs(rhoin(1:gr%fine%mesh%np, idim, is) - rhoout(1:gr%fine%mesh%np, idim, is))
+          if(cmplxscl) tmp = tmp + abs(Imrhoin(1:gr%fine%mesh%np, idim, is) - Imrhoout(1:gr%fine%mesh%np, idim, is))
           scf%abs_dens = scf%abs_dens + dmf_integrate(gr%fine%mesh, tmp)
         end do
       end do
@@ -616,6 +640,10 @@ contains
         ! mix input and output densities and compute new potential
         call dmixing(scf%smix, iter, rhoin, rhoout, rhonew, dmf_dotp_aux)
         st%rho(1:gr%fine%mesh%np, 1:nspin) = rhonew(1:gr%fine%mesh%np, 1, 1:nspin)
+        if(cmplxscl) then
+          call dmixing(scf%smix, iter, Imrhoin, Imrhoout, Imrhonew, dmf_dotp_aux)
+          st%zrho%Im(1:gr%fine%mesh%np, 1:nspin) = Imrhonew(1:gr%fine%mesh%np, 1, 1:nspin)          
+        end if
         if (hm%d%cdft) st%current(1:gr%mesh%np,1:gr%mesh%sb%dim,1:nspin) = rhonew(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin)
         call v_ks_calc(ks, hm, st, geo)
       case (MIXPOT)
@@ -624,6 +652,10 @@ contains
         ! mix input and output potentials
         call dmixing(scf%smix, iter, vin, vout, vnew, dmf_dotp_aux)
         hm%vhxc(1:gr%mesh%np, 1:nspin) = vnew(1:gr%mesh%np, 1, 1:nspin)
+        if(cmplxscl) then
+          call dmixing(scf%smix, iter, Imvin, Imvout, Imvnew, dmf_dotp_aux)
+          hm%Imvhxc(1:gr%mesh%np, 1:nspin) = Imvnew(1:gr%mesh%np, 1, 1:nspin)
+        end if
         call hamiltonian_update(hm, gr%mesh)
         if (hm%d%cdft) hm%axc(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin) = vnew(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin)
       end select
@@ -661,9 +693,11 @@ contains
 
       ! save information for the next iteration
       rhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
+      if(cmplxscl) Imrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
       if (hm%d%cdft) rhoin(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = st%current(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
       if (scf%mix_field == MIXPOT) then
         vin(1:gr%mesh%np, 1, 1:nspin) = hm%vhxc(1:gr%mesh%np, 1:nspin)
+        Imvin(1:gr%mesh%np, 1, 1:nspin) = hm%Imvhxc(1:gr%mesh%np, 1:nspin)
         if (hm%d%cdft) vin(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = hm%axc(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
       end if
       evsum_in = evsum_out
@@ -688,14 +722,20 @@ contains
       SAFE_DEALLOCATE_A(vout)
       SAFE_DEALLOCATE_A(vin)
       SAFE_DEALLOCATE_A(vnew)
+      SAFE_DEALLOCATE_A(Imvout)
+      SAFE_DEALLOCATE_A(Imvin)
+      SAFE_DEALLOCATE_A(Imvnew)
     case(MIXDENS)
       SAFE_DEALLOCATE_A(rhonew)
+      SAFE_DEALLOCATE_A(Imrhonew)
     case(MIXNONE)
       call v_ks_calc(ks, hm, st, geo)
     end select
 
     SAFE_DEALLOCATE_A(rhoout)
     SAFE_DEALLOCATE_A(rhoin)
+    SAFE_DEALLOCATE_A(Imrhoout)
+    SAFE_DEALLOCATE_A(Imrhoin)
 
     if(.not.finish) then
       write(message(1), '(a,i4,a)') 'SCF *not* converged after ', iter - 1, ' iterations.'

@@ -610,6 +610,7 @@ contains
         end if
       end if
 
+      print *, "<><><><HERE WE ARE><><><><>"
       ! Get the *local* XC term
       if(hm%d%cdft) then
         call messages_not_implemented('Current-DFT')
@@ -634,9 +635,10 @@ contains
 !                 ex = energy%Imexchange, ec = energy%Imcorrelation, vxc = ks%calc%Imvxc)
                 print *, "LDA calc energy exc"
                 call v_ks_hartree(ks, hm)
-                ks%calc%vxc(:,1) = M_HALF * hm%vhartree(:)
-                ks%calc%Imvxc(:,1) = M_HALF * hm%Imvhartree(:)
-                
+                ks%calc%vxc(:,1) = - M_HALF * hm%vhartree(:)
+                ks%calc%Imvxc(:,1) = - M_HALF * hm%Imvhartree(:)
+                energy%exchange = - M_HALF *hm%energy%hartree
+                energy%Imexchange = - M_HALF *hm%energy%Imhartree
 !                 ks%calc%vxc = ks%calc%vxc * real(exp(-M_zI*hm%cmplxscl_th))
 !                 ks%calc%Imvxc = ks%calc%Imvxc * aimag(exp(-M_zI*hm%cmplxscl_th))
             else
@@ -1010,6 +1012,7 @@ contains
     type(hamiltonian_t), intent(inout) :: hm
 
     FLOAT, pointer :: pot(:), Impot(:)
+    CMPLX :: ztmp
 
     PUSH_SUB(v_ks_hartree)
 
@@ -1049,8 +1052,14 @@ contains
 
     if(ks%calc%calc_energy) then
       ! Get the Hartree energy
-      hm%energy%hartree = M_HALF*dmf_dotp(ks%gr%fine%mesh, ks%calc%total_density, pot)
-      if(hm%cmplxscl) hm%energy%Imhartree = M_HALF*dmf_dotp(ks%gr%fine%mesh, ks%calc%Imtotal_density, Impot)
+      if(.not. hm%cmplxscl) then
+        hm%energy%hartree = M_HALF*dmf_dotp(ks%gr%fine%mesh, ks%calc%total_density, pot)
+      else
+        ztmp = M_HALF*zmf_dotp(ks%gr%fine%mesh,&
+           ks%calc%total_density + M_zI * ks%calc%Imtotal_density, pot + M_zI * Impot)
+        hm%energy%hartree   = real(ztmp)
+        hm%energy%Imhartree = aimag(ztmp)
+      end if
     end if
 
     if(ks%gr%have_fine_mesh) then
