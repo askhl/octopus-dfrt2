@@ -461,7 +461,7 @@ contains
       SAFE_ALLOCATE(Imrhoout(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
       SAFE_ALLOCATE(Imrhoin (1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
 
-      Imrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
+      Imrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
       Imrhoout = M_ZERO
     end if
 
@@ -658,6 +658,8 @@ contains
         end if
         call hamiltonian_update(hm, gr%mesh)
         if (hm%d%cdft) hm%axc(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin) = vnew(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin)
+      case(MIXNONE)
+        call v_ks_calc(ks, hm, st, geo)
       end select
 
       ! Are we asked to stop? (Whenever Fortran is ready for signals, this should go away)
