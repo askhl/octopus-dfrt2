@@ -1050,6 +1050,7 @@ contains
         call dpoisson_solve(ks%hartree_solver, pot, ks%calc%total_density)
       else
         ! Solve the Poisson equation for the scaled density and coulomb potential
+        print *,"CALC HARTREE - ZPSOLVE"
         call zpoisson_solve(ks%hartree_solver, zpot,&
                ks%calc%total_density + M_zI * ks%calc%Imtotal_density, theta = hm%cmplxscl_th)
         pot   =   real(zpot)
