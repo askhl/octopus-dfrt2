@@ -410,8 +410,8 @@ subroutine X(exchange_operator) (hm, der, psi, hpsi, ist, ik, exx_coef)
     ! in Hartree we just remove the self-interaction
     if(hm%theory_level == HARTREE .and. jst .ne. ist) cycle
 
-    pot = M_ZERO
-    rho = M_ZERO
+    pot = R_TOTYPE(M_ZERO)
+    rho = R_TOTYPE(M_ZERO)
 
     call states_get_state(hm%hf_st, der%mesh, jst, ik, psi2)
     
@@ -431,9 +431,7 @@ subroutine X(exchange_operator) (hm, der, psi, hpsi, ist, ik, exx_coef)
           rho(ip) = rho(ip) + psi2(ip, idim)*psi(ip, idim)
         end forall
       end do
-    
-      call zpoisson_solve(psolver, pot, rho)
-      pot = pot * exp(-M_zI*hm%cmplxscl_th) ! rotate on complex plane 
+      call zpoisson_solve(psolver, pot, rho, theta = hm%cmplxscl_th)
 #endif      
     end if
 

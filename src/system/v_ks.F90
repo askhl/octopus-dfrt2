@@ -497,7 +497,11 @@ contains
       call calculate_density()
 
       if(poisson_is_async(ks%hartree_solver)) then
-        call dpoisson_solve_start(ks%hartree_solver, ks%calc%total_density)
+        if(.not. cmplxscl) then
+          call dpoisson_solve_start(ks%hartree_solver, ks%calc%total_density)
+        else
+          call zpoisson_solve_start(ks%hartree_solver, ks%calc%total_density + M_zI * ks%calc%total_density)          
+        end if
       end if
 
       if(ks%theory_level .ne. HARTREE) call v_a_xc(geo, hm)
@@ -635,12 +639,15 @@ contains
 !                 ex = energy%Imexchange, ec = energy%Imcorrelation, vxc = ks%calc%Imvxc)
                 print *, "LDA calc energy exc"
                 call v_ks_hartree(ks, hm)
-                ks%calc%vxc(:,1) = - M_HALF * hm%vhartree(:)
+                ks%calc%vxc(:,1) = - M_HALF * hm%vhartree(:) 
                 ks%calc%Imvxc(:,1) = - M_HALF * hm%Imvhartree(:)
                 energy%exchange = - M_HALF *hm%energy%hartree
                 energy%Imexchange = - M_HALF *hm%energy%Imhartree
-!                 ks%calc%vxc = ks%calc%vxc * real(exp(-M_zI*hm%cmplxscl_th))
-!                 ks%calc%Imvxc = ks%calc%Imvxc * aimag(exp(-M_zI*hm%cmplxscl_th))
+
+!                 ks%calc%vxc(:,1) = M_ZERO 
+!                 ks%calc%Imvxc(:,1) = M_ZERO
+!                 energy%exchange = M_ZERO
+!                 energy%Imexchange = M_ZERO
             else
               call xc_get_vxc(ks%gr%fine%der, ks%xc, &
                 st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
@@ -1011,42 +1018,51 @@ contains
     type(v_ks_t),        intent(inout) :: ks
     type(hamiltonian_t), intent(inout) :: hm
 
-    FLOAT, pointer :: pot(:), Impot(:)
+    FLOAT, pointer :: pot(:), Impot(:), aux(:)
+    CMPLX, pointer :: zpot(:)
     CMPLX :: ztmp
 
     PUSH_SUB(v_ks_hartree)
 
     ASSERT(associated(ks%hartree_solver))
 
+    
     if(.not. ks%gr%have_fine_mesh) then
       pot => hm%vhartree
-      if (hm%cmplxscl) Impot => hm%Imvhartree
+      if (hm%cmplxscl) then 
+        Impot => hm%Imvhartree
+        SAFE_ALLOCATE(zpot(1:size(Impot,1)))
+      end if
     else
-      SAFE_ALLOCATE(pot(1:ks%gr%fine%mesh%np_part))
-      pot = M_ZERO
-      if(hm%cmplxscl) then
-        SAFE_ALLOCATE(Impot(1:ks%gr%fine%mesh%np_part))
-        Impot = M_ZERO
+      if(.not. hm%cmplxscl) then
+        SAFE_ALLOCATE(pot(1:ks%gr%fine%mesh%np_part))
+        pot = M_ZERO
+      else
+        SAFE_ALLOCATE(aux(1:ks%gr%fine%mesh%np_part))
+        SAFE_ALLOCATE(zpot(1:ks%gr%fine%mesh%np_part))
+        zpot = M_z0
       end if
     end if
 
     if(.not. poisson_is_async(ks%hartree_solver)) then
-      ! solve the Poisson equation
-      call dpoisson_solve(ks%hartree_solver, pot, ks%calc%total_density)
-      if (hm%cmplxscl) then 
-        ! Solve the Poisson equation for the Imaginary part of the density and 
-        ! apply the rotation on the complex plane 
-        call dpoisson_solve(ks%hartree_solver, Impot, ks%calc%Imtotal_density)
-        pot   =   pot *  real(exp(-M_zI*hm%cmplxscl_th))
-        Impot = Impot * aimag(exp(-M_zI*hm%cmplxscl_th))
+      if (.not. hm%cmplxscl) then 
+        ! solve the Poisson equation
+        call dpoisson_solve(ks%hartree_solver, pot, ks%calc%total_density)
+      else
+        ! Solve the Poisson equation for the scaled density and coulomb potential
+        call zpoisson_solve(ks%hartree_solver, zpot,&
+               ks%calc%total_density + M_zI * ks%calc%Imtotal_density, theta = hm%cmplxscl_th)
+        pot   =   real(zpot)
+        Impot =  aimag(zpot)
       end if
     else
       ! The calculation was started by v_ks_calc_start.
-      call dpoisson_solve_finish(ks%hartree_solver, pot)
-      if(hm%cmplxscl) then
-        call dpoisson_solve_finish(ks%hartree_solver, Impot)
-        pot   =   pot *  real(exp(-M_zI*hm%cmplxscl_th))
-        Impot = Impot * aimag(exp(-M_zI*hm%cmplxscl_th))
+      if(.not. hm%cmplxscl) then
+        call dpoisson_solve_finish(ks%hartree_solver, pot)
+      else
+        call zpoisson_solve_finish(ks%hartree_solver, zpot)
+        pot   =   real(zpot)
+        Impot =  aimag(zpot)
       end if
     end if
 
@@ -1056,7 +1072,7 @@ contains
         hm%energy%hartree = M_HALF*dmf_dotp(ks%gr%fine%mesh, ks%calc%total_density, pot)
       else
         ztmp = M_HALF*zmf_dotp(ks%gr%fine%mesh,&
-           ks%calc%total_density + M_zI * ks%calc%Imtotal_density, pot + M_zI * Impot)
+           ks%calc%total_density + M_zI * ks%calc%Imtotal_density, zpot, dotu = .true.)
         hm%energy%hartree   = real(ztmp)
         hm%energy%Imhartree = aimag(ztmp)
       end if
@@ -1066,13 +1082,19 @@ contains
       ! we use injection to transfer to the fine grid, we cannot use
       ! restriction since the boundary conditions are not zero for the
       ! Hartree potential (and for some XC functionals).
-      call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, pot, hm%vhartree, INJECTION)
-      if(hm%cmplxscl) call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, Impot, hm%Imvhartree, INJECTION)
+      if(.not. hm%cmplxscl) then
+        call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, pot, hm%vhartree, INJECTION)
+      else
+        aux = real(zpot)
+        call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, aux, hm%vhartree, INJECTION)
+        aux = aimag(zpot)
+        call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, aux, hm%Imvhartree, INJECTION)
+      end if
       ! some debugging output that I will keep here for the moment, XA
       !      call dio_function_output(1, "./", "vh_fine", ks%gr%fine%mesh, pot, unit_one, is)
       !      call dio_function_output(1, "./", "vh_coarse", ks%gr%mesh, hm%vhartree, unit_one, is)
       SAFE_DEALLOCATE_P(pot)
-      SAFE_DEALLOCATE_P(Impot)
+      SAFE_DEALLOCATE_P(aux)
     end if
 
     if (ks%calc%calc_energy .and. poisson_get_solver(ks%hartree_solver) == POISSON_SETE) then !SEC
@@ -1084,6 +1106,10 @@ contains
       !  hm%ep%eii*CNST(2.0)*CNST(13.60569193)
     endif
 
+    if (hm%cmplxscl) then
+      SAFE_DEALLOCATE_P(zpot)
+    end if
+    
     POP_SUB(v_ks_hartree)
   end subroutine v_ks_hartree
   ! ---------------------------------------------------------

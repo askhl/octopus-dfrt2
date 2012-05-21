@@ -730,8 +730,8 @@ contains
     case(MIXDENS)
       SAFE_DEALLOCATE_A(rhonew)
       SAFE_DEALLOCATE_A(Imrhonew)
-    case(MIXNONE)
-      call v_ks_calc(ks, hm, st, geo)
+!     case(MIXNONE)
+!       call v_ks_calc(ks, hm, st, geo)
     end select
 
     SAFE_DEALLOCATE_A(rhoout)

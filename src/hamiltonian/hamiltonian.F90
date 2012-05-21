@@ -284,7 +284,7 @@ contains
     !% It should be bound to 0 <= theta < pi/4. 
     !%End
     call parse_float(datasets_check('ComplexScalingAngle'), CNST(0.3), hm%cmplxscl_th)
-    if(hm%cmplxscl_th < M_ZERO .or. hm%cmplxscl_th >= M_PI/CNST(4.0)) call input_error('ComplexScalingAngle')
+    if(hm%cmplxscl_th < M_ZERO .or. hm%cmplxscl_th > M_PI/CNST(4.0)) call input_error('ComplexScalingAngle')
     hm%cmplxscl=states_dim%cmplxscl
     if (states_dim%cmplxscl) then
       call messages_print_stress(stdout, "Complex Scaling")
