@@ -631,18 +631,19 @@ contains
               ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc)
           else
             if(iand(hm%xc_family, XC_FAMILY_LDA) .ne. 0) then
-!               call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-!                 st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-!                 ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc)
-!               call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-!                 st, ks%calc%Imdensity, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-!                 ex = energy%Imexchange, ec = energy%Imcorrelation, vxc = ks%calc%Imvxc)
-                print *, "LDA calc energy exc"
-                call v_ks_hartree(ks, hm)
-                ks%calc%vxc(:,1) = - M_HALF * hm%vhartree(:) 
-                ks%calc%Imvxc(:,1) = - M_HALF * hm%Imvhartree(:)
-                energy%exchange = - M_HALF *hm%energy%hartree
-                energy%Imexchange = - M_HALF *hm%energy%Imhartree
+
+              call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+                st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+                ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, & 
+                Imrho = ks%calc%Imdensity, Imex = energy%Imexchange, Imec = energy%Imcorrelation, &
+                Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
+            
+                
+!                 call v_ks_hartree(ks, hm)
+!                 ks%calc%vxc(:,1) = - M_HALF * hm%vhartree(:) 
+!                 ks%calc%Imvxc(:,1) = - M_HALF * hm%Imvhartree(:)
+!                 energy%exchange = - M_HALF *hm%energy%hartree
+!                 energy%Imexchange = - M_HALF *hm%energy%Imhartree
 
 !                 ks%calc%vxc(:,1) = M_ZERO 
 !                 ks%calc%Imvxc(:,1) = M_ZERO

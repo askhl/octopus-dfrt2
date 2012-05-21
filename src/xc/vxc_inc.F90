@@ -18,7 +18,7 @@
 !! $Id: vxc_inc.F90 8658 2011-12-06 00:35:11Z dstrubbe $
 
 ! ---------------------------------------------------------
-subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau, Imrho, Imvxc, Imvtau, cmplxscl_th)
+subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
   type(states_t),       intent(in)    :: st              !< State of the system (wavefunction,eigenvalues...)
@@ -30,10 +30,6 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vt
   FLOAT, optional,      intent(inout) :: ec              !< Correlation energy.
   FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
   FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
-  FLOAT, optional,      intent(in)    :: Imrho(:, :)     !< cmplxscl: Electronic density 
-  FLOAT, optional,      intent(inout) :: Imvxc(:,:)      !< cmplxscl: XC potential
-  FLOAT, optional,      intent(inout) :: Imvtau(:,:)     !< cmplxscl: Derivative wrt (two times kinetic energy density)
-  FLOAT, optional,      intent(in)    :: cmplxscl_th     !< complex scaling angle
 
   integer :: n_block
 
@@ -72,8 +68,8 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vt
   type(xc_functl_t), pointer :: functl(:)
   type(symmetrizer_t) :: symmetrizer
 
-  PUSH_SUB(xc_get_vxc)
-  call profiling_in(prof, "XC_LOCAL")
+  PUSH_SUB(dxc_get_vxc)
+  call profiling_in(prof, "dXC_LOCAL")
 
   ASSERT(present(ex) .eqv. present(ec))
   calc_energy = present(ex)
@@ -381,7 +377,7 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vt
   if(gga .or. xcs%xc_density_correction == LR_X) call  gga_end()
   if(mgga) call mgga_end()
 
-  POP_SUB(xc_get_vxc)
+  POP_SUB(dxc_get_vxc)
   call profiling_out(prof)
 
 contains
@@ -689,7 +685,7 @@ contains
     POP_SUB(xc_get_vxc.mgga_process)
   end subroutine mgga_process
 
-end subroutine xc_get_vxc
+end subroutine dxc_get_vxc
 
 ! -----------------------------------------------------
 
@@ -903,6 +899,72 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
 
   POP_SUB('vxc_inc.get_qxc')
 end function get_qxc
+
+! ----------------------------------------------------------------------------- 
+! This is the complex scaled interface for xc functionals.
+! It will eventually be merged with the other one dxc_get_vxc after some test
+! -----------------------------------------------------------------------------
+subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau, Imrho, Imex, Imec, Imvxc, Imvtau, cmplxscl_th)
+  type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
+  type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
+  type(states_t),       intent(in)    :: st              !< State of the system (wavefunction,eigenvalues...)
+  FLOAT,                intent(in)    :: rho(:, :)       !< Electronic density 
+  integer,              intent(in)    :: ispin           !< Number of spin channels 
+  FLOAT,                intent(in)    :: ioniz_pot
+  FLOAT,                intent(in)    :: qtot 
+  FLOAT, optional,      intent(inout) :: ex              !< Exchange energy.
+  FLOAT, optional,      intent(inout) :: ec              !< Correlation energy.
+  FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
+  FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
+  FLOAT,                intent(in)    :: Imrho(:, :)     !< cmplxscl: Electronic density 
+  FLOAT, optional,      intent(inout) :: Imex              !< cmplxscl: Exchange energy.
+  FLOAT, optional,      intent(inout) :: Imec              !< cmplxscl: Correlation energy
+  FLOAT, optional,      intent(inout) :: Imvxc(:,:)      !< cmplxscl: XC potential
+  FLOAT, optional,      intent(inout) :: Imvtau(:,:)     !< cmplxscl: Derivative wrt (two times kinetic energy density)
+  FLOAT,                intent(in)    :: cmplxscl_th     !< complex scaling angle
+
+  
+  CMPLX, pointer :: zpot(:), zrho_tot(:)
+  CMPLX          :: ztmp
+  Integer        :: isp
+
+  PUSH_SUB('zxc_get_vxc')
+
+  SAFE_ALLOCATE(zpot(1:size(vxc,1)))
+  SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
+  
+  print *, "LDA calc energy exc"
+
+  zrho_tot = M_z0
+  do isp = 1, ispin
+    zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
+  end do
+
+  call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
+
+
+  vxc(:,1) = - M_HALF * real(zpot(:)) 
+  Imvxc(:,1) = - M_HALF * aimag(zpot(:))
+  
+  if(present(ex)) then
+  
+    ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
+  
+    ex = - M_HALF *real(ztmp)
+    Imex = - M_HALF *aimag(ztmp)
+
+    ec = M_ZERO
+    ex = M_ZERO
+    
+  end if
+  
+  
+  SAFE_DEALLOCATE_P(zrho_tot)
+  SAFE_DEALLOCATE_P(zpot)
+  
+  POP_SUB('zxc_get_vxc')
+end subroutine zxc_get_vxc
+
 
 !! Local Variables:
 !! mode: f90
