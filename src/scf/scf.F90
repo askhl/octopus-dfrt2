@@ -699,7 +699,7 @@ contains
       if (hm%d%cdft) rhoin(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = st%current(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
       if (scf%mix_field == MIXPOT) then
         vin(1:gr%mesh%np, 1, 1:nspin) = hm%vhxc(1:gr%mesh%np, 1:nspin)
-        Imvin(1:gr%mesh%np, 1, 1:nspin) = hm%Imvhxc(1:gr%mesh%np, 1:nspin)
+        if (cmplxscl) Imvin(1:gr%mesh%np, 1, 1:nspin) = hm%Imvhxc(1:gr%mesh%np, 1:nspin)
         if (hm%d%cdft) vin(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = hm%axc(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
       end if
       evsum_in = evsum_out

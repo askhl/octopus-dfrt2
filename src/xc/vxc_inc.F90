@@ -917,8 +917,8 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
   FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
   FLOAT,                intent(in)    :: Imrho(:, :)     !< cmplxscl: Electronic density 
-  FLOAT, optional,      intent(inout) :: Imex              !< cmplxscl: Exchange energy.
-  FLOAT, optional,      intent(inout) :: Imec              !< cmplxscl: Correlation energy
+  FLOAT, optional,      intent(inout) :: Imex            !< cmplxscl: Exchange energy.
+  FLOAT, optional,      intent(inout) :: Imec            !< cmplxscl: Correlation energy
   FLOAT, optional,      intent(inout) :: Imvxc(:,:)      !< cmplxscl: XC potential
   FLOAT, optional,      intent(inout) :: Imvtau(:,:)     !< cmplxscl: Derivative wrt (two times kinetic energy density)
   FLOAT,                intent(in)    :: cmplxscl_th     !< complex scaling angle
@@ -950,11 +950,11 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   
     ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
   
-    ex = - M_HALF *real(ztmp)
-    Imex = - M_HALF *aimag(ztmp)
+    ex =  M_HALF *real(ztmp)
+    Imex =  M_HALF *aimag(ztmp)
 
-    ec = M_ZERO
-    ex = M_ZERO
+    ec   = M_ZERO
+    Imec = M_ZERO
     
   end if
   
