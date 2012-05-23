@@ -900,6 +900,85 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
   POP_SUB('vxc_inc.get_qxc')
 end function get_qxc
 
+subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec)
+  type(mesh_t), intent(in) :: mesh
+  FLOAT, intent(in)        :: rho(:, :)
+  FLOAT, intent(inout)     :: vxc(:, :)
+  FLOAT, intent(inout)     :: ex
+  FLOAT, intent(inout)     :: ec
+  FLOAT, intent(in)        :: Imrho(:, :)
+  FLOAT, intent(inout)     :: Imvxc(:, :)
+  FLOAT, intent(inout)     :: Imex
+  FLOAT, intent(inout)     :: Imec
+  
+  
+  COMPLEX :: zex, zec, zrho, zvxc, eps_c
+  INTEGER :: i, N
+  FLOAT :: lda_exchange_prefactor
+  COMPLEX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs
+
+  FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4
+
+  ! LDA constants.
+  ! Only C0I is used for spin-paired calculations among these five
+  C0I = 0.238732414637843
+  C1 = -0.45816529328314287
+  CC1 = 1.9236610509315362
+  CC2 = 2.5648814012420482
+  IF2 = 0.58482236226346462
+  
+  gamma = 0.031091
+  alpha1 = 0.21370
+  beta1 = 7.5957
+  beta2 = 3.5876
+  beta3 = 1.6382
+  beta4 = 0.49294
+
+  N = size(rho, 1)
+
+  zex = M_z0
+  zec = M_z0
+  
+  lda_exchange_prefactor = -0.73855876638202234 !-3.0 / 4.0 * (3.0 / np.pi)**(1.0 / 3.0)
+
+  do i=1, N
+     zrho = rho(i, 1) + M_zI * Imrho(i, 1)
+     
+     ! exchange
+     zex = zex + lda_exchange_prefactor * zrho**(4.0 / 3.0)
+     zvxc = (4.0 / 3.0) * lda_exchange_prefactor * zrho**(1.0 / 3.0)
+
+     ! correlation
+     rs = (C0I / zrho)**(1.0 / 3.0)
+     rtrs = sqrt(rs)
+     Q0 = -2.0 * gamma * (1.0 + alpha1 * rs)
+     Q1 = 2.0 * gamma * rtrs * (beta1 + rtrs * (beta2 + rtrs * (beta3 + rtrs * beta4)))
+     eps_c = Q0 * log(1.0 + 1.0 / Q1)
+     zec = zec + eps_c * zrho
+     dQ1drs = gamma * (beta1 / rtrs + 2.0 * beta2 + rtrs * (3.0 * beta3 + 4.0 * beta4 * rtrs))
+     dedrs = -2.0 * gamma * alpha1 * eps_c / Q0 - Q0 * dQ1drs / (Q1 * (Q1 + 1.0))
+
+     zvxc = zvxc + eps_c - rs * dedrs / 3.0
+     
+     
+     vxc(i, 1) = real(zvxc)
+     Imvxc(i, 1) = aimag(zvxc)
+
+  end do
+  zex = zex * mesh%volume_element
+  zec = zec * mesh%volume_element
+
+  ex = ex + real(zex)
+  ec = ec + real(zec)
+  Imex = Imex + aimag(zex)
+  Imec = Imec + aimag(zec)
+  
+  print*, 'lda exchange', zex
+  print*, 'lda correlation', zec
+
+  
+end subroutine zxc_complex_lda
+
 ! ----------------------------------------------------------------------------- 
 ! This is the complex scaled interface for xc functionals.
 ! It will eventually be merged with the other one dxc_get_vxc after some test
@@ -930,38 +1009,40 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
 
   PUSH_SUB('zxc_get_vxc')
 
-  SAFE_ALLOCATE(zpot(1:size(vxc,1)))
-  SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
   
   print *, "LDA calc energy exc"
+  call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec)
 
-  zrho_tot = M_z0
-  do isp = 1, ispin
-    zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
-  end do
-
-  call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
-
-
-  vxc(:,1) = - M_HALF * real(zpot(:)) 
-  Imvxc(:,1) = - M_HALF * aimag(zpot(:))
-  
-  if(present(ex)) then
-  
-    ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
-  
-    ex = - M_HALF *real(ztmp)
-    Imex = - M_HALF *aimag(ztmp)
-
-    ec = M_ZERO
-    ex = M_ZERO
-    
-  end if
-  
-  
-  SAFE_DEALLOCATE_P(zrho_tot)
-  SAFE_DEALLOCATE_P(zpot)
-  
+!!$  SAFE_ALLOCATE(zpot(1:size(vxc,1)))
+!!$  SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
+!!$
+!!$  zrho_tot = M_z0
+!!$  do isp = 1, ispin
+!!$    zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
+!!$  end do
+!!$
+!!$  call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
+!!$
+!!$
+!!$  vxc(:,1) = - M_HALF * real(zpot(:)) 
+!!$  Imvxc(:,1) = - M_HALF * aimag(zpot(:))
+!!$  
+!!$  if(present(ex)) then
+!!$  
+!!$    ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
+!!$  
+!!$    ex = - M_HALF *real(ztmp)
+!!$    Imex = - M_HALF *aimag(ztmp)
+!!$
+!!$    ec = M_ZERO
+!!$    ex = M_ZERO
+!!$    
+!!$  end if
+!!$  
+!!$  
+!!$  SAFE_DEALLOCATE_P(zrho_tot)
+!!$  SAFE_DEALLOCATE_P(zpot)
+!!$  
   POP_SUB('zxc_get_vxc')
 end subroutine zxc_get_vxc
 

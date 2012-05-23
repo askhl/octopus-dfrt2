@@ -637,7 +637,6 @@ contains
                 ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, & 
                 Imrho = ks%calc%Imdensity, Imex = energy%Imexchange, Imec = energy%Imcorrelation, &
                 Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
-            
                 
 !                 call v_ks_hartree(ks, hm)
 !                 ks%calc%vxc(:,1) = - M_HALF * hm%vhartree(:) 
@@ -676,7 +675,6 @@ contains
               call xc_get_vxc(ks%gr%fine%der, ks%xc, &
                 st, ks%calc%Imdensity, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
                 vxc = ks%calc%Imvxc)
-                print *, "LDA calc pot"
 !                 ks%calc%vxc = ks%calc%vxc * real(exp(-M_zI*hm%cmplxscl_th))
 !                 ks%calc%Imvxc = ks%calc%Imvxc * aimag(exp(-M_zI*hm%cmplxscl_th))
             else
@@ -714,6 +712,7 @@ contains
 
         endif
       end if
+      print*, 'XC energies: ex', energy%exchange, 'ec', energy%correlation
 
       if(ks%tail_correction) then 
         if (cmplxscl) call messages_not_implemented('Complex Scaling with tail_correction')
