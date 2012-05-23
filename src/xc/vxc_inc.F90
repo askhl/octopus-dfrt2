@@ -912,10 +912,10 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec)
   FLOAT, intent(inout)     :: Imec
   
   
-  COMPLEX :: zex, zec, zrho, zvxc, eps_c
+  CMPLX :: zex, zec, zrho, zvxc, eps_c
   INTEGER :: i, N
   FLOAT :: lda_exchange_prefactor
-  COMPLEX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs
+  CMPLX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs
 
   FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4
 
