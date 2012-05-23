@@ -996,8 +996,8 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
   FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
   FLOAT,                intent(in)    :: Imrho(:, :)     !< cmplxscl: Electronic density 
-  FLOAT, optional,      intent(inout) :: Imex              !< cmplxscl: Exchange energy.
-  FLOAT, optional,      intent(inout) :: Imec              !< cmplxscl: Correlation energy
+  FLOAT, optional,      intent(inout) :: Imex            !< cmplxscl: Exchange energy.
+  FLOAT, optional,      intent(inout) :: Imec            !< cmplxscl: Correlation energy
   FLOAT, optional,      intent(inout) :: Imvxc(:,:)      !< cmplxscl: XC potential
   FLOAT, optional,      intent(inout) :: Imvtau(:,:)     !< cmplxscl: Derivative wrt (two times kinetic energy density)
   FLOAT,                intent(in)    :: cmplxscl_th     !< complex scaling angle
@@ -1010,39 +1010,39 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   PUSH_SUB('zxc_get_vxc')
 
   
-  print *, "LDA calc energy exc"
-  call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec)
+  !print *, "LDA calc energy exc"
+  !call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec)
 
-!!$  SAFE_ALLOCATE(zpot(1:size(vxc,1)))
-!!$  SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
-!!$
-!!$  zrho_tot = M_z0
-!!$  do isp = 1, ispin
-!!$    zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
-!!$  end do
-!!$
-!!$  call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
-!!$
-!!$
-!!$  vxc(:,1) = - M_HALF * real(zpot(:)) 
-!!$  Imvxc(:,1) = - M_HALF * aimag(zpot(:))
-!!$  
-!!$  if(present(ex)) then
-!!$  
-!!$    ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
-!!$  
-!!$    ex = - M_HALF *real(ztmp)
-!!$    Imex = - M_HALF *aimag(ztmp)
-!!$
-!!$    ec = M_ZERO
-!!$    ex = M_ZERO
-!!$    
-!!$  end if
-!!$  
-!!$  
-!!$  SAFE_DEALLOCATE_P(zrho_tot)
-!!$  SAFE_DEALLOCATE_P(zpot)
-!!$  
+  SAFE_ALLOCATE(zpot(1:size(vxc,1)))
+  SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
+
+  zrho_tot = M_z0
+  do isp = 1, ispin
+    zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
+  end do
+
+  call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
+
+
+  vxc(:,1) = - M_HALF * real(zpot(:)) 
+  Imvxc(:,1) = - M_HALF * aimag(zpot(:))
+  
+  if(present(ex)) then
+  
+    ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
+  
+    ex =  M_HALF *real(ztmp)
+    Imex =  M_HALF *aimag(ztmp)
+
+    ec   = M_ZERO
+    Imec = M_ZERO
+    
+  end if
+  
+  
+  SAFE_DEALLOCATE_P(zrho_tot)
+  SAFE_DEALLOCATE_P(zpot)
+  
   POP_SUB('zxc_get_vxc')
 end subroutine zxc_get_vxc
 
