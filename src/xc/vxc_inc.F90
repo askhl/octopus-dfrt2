@@ -1033,7 +1033,7 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   
   if(functl(1)%id == XC_LDA_XC_CMPLX) then
     
-    call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec)
+    call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
 
     ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
     ! we keep it here for debug purposes
