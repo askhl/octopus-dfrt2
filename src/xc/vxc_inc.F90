@@ -1013,8 +1013,6 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
 
   PUSH_SUB('zxc_get_vxc')
 
-  ! DISABLE (or enable) STUFF
-  if (.false.) then
   print *, "LDA calc energy exc"
   ASSERT(present(ex) .eqv. present(ec))
   calc_energy = present(ex)
@@ -1077,11 +1075,6 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
     write(message(2), '(a)') 'Use XCFunctional = lda_xc_cmplx.'
     call messages_fatal(2)     
   end if
-
-
-  else
-     call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
-  end if ! disable 
 
   POP_SUB('zxc_get_vxc')
 end subroutine zxc_get_vxc
