@@ -967,6 +967,7 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
      Imvxc(i, 1) = aimag(zvxc)
 
   end do
+  
   zex = zex * mesh%volume_element
   zec = zec * mesh%volume_element
 
