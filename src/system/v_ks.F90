@@ -614,7 +614,6 @@ contains
         end if
       end if
 
-      print *, "<><><><HERE WE ARE><><><><>"
       ! Get the *local* XC term
       if(hm%d%cdft) then
         call messages_not_implemented('Current-DFT')
@@ -683,7 +682,6 @@ contains
 
         endif
       end if
-      print*, 'XC energies: ex', energy%exchange, 'ec', energy%correlation
 
       if(ks%tail_correction) then 
         if (cmplxscl) call messages_not_implemented('Complex Scaling with tail_correction')

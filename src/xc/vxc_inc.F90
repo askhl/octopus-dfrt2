@@ -1007,50 +1007,77 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   CMPLX          :: ztmp
   Integer        :: isp
 
+  type(xc_functl_t), pointer :: functl(:)
+  logical         :: calc_energy
+
   PUSH_SUB('zxc_get_vxc')
 
+
+  ASSERT(present(ex) .eqv. present(ec))
+  calc_energy = present(ex)
+
+  !Pointer-shortcut for xcs%functl
+  !It helps to remember that for xcs%functl(:,:)
+  ! (1,:) => exchange,    (2,:) => correlation
+  ! (:,1) => unpolarized, (:,2) => polarized
+  if(ispin == UNPOLARIZED) then
+    functl => xcs%functl(:, 1)
+  else
+    functl => xcs%functl(:, 2)
+  end if
+
+
   
-  print *, "LDA calc energy exc"
+  if(functl(1)%id == XC_LDA_XC_CMPLX) then
+    
+    call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec)
 
-  call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec)
+    ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
+    ! we keep it here for debug purposes
+    if(.false.) then
+      SAFE_ALLOCATE(zpot(1:size(vxc,1)))
+      SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
 
+      zrho_tot = M_z0
+      do isp = 1, ispin
+        zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
+      end do
 
+      call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
 
-
-
-  ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
-  ! I keep it here for debug purposes
-  if(.false.) then
-    SAFE_ALLOCATE(zpot(1:size(vxc,1)))
-    SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
-
-    zrho_tot = M_z0
-    do isp = 1, ispin
-      zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
-    end do
-
-    call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
-
-
-    vxc(:,1) = - M_HALF * real(zpot(:)) 
-    Imvxc(:,1) = - M_HALF * aimag(zpot(:))
+      vxc(:,1) = - M_HALF * real(zpot(:)) 
+      Imvxc(:,1) = - M_HALF * aimag(zpot(:))
   
-    if(present(ex)) then
-  
-      ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
-  
-      ex =  M_HALF *real(ztmp)
-      Imex =  M_HALF *aimag(ztmp)
+      if(calc_energy) then
+        ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
+        ex =  M_HALF *real(ztmp)
+        Imex =  M_HALF *aimag(ztmp)
+        ec   = M_ZERO
+        Imec = M_ZERO    
+      end if
+      SAFE_DEALLOCATE_P(zrho_tot)
+      SAFE_DEALLOCATE_P(zpot)
+    end if
+    
+  else if(functl(1)%family == XC_FAMILY_NONE) then
 
+    vxc = M_ZERO
+    if(calc_energy) then
+      ex   = M_ZERO
+      Imex = M_ZERO
       ec   = M_ZERO
       Imec = M_ZERO
-    
     end if
 
-    SAFE_DEALLOCATE_P(zrho_tot)
-    SAFE_DEALLOCATE_P(zpot)
-
+  else  
+    write(message(1), '(a)') 'The selected XCFunctional will not work with ComplexScaling = yes.'
+    write(message(2), '(a)') 'Use XCFunctional = lda_xc_cmplx.'
+    call messages_fatal(2)     
   end if
+
+
+
+
   
   
   
