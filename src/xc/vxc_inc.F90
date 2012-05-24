@@ -912,10 +912,10 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   FLOAT, intent(inout)     :: Imec
   FLOAT, intent(in)        :: cmplxscl_th
   
-  COMPLEX :: zex, zec, zrho, zvxc, eps_c
+  CMPLX :: zex, zec, zrho, zvxc, eps_c
   INTEGER :: i, N
   FLOAT :: lda_exchange_prefactor
-  COMPLEX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs, phase
+  CMPLX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs, phase
 
   FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4
 
@@ -1011,42 +1011,49 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
 
   PUSH_SUB('zxc_get_vxc')
 
-  
-  !print *, "LDA calc energy exc"
   call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
 
   ! DISABLE STUFF
   if (.false.) then
-
-  SAFE_ALLOCATE(zpot(1:size(vxc,1)))
-  SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
-
-  zrho_tot = M_z0
-  do isp = 1, ispin
-    zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
-  end do
-
-  call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
+  print *, "LDA calc energy exc"
 
 
-  vxc(:,1) = - M_HALF * real(zpot(:)) 
-  Imvxc(:,1) = - M_HALF * aimag(zpot(:))
+
+  ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
+  ! I keep it here for debug purposes
+  if(.false.) then
+    SAFE_ALLOCATE(zpot(1:size(vxc,1)))
+    SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
+
+    zrho_tot = M_z0
+    do isp = 1, ispin
+      zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
+    end do
+
+    call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
+
+
+    vxc(:,1) = - M_HALF * real(zpot(:)) 
+    Imvxc(:,1) = - M_HALF * aimag(zpot(:))
   
-  if(present(ex)) then
+    if(present(ex)) then
   
-    ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
+      ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
   
-    ex =  M_HALF *real(ztmp)
-    Imex =  M_HALF *aimag(ztmp)
+      ex =  M_HALF *real(ztmp)
+      Imex =  M_HALF *aimag(ztmp)
 
-    ec   = M_ZERO
-    Imec = M_ZERO
+      ec   = M_ZERO
+      Imec = M_ZERO
     
+    end if
+
+    SAFE_DEALLOCATE_P(zrho_tot)
+    SAFE_DEALLOCATE_P(zpot)
+
   end if
   
   
-  SAFE_DEALLOCATE_P(zrho_tot)
-  SAFE_DEALLOCATE_P(zpot)
   
   end if
 
