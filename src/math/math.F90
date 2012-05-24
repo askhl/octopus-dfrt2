@@ -1146,19 +1146,24 @@ end subroutine generate_rotation_matrix
 ! 3. values with positive imaginary part unsorted
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-subroutine sort_complex(vec, Imvec, reorder)
-  FLOAT,     intent(inout)  :: vec(:)
-  FLOAT,     intent(inout)  :: Imvec(:)
-  integer,   intent(out)    :: reorder(:)
+subroutine sort_complex(vec, Imvec, reorder, imthr)
+  FLOAT,           intent(inout)  :: vec(:)
+  FLOAT,           intent(inout)  :: Imvec(:)
+  integer,         intent(out)    :: reorder(:)
+  FLOAT, optional, intent(in)     :: imthr ! the threshold for zero imaginary part
   
   integer              :: dim, n0, n1, n2, i
   integer, allocatable :: table(:),idx0(:)
   FLOAT,   allocatable :: temp(:),tempI(:)
+  FLOAT                :: imthr_
   
   PUSH_SUB(sort_complex)
   
   dim = size(vec, 1)
   ASSERT(dim == size(Imvec,1) .and. dim == size(reorder,1))
+  
+  imthr_ = CNST(1E-6)
+  if(present(imthr)) imthr_ = imthr
   
   SAFE_ALLOCATE(table(dim))
   SAFE_ALLOCATE(temp(dim))
@@ -1171,18 +1176,18 @@ subroutine sort_complex(vec, Imvec, reorder)
   n1 = 0
   temp = vec
   do i = 1, dim
-    if (abs(Imvec(i)) < CNST(1e-7)) then
+    if (abs(Imvec(i)) < imthr_) then
       n0 = n0 + 1 
-    else if (Imvec(i) <  0) then 
+    else if (Imvec(i) < -imthr_) then 
       n1 = n1 + 1
     end if
     vec(i)     = temp(table(dim - i + 1))
     Imvec(i)   = tempI(dim - i + 1)
     reorder(i) = table(dim - i + 1)
-!     print *, "---", i ,vec(i), Imvec(i)
+     print *, "---", i ,vec(i), Imvec(i), reorder(i)
   end do
   n2 = dim - n0 - n1 
-!   print *,n1, n0, n2 
+   print *,n1, n0, n2 
   
   temp = vec
   tempI = Imvec
@@ -1196,32 +1201,32 @@ subroutine sort_complex(vec, Imvec, reorder)
   
   do i = 1, n0
     vec  (i) = temp (n2 + i)
-!      print *, i , n0 , n2 ,idx0(i)
-    Imvec(i) = tempI(table(n2 + idx0(i)))
+    Imvec  (i) = tempI(n2 + idx0(i))
     reorder(i) = table(n2 + idx0(i))
-!     print *, "zero", reorder(i)
+    print *, i , n0 , n2 ,idx0(i), Imvec(i),reorder(i)
+!      print *, "zero", reorder(i)
   end do
   SAFE_DEALLOCATE_A(idx0)
   
   !negative Img parts
   do i =  1, n1
-    vec  (n0 + i) = temp (n2 + n0 + i)
-    Imvec(n0 + i) = tempI(n2 + n0 + i)
+    vec    (n0 + i) = temp (n2 + n0 + i)
+    Imvec  (n0 + i) = tempI(n2 + n0 + i)
     reorder(n0 + i) = table(n2 + n0 + i)
 !     print *, "neg", reorder(i)
   end do 
   
   ! positive img parts
   do i = 1, n2
-    vec  (n0 + n1 + i) = temp (n2 + 1 -i)
-    Imvec(n0 + n1 + i) = tempI(n2 + 1 -i)
+    vec    (n0 + n1 + i) = temp (n2 + 1 -i)
+    Imvec  (n0 + n1 + i) = tempI(n2 + 1 -i)
     reorder(n0 + n1 + i) = table(n2 + 1 -i)
 !     print *, "pos", reorder(i)
   end do
   
   
   do i = 1, dim
-!     print *, "--->", i ,vec(i), Imvec(i), reorder(i)
+     print *, "--->", i ,vec(i), Imvec(i), reorder(i)
   end do
   
   
