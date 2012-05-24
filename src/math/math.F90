@@ -1184,7 +1184,7 @@ subroutine sort_complex(vec, Imvec, reorder, imthr)
     vec(i)     = temp(table(dim - i + 1))
     Imvec(i)   = tempI(dim - i + 1)
     reorder(i) = table(dim - i + 1)
-     print *, "---", i ,vec(i), Imvec(i), reorder(i)
+!      print *, "---", i ,vec(i), Imvec(i), reorder(i)
   end do
   n2 = dim - n0 - n1 
    print *,n1, n0, n2 
@@ -1203,8 +1203,7 @@ subroutine sort_complex(vec, Imvec, reorder, imthr)
     vec  (i) = temp (n2 + i)
     Imvec  (i) = tempI(n2 + idx0(i))
     reorder(i) = table(n2 + idx0(i))
-    print *, i , n0 , n2 ,idx0(i), Imvec(i),reorder(i)
-!      print *, "zero", reorder(i)
+!     print *, i , n0 , n2 ,idx0(i), Imvec(i),reorder(i)
   end do
   SAFE_DEALLOCATE_A(idx0)
   
@@ -1213,7 +1212,6 @@ subroutine sort_complex(vec, Imvec, reorder, imthr)
     vec    (n0 + i) = temp (n2 + n0 + i)
     Imvec  (n0 + i) = tempI(n2 + n0 + i)
     reorder(n0 + i) = table(n2 + n0 + i)
-!     print *, "neg", reorder(i)
   end do 
   
   ! positive img parts
@@ -1221,13 +1219,12 @@ subroutine sort_complex(vec, Imvec, reorder, imthr)
     vec    (n0 + n1 + i) = temp (n2 + 1 -i)
     Imvec  (n0 + n1 + i) = tempI(n2 + 1 -i)
     reorder(n0 + n1 + i) = table(n2 + 1 -i)
-!     print *, "pos", reorder(i)
   end do
   
   
-  do i = 1, dim
-     print *, "--->", i ,vec(i), Imvec(i), reorder(i)
-  end do
+!   do i = 1, dim
+!      print *, "--->", i ,vec(i), Imvec(i), reorder(i)
+!   end do
   
   
   SAFE_DEALLOCATE_A(tempI)  

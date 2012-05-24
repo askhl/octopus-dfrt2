@@ -941,7 +941,7 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
 
   phase = exp(-M_zI * cmplxscl_th)
   
-  lda_exchange_prefactor = -0.73855876638202234 * 0.0 !-3.0 / 4.0 * (3.0 / np.pi)**(1.0 / 3.0)
+  lda_exchange_prefactor = -0.73855876638202234 !-3.0 / 4.0 * (3.0 / np.pi)**(1.0 / 3.0)
 
   do i=1, N
      zrho = rho(i, 1) + M_zI * Imrho(i, 1)
@@ -967,6 +967,7 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
      Imvxc(i, 1) = aimag(zvxc)
 
   end do
+  
   zex = zex * mesh%volume_element
   zec = zec * mesh%volume_element
 
@@ -1013,9 +1014,6 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
 
   PUSH_SUB('zxc_get_vxc')
 
-  ! DISABLE (or enable) STUFF
-  if (.false.) then
-  print *, "LDA calc energy exc"
   ASSERT(present(ex) .eqv. present(ec))
   calc_energy = present(ex)
 
@@ -1079,9 +1077,6 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   end if
 
 
-  else
-     call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
-  end if ! disable 
 
   POP_SUB('zxc_get_vxc')
 end subroutine zxc_get_vxc
