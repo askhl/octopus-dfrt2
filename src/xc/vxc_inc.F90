@@ -1014,7 +1014,7 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   PUSH_SUB('zxc_get_vxc')
 
   ! DISABLE (or enable) STUFF
-  if (.true.) then
+  if (.false.) then
   print *, "LDA calc energy exc"
   ASSERT(present(ex) .eqv. present(ec))
   calc_energy = present(ex)
