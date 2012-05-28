@@ -177,16 +177,19 @@ contains
       do ist = 1, st%nst
         call states_get_state(st, mesh, ist, ik, psi)
 
-        ! Orthogonalize eigenstates according to cproduct - this implies st%cmplxscl = .true. 
-        if(ist > 1) then
-           call zstates_orthogonalize_single(st, mesh, ist - 1, ik, psi, normalize = .true.,  norm = cnorm)
-        else
-        ! Normalize the first eigenstate  
+!         ! Orthogonalize eigenstates according to cproduct - this implies st%cmplxscl = .true. 
+!         if(ist > 1) then
+!            call zstates_orthogonalize_single(st, mesh, ist - 1, ik, psi, normalize = .true.,  norm = cnorm)
+!         else
+!         ! Normalize the first eigenstate  
           cnorm = sqrt(zmf_dotp(mesh, st%d%dim, psi, psi, dotu = .true.))
-        end if    
-        st%psi%zR(:,:,ist,ik) = st%psi%zR(:,:,ist,ik)/cnorm
+!           cnorm = sqrt(zmf_integrate(mesh, psi(:,1)**2))
+!         end if    
 
-!         print *,"cnorm", ist, cnorm, abs(cnorm), atan2 (aimag(cnorm), real(cnorm) )
+        psi = psi /cnorm
+        call states_set_state(st, mesh, ist, ik, psi)
+        
+        print *,"cnorm", ist, cnorm, abs(cnorm), atan2 (aimag(cnorm), real(cnorm) )
         
       end do
     end do
@@ -199,21 +202,21 @@ contains
   subroutine reorder_states_by_args(st, mesh, args, idim, ik)
     ! Reorder the states in st so that the order corresponds to
     ! the indices given in args (args could come from an argsort)
-    implicit none
 
-    type(states_t),    intent(inout) :: st
-    type(mesh_t),         intent(in) :: mesh
-    integer, allocatable, intent(in) :: args(:)
-    integer,              intent(in) :: idim, ik
+    type(states_t),       intent(inout) :: st
+    type(mesh_t),         intent(in)    :: mesh
+    integer, allocatable, intent(in)    :: args(:)
+    integer,              intent(in)    :: idim, ik
 
     integer :: ist, jst, kst
-    complex, allocatable :: buf(:)
+    CMPLX,   allocatable :: buf(:,:),buf1(:,:)
     logical, allocatable :: ok(:)
     integer, allocatable :: rank(:)
 
-    allocate(ok(st%nst))
-    allocate(rank(st%nst))
-    allocate(buf(mesh%np_part))
+    SAFE_ALLOCATE(ok(st%nst))
+    SAFE_ALLOCATE(rank(st%nst))
+    SAFE_ALLOCATE(buf(mesh%np_part,1:st%d%dim))
+    SAFE_ALLOCATE(buf1(mesh%np_part,1:st%d%dim))
 
     do ist = 1, st%nst
        ok(ist) = .false.
@@ -222,57 +225,70 @@ contains
 
     do ist = 1, st%nst
        if ((args(ist) /= ist).and.(.not.(ok(ist)))) then
-          buf(:) = st%psi%zR(:, idim, ist, ik)
+          call states_get_state(st, mesh, ist, ik, buf)
+!           buf(:) = st%psi%zR(:, idim, ist, ik)
           kst = ist
           do
              jst = args(kst)
              if (jst.eq.ist) then
-                st%psi%zR(:, idim, rank(jst), ik) = buf(:)
+               call states_set_state(st, mesh, rank(jst), ik, buf)
+!                 st%psi%zR(:, idim, rank(jst), ik) = buf(:)
                 ok(rank(jst)) = .true.
                 exit
              end if
-             st%psi%zR(:, idim, kst, ik) = st%psi%zR(:, idim, jst, ik)
+             call states_get_state(st, mesh, jst, ik, buf1)
+             call states_set_state(st, mesh, kst, ik, buf1)             
+!              st%psi%zR(:, idim, kst, ik) = st%psi%zR(:, idim, jst, ik)
              ok(kst) = .true.
              kst = jst
           end do
        end if
     end do
 
-    deallocate(ok)
-    deallocate(rank)
+    SAFE_DEALLOCATE_A(ok)
+    SAFE_DEALLOCATE_A(rank)
+    SAFE_DEALLOCATE_A(buf)
+    SAFE_DEALLOCATE_A(buf1)
+    
   end subroutine reorder_states_by_args
 
-  subroutine states_sort_complex(st, mesh)
-    type(states_t),    intent(inout) :: st
+  subroutine states_sort_complex( mesh, st, diff)
     type(mesh_t),      intent(in)    :: mesh
+    type(states_t),    intent(inout) :: st
+    FLOAT,             intent(inout) :: diff(:,:) !eigenstates convergence error
 
     integer              :: ik, ist, idim
     integer, allocatable :: index(:)
+    FLOAT, allocatable   :: diff_copy(:,:)
     type(states_t) :: st_copy
     
     PUSH_SUB(states_sort_complex)
     
     SAFE_ALLOCATE(index(st%nst))
+    SAFE_ALLOCATE(diff_copy(1:size(diff,1),1:size(diff,2)))
+    
+    diff_copy = diff
     
     do ik = st%d%kpt%start, st%d%kpt%end
 
     call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
+    do ist = 1 , st%nst
+      diff(ist, ik) = diff_copy(index(ist),ik)
+    end do
     
-    !call states_copy(st_copy, st)  !OK This is very unefficient 
+    call states_copy(st_copy, st)  !OK This is very unefficient 
       do idim =1, st%d%dim
          call reorder_states_by_args(st, mesh, index, idim, ik)
-        !do ist = 1 , st%nst - 1
-!           I keep this here as reference for the implemention of some in-place sorting 
-!           call lalg_swap(mesh%np, st%psi%zR(:, idim, ist, ik), st%psi%zR(:, idim, index(ist), ik))
-!           call lalg_swap(mesh%np, st%psi%zL(:, idim, ist, ik), st%psi%zL(:, idim, index(ist), ik))
-           !st%psi%zR(:, idim, ist, ik) =  st_copy%psi%zR(:, idim, index(ist), ik)          
-        !end do
+!         do ist = 1 , st%nst 
+!            st%psi%zR(:, idim, ist, ik) =  st_copy%psi%zR(:, idim, index(ist), ik)          
+!         end do
       end do
     end do
     
-    !call states_end(st_copy)
+    call states_end(st_copy)
     
     SAFE_DEALLOCATE_A(index)
+    SAFE_DEALLOCATE_A(diff_copy)
     
     POP_SUB(states_sort_complex)
   end subroutine states_sort_complex
