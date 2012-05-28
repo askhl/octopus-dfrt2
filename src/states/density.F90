@@ -182,13 +182,10 @@ contains
           end do
         else
           if(calc_cmplx) then
-
             do ist = 1, psib%nst
               forall(ip = 1:this%gr%mesh%np)
-                crho(ip) = crho(ip) + weight(ist)* &
-                  (real(psib%states(ist)%zpsi(ip, 1), REAL_PRECISION)**2 - aimag(psib%states(ist)%zpsi(ip, 1))**2)
-                Imcrho(ip) = Imcrho(ip) + weight(ist) * M_TWO * &
-                  (real(psib%states(ist)%zpsi(ip, 1), REAL_PRECISION) * aimag(psib%states(ist)%zpsi(ip, 1)))
+                crho(ip)   = crho(ip)   + weight(ist) * real( psib%states(ist)%zpsi(ip, 1)**2)
+                Imcrho(ip) = Imcrho(ip) + weight(ist) * aimag(psib%states(ist)%zpsi(ip, 1)**2)
               end forall
             end do
           else
@@ -211,10 +208,8 @@ contains
           if(calc_cmplx) then
             do ip = 1, this%gr%mesh%np
               do ist = 1, psib%nst
-                crho(ip) = crho(ip) + weight(ist)* &
-                  (real(psib%pack%zpsi(ist, ip), REAL_PRECISION)**2 - aimag(psib%pack%zpsi(ist, ip))**2)
-                Imcrho(ip) = Imcrho(ip) + weight(ist)* M_TWO* &
-                  (real(psib%pack%zpsi(ist, ip), REAL_PRECISION) * aimag(psib%pack%zpsi(ist, ip)))
+                crho(ip)   = crho(ip)   + weight(ist) * real( psib%pack%zpsi(ist, ip)**2 )
+                Imcrho(ip) = Imcrho(ip) + weight(ist) * aimag(psib%pack%zpsi(ist, ip)**2 )
               end do
             end do
           else  
