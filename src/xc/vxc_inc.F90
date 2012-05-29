@@ -1047,13 +1047,14 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
 
       call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
 
-      vxc(:,1) = - M_HALF * real(zpot(:)) 
-      Imvxc(:,1) = - M_HALF * aimag(zpot(:))
+      zpot = - zpot /CNST(2.0)
+      vxc(:,1) = real(zpot(:)) 
+      Imvxc(:,1) = aimag(zpot(:))
   
       if(calc_energy) then
-        ztmp = M_HALF * zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
-        ex =  M_HALF *real(ztmp)
-        Imex =  M_HALF *aimag(ztmp)
+        ztmp = M_HALF *zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
+        ex =  real(ztmp)
+        Imex = aimag(ztmp)
         ec   = M_ZERO
         Imec = M_ZERO    
       end if
