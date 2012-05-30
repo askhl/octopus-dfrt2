@@ -1032,11 +1032,11 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   
   if(functl(1)%id == XC_LDA_XC_CMPLX) then
     
-!     call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
+    call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
 
     ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
     ! we keep it here for debug purposes
-    if(.true.) then
+    if(.false.) then
       SAFE_ALLOCATE(zpot(1:size(vxc,1)))
       SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
 
