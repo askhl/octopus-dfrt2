@@ -915,7 +915,7 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   CMPLX :: zex, zec, zrho, zvxc, eps_c
   INTEGER :: i, N
   FLOAT :: lda_exchange_prefactor
-  CMPLX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs, phase
+  CMPLX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs, phase, phase_linear, phase2d
 
   FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4
 
@@ -939,16 +939,27 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   zex = M_z0
   zec = M_z0
 
-  phase = exp(-M_zI * cmplxscl_th)
-  
+  phase_linear = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
+  phase = exp(-3./3.0*M_zI * cmplxscl_th)
+  phase2d = phase
+
   lda_exchange_prefactor = -0.73855876638202234 !-3.0 / 4.0 * (3.0 / np.pi)**(1.0 / 3.0)
 
   do i=1, N
      zrho = rho(i, 1) + M_zI * Imrho(i, 1)
      
-     ! exchange
-     zex = zex + lda_exchange_prefactor * zrho**(4.0 / 3.0) * phase
-     zvxc = (4.0 / 3.0) * lda_exchange_prefactor * zrho**(1.0 / 3.0) * phase
+     ! "simplified", linear exchange
+     zex = zex + 0.5 * lda_exchange_prefactor * zrho * zrho * phase_linear
+     zvxc = lda_exchange_prefactor * zrho * phase_linear
+
+     ! 3d exchange
+     ! This agrees with theta=0 with standard octopus 3d exchange
+     !zex = zex + lda_exchange_prefactor * zrho**(4.0 / 3.0) * phase
+     !zvxc = (4.0 / 3.0) * lda_exchange_prefactor * zrho**(1.0 / 3.0) * phase
+
+     ! 2d exchange
+     !zex = zex - (4./3.) * sqrt(2./3.1415926535897931) * zrho**(3.0/2.0)
+     !zvxc = -1.5 * (4./3.) * sqrt(2./3.1415926535897931) * zrho**(3.0/2.0)
 
      ! correlation
      !rs = (C0I / zrho)**(1.0 / 3.0)
