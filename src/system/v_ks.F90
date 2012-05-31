@@ -705,9 +705,9 @@ contains
             energy%intnvxc = energy%intnvxc + dmf_dotp(ks%gr%fine%mesh, st%rho(:, 1), ks%calc%vxc(:, 1)) &
               + dmf_dotp(ks%gr%fine%mesh, st%rho(:, 2), ks%calc%vxc(:, 2))
           else
-            ctmp  = ctmp + zmf_dotp(ks%gr%fine%mesh, st%zrho%Im(:, 1) + M_zI * st%zrho%Im(:, 1), &
+            ctmp  = ctmp + zmf_dotp(ks%gr%fine%mesh, st%zrho%Re(:, 1) + M_zI * st%zrho%Im(:, 1), &
                              ks%calc%vxc(:, 1) + M_zI * ks%calc%Imvxc(:, 1), dotu = .true.) &
-                         + zmf_dotp(ks%gr%fine%mesh, st%zrho%Im(:, 2) + M_zI * st%zrho%Im(:, 2), &
+                         + zmf_dotp(ks%gr%fine%mesh, st%zrho%Re(:, 2) + M_zI * st%zrho%Im(:, 2), &
                              ks%calc%vxc(:, 2) + M_zI * ks%calc%Imvxc(:, 2), dotu = .true. )
             energy%intnvxc = energy%intnvxc + real(ctmp)
             energy%Imintnvxc = energy%Imintnvxc + aimag(ctmp)        
