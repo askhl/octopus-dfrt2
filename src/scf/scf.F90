@@ -58,6 +58,7 @@ module scf_m
   use states_calc_m
   use states_dim_m
   use states_io_m
+  use types_m
   use unit_m
   use unit_system_m
   use utils_m
@@ -288,7 +289,11 @@ contains
     scf%mixdim2 = 1
     if(hm%d%cdft) scf%mixdim2 = 1 + gr%mesh%sb%dim
     if(scf%mix_field /= MIXNONE) then
-      call mix_init(scf%smix, scf%mixdim1, scf%mixdim2, st%d%nspin)
+      if(.not. hm%cmplxscl) then
+        call mix_init(scf%smix, scf%mixdim1, scf%mixdim2, st%d%nspin)
+      else
+        call mix_init(scf%smix, scf%mixdim1, scf%mixdim2, st%d%nspin, func_type = TYPE_CMPLX)
+      end if
     end if
 
     ! now the eigensolver stuff
@@ -411,7 +416,7 @@ contains
     FLOAT, allocatable :: rhoout(:,:,:), rhoin(:,:,:), rhonew(:,:,:)
     FLOAT, allocatable :: vout(:,:,:), vin(:,:,:), vnew(:,:,:)
     FLOAT, allocatable :: forceout(:,:), forcein(:,:), forcediff(:), tmp(:)
-    FLOAT, allocatable :: Imrhoout(:,:,:), Imrhoin(:,:,:), Imrhonew(:,:,:)
+    CMPLX, allocatable :: zrhoout(:,:,:), zrhoin(:,:,:), zrhonew(:,:,:)
     FLOAT, allocatable :: Imvout(:,:,:), Imvin(:,:,:), Imvnew(:,:,:)
     character(len=8) :: dirname
     logical :: finish, forced_finish, gs_run_, berry_conv, cmplxscl
@@ -451,18 +456,20 @@ contains
 
     nspin = st%d%nspin
 
-    SAFE_ALLOCATE(rhoout(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
-    SAFE_ALLOCATE(rhoin (1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+    if(.not. cmplxscl) then
+      
+      SAFE_ALLOCATE(rhoout(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+      SAFE_ALLOCATE(rhoin (1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
 
-    rhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
-    rhoout = M_ZERO
+      rhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
+      rhoout = M_ZERO
+    else
+  
+      SAFE_ALLOCATE(zrhoout(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+      SAFE_ALLOCATE(zrhoin (1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
 
-    if(cmplxscl) then
-      SAFE_ALLOCATE(Imrhoout(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
-      SAFE_ALLOCATE(Imrhoin (1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
-
-      Imrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
-      Imrhoout = M_ZERO
+      zrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
+      zrhoout = M_z0
     end if
 
     if (st%d%cdft) then
@@ -487,9 +494,11 @@ contains
         Imvout = M_ZERO
       end if
     case(MIXDENS)
-      SAFE_ALLOCATE(rhonew(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
-      if(cmplxscl) SAFE_ALLOCATE(Imrhonew(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
-      
+      if(.not. cmplxscl) then
+        SAFE_ALLOCATE(rhonew(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+      else
+        SAFE_ALLOCATE(zrhonew(1:gr%fine%mesh%np, 1:scf%mixdim2, 1:nspin))
+      end if
     end select
 
     evsum_in = states_eigenvalues_sum(st)
@@ -572,9 +581,12 @@ contains
         print *,"Density integral", sum(st%rho(:,1))*gr%mesh%volume_element
       end if
       
-      
-      rhoout(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
-      if(cmplxscl) Imrhoout(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
+      if(.not. cmplxscl) then
+        rhoout(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
+      else
+        zrhoout(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Re(1:gr%fine%mesh%np, 1:nspin) +&
+                                           M_zI * st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
+      end if
       
       if (hm%d%cdft) then
         call calc_physical_current(gr%der, st, st%current)
@@ -596,8 +608,11 @@ contains
       SAFE_ALLOCATE(tmp(1:gr%fine%mesh%np))
       do is = 1, nspin
         do idim = 1, scf%mixdim2
-          tmp = abs(rhoin(1:gr%fine%mesh%np, idim, is) - rhoout(1:gr%fine%mesh%np, idim, is))
-          if(cmplxscl) tmp = tmp + abs(Imrhoin(1:gr%fine%mesh%np, idim, is) - Imrhoout(1:gr%fine%mesh%np, idim, is))
+          if(.not. cmplxscl) then
+            tmp = abs(rhoin(1:gr%fine%mesh%np, idim, is) - rhoout(1:gr%fine%mesh%np, idim, is))
+          else
+            tmp = tmp + abs(zrhoin(1:gr%fine%mesh%np, idim, is) - zrhoout(1:gr%fine%mesh%np, idim, is))
+          end if
           scf%abs_dens = scf%abs_dens + dmf_integrate(gr%fine%mesh, tmp)
         end do
       end do
@@ -639,11 +654,13 @@ contains
         !set the pointer for dmf_dotp_aux
         call mesh_init_mesh_aux(gr%fine%mesh)
         ! mix input and output densities and compute new potential
+        if(.not. cmplxscl) then
         call dmixing(scf%smix, iter, rhoin, rhoout, rhonew, dmf_dotp_aux)
-        st%rho(1:gr%fine%mesh%np, 1:nspin) = rhonew(1:gr%fine%mesh%np, 1, 1:nspin)
-        if(cmplxscl) then
-          call dmixing(scf%smix, iter, Imrhoin, Imrhoout, Imrhonew, dmf_dotp_aux)
-          st%zrho%Im(1:gr%fine%mesh%np, 1:nspin) = Imrhonew(1:gr%fine%mesh%np, 1, 1:nspin)          
+          st%rho(1:gr%fine%mesh%np, 1:nspin) = rhonew(1:gr%fine%mesh%np, 1, 1:nspin)
+        else
+          call zmixing(scf%smix, iter, zrhoin, zrhoout, zrhonew, zmf_dotp_aux)
+          st%zrho%Re(1:gr%fine%mesh%np, 1:nspin) =  real(zrhonew(1:gr%fine%mesh%np, 1, 1:nspin))                   
+          st%zrho%Im(1:gr%fine%mesh%np, 1:nspin) = aimag(zrhonew(1:gr%fine%mesh%np, 1, 1:nspin))                    
         end if
         if (hm%d%cdft) st%current(1:gr%mesh%np,1:gr%mesh%sb%dim,1:nspin) = rhonew(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin)
         call v_ks_calc(ks, hm, st, geo)
@@ -695,8 +712,12 @@ contains
       end if
 
       ! save information for the next iteration
-      rhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
-      if(cmplxscl) Imrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
+      if(.not. cmplxscl) then
+        rhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
+      else
+        zrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Re(1:gr%fine%mesh%np, 1:nspin) +&
+                                         M_zI * st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)  
+      end if
       if (hm%d%cdft) rhoin(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = st%current(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
       if (scf%mix_field == MIXPOT) then
         vin(1:gr%mesh%np, 1, 1:nspin) = hm%vhxc(1:gr%mesh%np, 1:nspin)
@@ -730,15 +751,16 @@ contains
       SAFE_DEALLOCATE_A(Imvnew)
     case(MIXDENS)
       SAFE_DEALLOCATE_A(rhonew)
-      SAFE_DEALLOCATE_A(Imrhonew)
-!     case(MIXNONE)
+      SAFE_DEALLOCATE_A(zrhonew)
+    case(MIXNONE)
 !       call v_ks_calc(ks, hm, st, geo)
     end select
 
     SAFE_DEALLOCATE_A(rhoout)
     SAFE_DEALLOCATE_A(rhoin)
-    SAFE_DEALLOCATE_A(Imrhoout)
-    SAFE_DEALLOCATE_A(Imrhoin)
+    SAFE_DEALLOCATE_A(zrhoout)
+    SAFE_DEALLOCATE_A(zrhoin)
+
 
     if(.not.finish) then
       write(message(1), '(a,i4,a)') 'SCF *not* converged after ', iter - 1, ' iterations.'
