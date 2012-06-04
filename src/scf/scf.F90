@@ -585,7 +585,7 @@ contains
         rhoout(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
       else
         zrhoout(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Re(1:gr%fine%mesh%np, 1:nspin) +&
-                                           M_zI * st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
+                                            M_zI * st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)
       end if
       
       if (hm%d%cdft) then
@@ -611,7 +611,7 @@ contains
           if(.not. cmplxscl) then
             tmp = abs(rhoin(1:gr%fine%mesh%np, idim, is) - rhoout(1:gr%fine%mesh%np, idim, is))
           else
-            tmp = tmp + abs(zrhoin(1:gr%fine%mesh%np, idim, is) - zrhoout(1:gr%fine%mesh%np, idim, is))
+            tmp = abs(zrhoin(1:gr%fine%mesh%np, idim, is) - zrhoout(1:gr%fine%mesh%np, idim, is))
           end if
           scf%abs_dens = scf%abs_dens + dmf_integrate(gr%fine%mesh, tmp)
         end do
@@ -716,7 +716,7 @@ contains
         rhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%rho(1:gr%fine%mesh%np, 1:nspin)
       else
         zrhoin(1:gr%fine%mesh%np, 1, 1:nspin) = st%zrho%Re(1:gr%fine%mesh%np, 1:nspin) +&
-                                         M_zI * st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)  
+                                          M_zI * st%zrho%Im(1:gr%fine%mesh%np, 1:nspin)  
       end if
       if (hm%d%cdft) rhoin(1:gr%mesh%np, 2:scf%mixdim2, 1:nspin) = st%current(1:gr%mesh%np, 1:gr%mesh%sb%dim, 1:nspin)
       if (scf%mix_field == MIXPOT) then
