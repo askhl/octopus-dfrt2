@@ -941,9 +941,8 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   zec = M_z0
 
   dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
-  phase = exp(-M_zI * cmplxscl_th)
 
-  !Cx = -3.0 / 4.0 * (3.0 / np.pi)**(1.0 / 3.0)
+  !Cx = -3.0 / 4.0 * (3.0 / M_PI)**(1.0 / 3.0)
   Cx = 0.73855876638202234 
 
   last_zvxc = M_ONE ! entirely arbitrary
