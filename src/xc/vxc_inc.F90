@@ -912,12 +912,12 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   FLOAT, intent(inout)     :: Imec
   FLOAT, intent(in)        :: cmplxscl_th
   
-  CMPLX :: zex, zec, zrho, zvxc, eps_c
+  CMPLX :: zex, zec, zrho, zvxc, eps_c, last_zvxc
   INTEGER :: i, N
-  FLOAT :: lda_exchange_prefactor
-  CMPLX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs, phase, phase_linear, phase2d
+  CMPLX :: rs, rtrs, Q0, Q1, dQ1drs, dedrs, tmpphase, dimphase, vtrial2, vtrial3
+  CMPLX, allocatable :: zvxc_arr(:)
 
-  FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4
+  FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4, Cx
 
   ! LDA constants.
   ! Only C0I is used for spin-paired calculations among these five
@@ -935,27 +935,48 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   beta4 = 0.49294
 
   N = size(rho, 1)
+  SAFE_ALLOCATE(zvxc_arr(1:N))
 
   zex = M_z0
   zec = M_z0
 
-  phase_linear = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
-  phase = exp(-3./3.0*M_zI * cmplxscl_th)
-  phase2d = phase
+  dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
+  phase = exp(-M_zI * cmplxscl_th)
 
-  lda_exchange_prefactor = -0.73855876638202234 !-3.0 / 4.0 * (3.0 / np.pi)**(1.0 / 3.0)
+  !Cx = -3.0 / 4.0 * (3.0 / np.pi)**(1.0 / 3.0)
+  Cx = 0.73855876638202234 
+
+  last_zvxc = M_ONE ! entirely arbitrary
 
   do i=1, N
      zrho = rho(i, 1) + M_zI * Imrho(i, 1)
-     
-     ! "simplified", linear exchange
-     zex = zex + 0.5 * lda_exchange_prefactor * zrho * zrho * phase_linear
-     zvxc = lda_exchange_prefactor * zrho * phase_linear
+
+     ! "simplified", linear exchange potential
+     !zex = zex + 0.5 * lda_exchange_prefactor * zrho * zrho * dimphase
+     !zvxc = lda_exchange_prefactor * zrho * dimphase !+ 2.0 * 3.1415926535897931 * M_zI
+
+     ! quadratic positive exchange potential
+     !zex = zex - lda_exchange_prefactor * (zrho * dimphase)**3.0 / dimphase / 10.
+     !zvxc = -3.0 * lda_exchange_prefactor * (zrho * dimphase)**2.0 / 10.
 
      ! 3d exchange
-     ! This agrees with theta=0 with standard octopus 3d exchange
-     !zex = zex + lda_exchange_prefactor * zrho**(4.0 / 3.0) * phase
-     !zvxc = (4.0 / 3.0) * lda_exchange_prefactor * zrho**(1.0 / 3.0) * phase
+     zvxc = -Cx * 4.0 / 3.0 * (zrho * dimphase)**(1.0 / 3.0)
+
+     ! Among the three cube roots, choose the one closest to that of
+     ! the last iteration.  This choise is quite arbitrary and
+     ! probably wrong.  We will correct it later since it only rotates
+     ! the potential by a specific phase.
+     vtrial2 = zvxc * exp(M_TWO * M_PI * M_zI / M_THREE)
+     vtrial3 = zvxc / exp(M_TWO * M_PI * M_zI / M_THREE)
+     if (abs(vtrial2 - last_zvxc).lt.abs(zvxc - last_zvxc)) then
+        zvxc = vtrial2
+     end if
+     if (abs(vtrial3 - last_zvxc).lt.abs(zvxc - last_zvxc)) then
+        zvxc = vtrial3
+     end if
+     last_zvxc = zvxc
+     
+     zex = zex + 3.0 / 4.0 * zvxc * zrho
 
      ! 2d exchange
      !zex = zex - (4./3.) * sqrt(2./3.1415926535897931) * zrho**(3.0/2.0)
@@ -970,15 +991,22 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
      zec = M_z0 !!!!zec + eps_c * zrho
      !dQ1drs = gamma * (beta1 / rtrs + 2.0 * beta2 + rtrs * (3.0 * beta3 + 4.0 * beta4 * rtrs))
      !dedrs = -2.0 * gamma * alpha1 * eps_c / Q0 - Q0 * dQ1drs / (Q1 * (Q1 + 1.0))
-
      !zvxc = zvxc + eps_c - rs * dedrs / 3.0
      
-     
-     vxc(i, 1) = real(zvxc)
-     Imvxc(i, 1) = aimag(zvxc)
-
+     zvxc_arr(i) = zvxc
   end do
   
+  tmpphase = exp(M_TWO * M_PI * M_zI / M_THREE)
+  do i=1, 2 ! multiply by the phase up to two times
+     if (real(zex * tmpphase).lt.real(zex)) then
+        zex = zex * tmpphase
+        zvxc_arr(:) = zvxc_arr(:) * tmpphase
+     end if
+  end do
+
+  vxc(:, 1) = real(zvxc_arr)
+  Imvxc(:, 1) = aimag(zvxc_arr)
+
   zex = zex * mesh%volume_element
   zec = zec * mesh%volume_element
 
@@ -986,6 +1014,8 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   ec = real(zec)
   Imex = aimag(zex)
   Imec = aimag(zec)
+
+  SAFE_DEALLOCATE_A(zvxc_arr)
   
   print*, 'lda exchange', zex
   print*, 'lda correlation', zec
