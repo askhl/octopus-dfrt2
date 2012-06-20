@@ -48,13 +48,6 @@ void FC_FUNC_(clgetdeviceids_listall, CLGETDEVICEIDS_LISTALL)
 
 /* -----------------------------------------------------------------------*/
 
-void FC_FUNC_(clgetdeviceids_getdev, CLGETDEVICEIDS_GETDEV)
-     (const cl_device_id * alldevices, const int * idevice, cl_device_id * device){
-  *device = alldevices[*idevice];
-}
-
-/* -----------------------------------------------------------------------*/
-
 void FC_FUNC_(clgetdeviceinfo_str, CLGETDEVICEINFO_STR)
      (const cl_device_id * device, const int * param_name, STR_F_TYPE param_value, int * status STR_ARG1){
   char info[2048];
@@ -171,4 +164,24 @@ void FC_FUNC_(clgetdeviceinfo_int, CLGETDEVICEINFO_INT)
   *param_value = (cl_int) param_value64;
 }
 
+#ifdef  CL_VERSION_1_2
+
 /* -----------------------------------------------------------------------*/
+
+void FC_FUNC_(clreleasedevice_low, CLRELEASEDEVICE_LOW)
+     (const cl_device_id * device, int * errcode_ret){
+  
+  *errcode_ret = clReleaseDevice(*device);
+}
+
+/* -----------------------------------------------------------------------*/
+
+void FC_FUNC_(clretaindevice_low, CLRETAINDEVICE_LOW)
+     (const cl_device_id * device, int * errcode_ret){
+  
+  *errcode_ret = clRetainDevice(*device);
+}
+
+/* -----------------------------------------------------------------------*/
+
+#endif

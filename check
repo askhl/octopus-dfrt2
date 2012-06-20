@@ -1,0 +1,9 @@
+cwd=`pwd`
+cd ./testsuite
+
+./oct-run_regression_test.pl  -f./finite_systems_1d/02-neon_mpi.test -D $cwd/src/main/
+./oct-run_regression_test.pl  -f./functionals/01-xc_1d.test   -D $cwd/src/main/
+./oct-run_regression_test.pl  -f./functionals/02-xc_2d.test  -D $cwd/src/main/
+
+cd $cwd
+

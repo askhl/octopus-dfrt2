@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td_write.F90 8953 2012-03-30 18:02:24Z umberto $
+!! $Id: td_write.F90 9106 2012-06-06 10:30:29Z umberto $
 
 #include "global.h"
 
@@ -43,6 +43,8 @@ module td_write_m
   use mesh_m
   use messages_m
   use mpi_m
+  use mpi_debug_m
+  use mpi_lib_m
   use parser_m
   use pert_m
   use profiling_m
@@ -92,7 +94,8 @@ module td_write_m
     OUT_TEMPERATURE = 12, &
     OUT_FTCHD       = 13, &
     OUT_VEL         = 14, &
-    OUT_MAX         = 14
+    OUT_EIGS        = 15, &
+    OUT_MAX         = 15
   
   type td_write_t
     private
@@ -154,28 +157,38 @@ contains
     !%Default multipoles + geometry + temperature + energy
     !%Section Time-Dependent::TD Output
     !%Description
-    !% Defines what should be output during the time-dependent simulation.
+    !% Defines what should be output during the time-dependent
+    !% simulation. Many of the options can increase the computational
+    !% cost of the simulation, so only use the ones that you need. In
+    !% most cases the default value is enough, as it is adapted to the
+    !% details of the TD run. The energy and multipoles are always
+    !% calculated. If the ions are allowed to be moved, additionally
+    !% the geometry and the temperature are output. If a laser is
+    !% included it will output by default.
     !%Option multipoles 1
     !% Outputs the multipole moments of the density to the file <tt>td.general/multipoles</tt>.
     !% This is required to, <i>e.g.</i>, calculate optical absorption spectra of finite systems. The
     !% maximum value of <math>l</math> can be set with the variable <tt>TDDipoleLmax</tt>.
     !%Option angular 2
-    !% Outputs the angular momentum of the system that can be used to calculate circular
-    !% dichroism (EXPERIMENTAL).
+    !% Outputs the angular momentum of the system, which can be used to calculate circular
+    !% dichroism.
     !%Option spin 4
-    !% Outputs the expectation value of the spin, that can be used to calculate magnetic
-    !% cicular dichroism (EXPERIMENTAL).
+    !% (Experimental) Outputs the expectation value of the spin, which can be used to calculate magnetic
+    !% circular dichroism.
     !%Option populations 8
-    !% Outputs the projection of the time-dependent Kohn-Sham Slater determinant
-    !% onto the ground-state (or approximations to the excited states) to the file 
-    !% <tt>td.general/populations</tt>.
+    !% (Experimental) Outputs the projection of the time-dependent
+    !% Kohn-Sham Slater determinant onto the ground state (or
+    !% approximations to the excited states) to the file
+    !% <tt>td.general/populations</tt>. Note that the calculation of
+    !% populations is expensive in memory and computer time, so it
+    !% should only be used if it is really needed.
     !%Option geometry 16
     !% If set (and if the atoms are allowed to move), outputs the coordinates, velocities,
     !% and forces of the atoms to the the file <tt>td.general/coordinates</tt>.
-    !%Option acceleration 32
-    !% When set, outputs the acceleration, calculated from Ehrenfest theorem,
+    !%Option dipole_acceleration 32
+    !% When set, outputs the acceleration of the electronic dipole, calculated from the Ehrenfest theorem,
     !% in the file <tt>td.general/acceleration</tt>. This file can then be
-    !% processed by the utility <tt>hs-from-acc</tt> in order to obtain the harmonic spectrum.
+    !% processed by the utility <tt>oct-harmonic-spectrum</tt> in order to obtain the harmonic spectrum.
     !%Option laser 64
     !% If set, and if there are lasers defined in <tt>TDLasers</tt>,
     !% <tt>octopus</tt> outputs the laser field to the file <tt>td.general/laser</tt>.
@@ -183,9 +196,11 @@ contains
     !% If <tt>set</tt>, <tt>octopus</tt> outputs the different components of the energy
     !% to the file <tt>td.general/el_energy</tt>.
     !%Option td_occup 256
-    !% If set, outputs the projections of the time-dependent Kohn-Sham
-    !% wavefunctions onto the static (zero-time) wavefunctions to the
-    !% file <tt>td.general/projections.XXX</tt>.
+    !% (Experimental) If set, outputs the projections of the
+    !% time-dependent Kohn-Sham wavefunctions onto the static
+    !% (zero-time) wavefunctions to the file
+    !% <tt>td.general/projections.XXX</tt>. Only use this option if
+    !% you really need it, as it might be computationally expensive.
     !%Option local_mag_moments 512
     !% If set, outputs the local magnetic moments, integrated in sphere centered around each atom.
     !% The radius of the sphere can be set with <tt>LocalMagneticMomentsSphereRadius</tt>.
@@ -200,10 +215,12 @@ contains
     !% This is needed for calculating the dynamic structure factor.
     !% In the case that the kick mode is qbessel, the written quantity is integral over
     !% density, multiplied by spherical Bessel function times real spherical harmonic.
-    !%Option velocity    8192
-    !% When set, outputs the velocity, calculated from Ehrenfest theorem,
+    !%Option dipole_velocity    8192
+    !% When set, outputs the dipole velocity, calculated from the Ehrenfest theorem,
     !% in the file <tt>td.general/velocity</tt>. This file can then be
-    !% processed by the utility <tt>hs-from-vel</tt> in order to obtain the harmonic spectrum.
+    !% processed by the utility <tt>oct-harmonic-spectrum</tt> in order to obtain the harmonic spectrum.
+    !%Option eigenvalues    16384
+    !% Write the KS eigenvalues. 
     !%End
 
     default = &
@@ -212,7 +229,8 @@ contains
          2**(OUT_COORDS - 1) +      &
          2**(OUT_TEMPERATURE - 1) + &
          2**(OUT_ENERGY - 1) +      &
-         2**(OUT_GAUGE_FIELD - 1)
+         2**(OUT_GAUGE_FIELD - 1) + &
+         2**(OUT_LASER - 1)
 
     call parse_integer(datasets_check('TDOutput'), default, flags)
 
@@ -228,6 +246,11 @@ contains
     writ%out(OUT_GAUGE_FIELD)%write = writ%out(OUT_GAUGE_FIELD)%write .and. with_gauge_field
     writ%out(OUT_LASER)%write = writ%out(OUT_LASER)%write .and. (hm%ep%no_lasers > 0)
     writ%out(OUT_FTCHD)%write = writ%out(OUT_FTCHD)%write .and. (kick%qkick_mode /= QKICKMODE_NONE)
+
+    ! experimental stuff
+    if(writ%out(OUT_SPIN)%write) call messages_experimental('TDOutput = spin')
+    if(writ%out(OUT_POPULATIONS)%write) call messages_experimental('TDOutput = populations')
+    if(writ%out(OUT_PROJ)%write) call messages_experimental('TDOutput = td_occup')
 
     !%Variable TDDipoleLmax
     !%Type integer
@@ -425,6 +448,11 @@ contains
       if(writ%out(OUT_GAUGE_FIELD)%write) &
         call write_iter_init(writ%out(OUT_GAUGE_FIELD)%handle, &
         first, units_from_atomic(units_out%time, dt), trim(io_workpath("td.general/gauge_field")))
+        
+      if(writ%out(OUT_EIGS)%write) &
+        call write_iter_init(writ%out(OUT_EIGS)%handle, first, &
+          units_from_atomic(units_out%time, dt), trim(io_workpath("td.general/eigenvalues")))
+        
     end if
 
     POP_SUB(td_write_init)
@@ -516,6 +544,9 @@ contains
 
     if(writ%out(OUT_GAUGE_FIELD)%write) &
       call td_write_gauge_field(writ%out(OUT_GAUGE_FIELD)%handle, hm, gr, iter)
+
+    if(writ%out(OUT_EIGS)%write) &
+      call td_write_eigs(writ%out(OUT_EIGS)%handle, st, iter)
 
     call profiling_out(prof)
     POP_SUB(td_write_iter)
@@ -1403,6 +1434,90 @@ contains
 
     POP_SUB(td_write_energy)
   end subroutine td_write_energy
+
+  ! ---------------------------------------------------------
+  subroutine td_write_eigs(out_eigs, st, iter)
+    type(c_ptr),         intent(in) :: out_eigs
+    type(states_t),      intent(in) :: st
+    integer,             intent(in) :: iter
+
+    integer             :: ii, is
+    character(len=68)   :: buf
+    FLOAT, allocatable  :: eigs(:,:)
+#if defined(HAVE_MPI) 
+    integer :: outcount, ik, mpi_err
+    integer, allocatable :: sendcnts(:), sdispls(:), recvcnts(:), rdispls(:)
+#endif
+
+    PUSH_SUB(td_write_eigs)
+
+    SAFE_ALLOCATE(eigs(1:st%nst,1:st%d%kpt%nglobal)) 
+           
+    eigs(st%st_start:st%st_end, st%d%kpt%start:st%d%kpt%end) = &
+      st%eigenval(st%st_start:st%st_end, st%d%kpt%start:st%d%kpt%end)
+
+#if defined(HAVE_MPI) 
+
+    do ik = st%d%kpt%start, st%d%kpt%end
+      call lmpi_gen_allgatherv(st%lnst, st%eigenval(st%st_start:st%st_end,ik), outcount, &
+                             eigs(:, ik), st%mpi_grp)
+    end do
+
+#endif
+  
+    if(.not.mpi_grp_is_root(mpi_world)) then 
+      SAFE_DEALLOCATE_A(eigs)
+      POP_SUB(td_write_eigs)
+      return ! only first node outputs        
+    end if
+
+
+    if(iter == 0) then
+      call td_write_print_header_init(out_eigs)
+
+      write(buf, '(a15,i2)')      '# nst          ', st%nst
+      call write_iter_string(out_eigs, buf)
+      call write_iter_nl(out_eigs)
+
+      write(buf, '(a15,i2)')      '# nspin        ', st%d%nspin
+      call write_iter_string(out_eigs, buf)
+      call write_iter_nl(out_eigs)
+      
+
+      ! first line -> column names
+      call write_iter_header_start(out_eigs)
+      do is = 1, st%d%nspin
+        do ii = 1, st%nst
+          write(buf, '(a,i4)') 'Eigenvalue ',ii
+          call write_iter_header(out_eigs, buf)
+        end do
+      end do
+      call write_iter_nl(out_eigs)
+
+      ! second line: units
+      call write_iter_string(out_eigs, '#[Iter n.]')
+      call write_iter_header(out_eigs, '[' // trim(units_abbrev(units_out%time)) // ']')
+      do is = 1, st%d%nspin
+        do ii = 1, st%nst
+          call write_iter_header(out_eigs, '[' // trim(units_abbrev(units_out%energy)) // ']')
+        end do
+      end do
+      call write_iter_nl(out_eigs)
+      call td_write_print_header_end(out_eigs)
+    end if
+
+    call write_iter_start(out_eigs)
+    do is = 1, st%d%nspin
+      do ii =1 , st%nst
+        call write_iter_double(out_eigs, units_from_atomic(units_out%energy, eigs(ii,is)), 1)
+      end do
+    end do
+    call write_iter_nl(out_eigs)
+
+    SAFE_DEALLOCATE_A(eigs)
+
+    POP_SUB(td_write_eigs)
+  end subroutine td_write_eigs
 
   ! ---------------------------------------------------------
   subroutine td_write_gauge_field(out_gauge, hm, gr, iter)

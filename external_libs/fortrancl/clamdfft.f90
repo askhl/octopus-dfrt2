@@ -29,6 +29,7 @@ module clAmdFft
     clAmdFftSetPlanInStride,     &
     clAmdFftSetPlanOutStride,    &
     clAmdFftGetPlanInStride,     &
+    clAmdFftGetPlanOutStride,    &
     clAmdFftSetPlanScale,        &
     clAmdFftGetPlanScale,        &
     clAmdFftBakePlan
@@ -103,10 +104,10 @@ module clAmdFft
   integer, public, parameter ::        &
     CLFFT_COMPLEX_INTERLEAVED     = 1, &
     CLFFT_COMPLEX_PLANAR          = 2, &
-    CLFFT_HERMITIAN_INTERLEAVED   = 4, &
-    CLFFT_HERMITIAN_PLANAR        = 5, &
-    CLFFT_REAL                    = 6, &
-    ENDLAYOUT                     = 7
+    CLFFT_HERMITIAN_INTERLEAVED   = 3, &
+    CLFFT_HERMITIAN_PLANAR        = 4, &
+    CLFFT_REAL                    = 5, &
+    ENDLAYOUT                     = 6
 
   integer, public, parameter ::        &
     CLFFT_SINGLE                  = 1, &
@@ -306,6 +307,20 @@ module clAmdFft
     end subroutine clAmdFftGetPlanInStride_low
   end interface clAmdFftGetPlanInStride
 
+  ! ---------------------------------------------------------
+
+  interface clAmdFftGetPlanOutStride
+    subroutine clAmdFftGetPlanOutStride_low(plHandle, dim, clStrides, status)
+      use clAmdFft_types
+
+      implicit none
+      
+      type(clAmdFftPlanHandle), intent(inout) :: plHandle
+      integer,                  intent(in)    :: dim
+      integer(8),               intent(out)   :: clStrides(1:dim)
+      integer,                  intent(out)   :: status    
+    end subroutine clAmdFftGetPlanOutStride_low
+  end interface clAmdFftGetPlanOutStride
   ! ---------------------------------------------------------
 
   interface clAmdFftSetPlanScale

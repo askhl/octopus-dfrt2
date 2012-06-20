@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: epot.F90 9062 2012-05-09 14:21:00Z umberto $
+!! $Id: epot.F90 9121 2012-06-12 21:42:09Z dstrubbe $
 
 #include "global.h"
 
@@ -159,7 +159,7 @@ contains
     !% very useful to decrease the egg-box effect, and so should be used in
     !% all instances where atoms move (<i>e.g.</i> geometry optimization,
     !% molecular dynamics, and vibrational modes).
-    !%Option filter_none 1
+    !%Option filter_none 0
     !% Do not filter.
     !%Option filter_TS 2
     !% The filter of M. Tafipolsky and R. Schmid, <i>J. Chem. Phys.</i> <b>124</b>, 174102 (2006).
@@ -242,6 +242,7 @@ contains
 
     !%Variable StaticElectricField
     !%Type block
+    !%Default 0
     !%Section Hamiltonian
     !%Description
     !% A static constant electric field may be added to the usual Hamiltonian,

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: solver_3d_inc.F90 9000 2012-04-08 18:49:11Z xavier $
+!! $Id: solver_3d_inc.F90 9095 2012-06-02 02:39:35Z xavier $
 
 ! ---------------------------------------------------------
 subroutine poisson3D_init(this, geo, all_nodes_comm)
@@ -27,7 +27,6 @@ subroutine poisson3D_init(this, geo, all_nodes_comm)
   integer :: nx, ny, nz
   FLOAT   :: xl, yl, zl
 
-  type(poisson_fmm_t) :: fmm_params
   logical :: valid_solver
 
   PUSH_SUB(poisson3D_init)

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: xc.F90 8121 2011-07-28 20:37:39Z xavier $
+!! $Id: xc.F90 9090 2012-06-01 13:49:00Z marques $
 
 #include "global.h"
 
@@ -164,7 +164,7 @@ contains
 
       ! get the mixing coefficient for hybrids
       if(iand(xcs%functl(2,1)%family, XC_FAMILY_HYB_GGA).ne.0) then
-        call XC_F90(hyb_gga_exx_coef)(xcs%functl(2,1)%conf, xcs%exx_coef)
+        call XC_F90(hyb_exx_coef)(xcs%functl(2,1)%conf, xcs%exx_coef)
       else
         ! we are doing Hartree-Fock plus possibly a correlation functional
         xcs%exx_coef = M_ONE

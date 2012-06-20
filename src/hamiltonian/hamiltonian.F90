@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian.F90 9009 2012-04-11 14:51:52Z xavier $
+!! $Id: hamiltonian.F90 9104 2012-06-04 08:11:57Z marques $
 
 #include "global.h"
 
@@ -118,7 +118,8 @@ module hamiltonian_m
     FLOAT :: entropy
     FLOAT :: ts          !< TS
     FLOAT :: berry       !< Berry energy correction = -mu.E - <Vberry>
-    
+    FLOAT :: delta_xc    !< the XC derivative discontinuity
+
     !cmplxscl 
     FLOAT :: Imtotal       
     FLOAT :: Imeigenvalues 
@@ -264,6 +265,7 @@ contains
     hm%energy%intnvxc = M_ZERO
     hm%energy%exchange = M_ZERO
     hm%energy%correlation = M_ZERO
+    hm%energy%delta_xc = M_ZERO
     hm%energy%total = M_ZERO
     hm%energy%kinetic = M_ZERO
     !cmplxscl
@@ -1163,19 +1165,21 @@ contains
 
     PUSH_SUB(energy_copy)
 
-    eout%total = ein%total
-    eout%eigenvalues = ein%eigenvalues
-    eout%exchange = ein%exchange
-    eout%correlation = ein%correlation
-    eout%xc_j = ein%xc_j
-    eout%intnvxc = ein%intnvxc
-    eout%hartree = ein%hartree
-    eout%kinetic = ein%kinetic
-    eout%extern = ein%extern
-    eout%entropy = ein%entropy
-    eout%ts = ein%ts
-    eout%berry = ein%berry
+    eout%total        = ein%total
+    eout%eigenvalues  = ein%eigenvalues
+    eout%exchange     = ein%exchange
+    eout%correlation  = ein%correlation
+    eout%xc_j         = ein%xc_j
+    eout%intnvxc      = ein%intnvxc
+    eout%hartree      = ein%hartree
+    eout%kinetic      = ein%kinetic
+    eout%extern       = ein%extern
+    eout%entropy      = ein%entropy
+    eout%ts           = ein%ts
+    eout%berry        = ein%berry
+    eout%delta_xc     = ein%delta_xc
 
+! <<<<<<< .mine
     eout%Imtotal = ein%Imtotal
     eout%Imeigenvalues = ein%Imeigenvalues
     eout%Imexchange = ein%Imexchange
@@ -1189,6 +1193,10 @@ contains
     eout%Imts = ein%Imts
     eout%Imberry = ein%Imberry
 
+! =======
+!     eout%ztotal       = ein%ztotal
+!     eout%zeigenvalues = ein%zeigenvalues
+! >>>>>>> .r9133
     
     POP_SUB(energy_copy)
   end subroutine energy_copy

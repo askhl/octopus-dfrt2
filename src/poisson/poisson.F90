@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson.F90 9000 2012-04-08 18:49:11Z xavier $
+!! $Id: poisson.F90 9119 2012-06-12 21:16:08Z xavier $
 
 #include "global.h"
 
@@ -163,6 +163,8 @@ contains
     !% Defines which method to use to solve the Poisson equation. Defaults:
     !% <br> 1D and 2D: <tt>fft</tt>.
     !% <br> 3D: <tt>cg_corrected</tt> if curvilinear, <tt>isf</tt> if not periodic, <tt>fft</tt> if periodic.
+    !%Option NoPoisson -999
+    !% do not use a Poisson solver at all
     !%Option FMM -4
     !% Fast multipole method.                                  
     !%Option direct3D -3                                      
@@ -196,7 +198,9 @@ contains
 #endif
 
 #ifdef HAVE_CLAMDFFT
-    if(opencl_is_enabled()) default_solver = POISSON_FFT
+    ! this is disabled, since the difference between solvers are big
+    ! enough to cause problems with the tests.
+    ! if(opencl_is_enabled()) default_solver = POISSON_FFT
 #endif
 
     if(der%mesh%use_curvilinear) then
@@ -399,7 +403,7 @@ contains
 
     ! Create the cube
     if (need_cube) then
-      call cube_init(this%cube, box, der%mesh%sb, fft_type=fft_type)
+      call cube_init(this%cube, box, der%mesh%sb, fft_type = fft_type, verbose = .true.)
       if (der%mesh%parallel_in_domains .and. this%cube%parallel_in_domains) then
         call mesh_cube_parallel_map_init(this%mesh_cube_map, der%mesh, this%cube)
       end if
@@ -743,7 +747,6 @@ contains
   !! This only makes sense for finite systems.
   subroutine poisson_test(mesh)
     type(mesh_t), intent(inout) :: mesh
-    FLOAT :: aux1, aux2
     FLOAT, allocatable :: rho(:), vh(:), vh2(:), vh3(:), vh_exact(:), rhop(:), xx(:, :)
     FLOAT :: alpha, beta, rr, delta, norm, ralpha, range, hartree_nrg_num, &
          hartree_nrg_analyt, lcl_hartree_nrg 

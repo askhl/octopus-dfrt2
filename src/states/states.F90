@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states.F90 9062 2012-05-09 14:21:00Z umberto $
+!! $Id: states.F90 9104 2012-06-04 08:11:57Z marques $
 
 #include "global.h"
 
@@ -1925,7 +1925,7 @@ contains
     if(st%d%cmplxscl) then
       call smear_find_fermi_energy(st%smear, st%zeigenval%Re, st%occ, st%qtot, &
         st%d%nik, st%nst, st%d%kweights, st%zeigenval%Im)
-        print *, "Efermi", st%smear%e_fermi, st%smear%Ime_fermi
+
       call smear_fill_occupations(st%smear, st%eigenval, st%occ, &
         st%d%nik, st%nst, st%zeigenval%Im)
     else

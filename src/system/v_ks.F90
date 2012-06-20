@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: v_ks.F90 8971 2012-04-03 16:32:55Z jrfsousa $
+!! $Id: v_ks.F90 9093 2012-06-01 21:04:36Z xavier $
 
 #include "global.h"
  
@@ -622,12 +622,16 @@ contains
           if (cmplxscl) call messages_not_implemented('Complex Scaling with XC_FAMILY_MGGA')
           call xc_get_vxc(ks%gr%fine%der, ks%xc, st, &
             ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-            ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, vtau = ks%calc%vtau)
+            ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc, vtau = ks%calc%vtau)
         else
+! <<<<<<< .mine
           if(.not. cmplxscl) then
-            call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-              ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc)
+          call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+            st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+            ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
+!             call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+!               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+!               ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc)
           else
             call xc_get_vxc(ks%gr%fine%der, ks%xc, &
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
@@ -635,6 +639,11 @@ contains
               Imrho = ks%calc%Imdensity, Imex = energy%Imexchange, Imec = energy%Imcorrelation, &
               Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
           end if
+! =======
+!           call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+!             st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+!             ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
+! >>>>>>> .r9133
         end if
       else
         if(iand(hm%xc_family, XC_FAMILY_MGGA) .ne. 0) then

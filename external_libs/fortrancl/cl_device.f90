@@ -84,6 +84,32 @@ module cl_device_m
 
   end interface clGetDeviceInfo
 
+  ! ----------------------------------------------------
+  ! These functions are OpenCL 1.2, I will not include them for the moment.
+  ! 
+  
+  !  interface clReleaseDevice
+  !    subroutine clReleaseDevice_low(device, errcode_ret)
+  !      use cl_types_m
+  !      
+  !      implicit none
+  !      type(cl_device_id), intent(inout) :: device
+  !      integer,            intent(out)   :: errcode_ret
+  !    end subroutine clReleaseDevice_low
+  !  end interface clReleaseDevice
+  
+  ! ----------------------------------------------------
+
+  !  interface clRetainDevice
+  !    subroutine clRetainDevice_low(device, errcode_ret)
+  !      use cl_types_m
+  !      
+  !      implicit none
+  !      type(cl_device_id), intent(inout) :: device
+  !      integer,            intent(out)   :: errcode_ret
+  !    end subroutine clRetainDevice_low
+  !  end interface clRetainDevice
+  
   ! ---------------------------------------------------
   ! some auxiliary functions
   !
@@ -101,16 +127,9 @@ module cl_device_m
       integer,              intent(out)  :: errcode_ret
     end subroutine clgetdeviceids_listall
 
-    subroutine clgetdeviceids_getdev(alldevices, idevice, device)
-      use cl_types_m
-      
-      implicit none
-      
-      type(cl_device_id),   intent(in)   :: alldevices
-      integer,              intent(in)   :: idevice
-      type(cl_device_id),   intent(out)  :: device
-    end subroutine clgetdeviceids_getdev
   end interface
+
+  ! ----------------------------------------------------
   
 contains
 
@@ -135,7 +154,7 @@ contains
     call clgetdeviceids_listall(platform, device_type, num_entries, dev(1), num_devices, errcode_ret)
 
     do idevice = 1, num_devices
-      call clgetdeviceids_getdev(dev(1), idevice - 1, devices(idevice))
+      call fortrancl_get_component(dev(1), idevice - 1, devices(idevice))
     end do
 
     deallocate(dev)

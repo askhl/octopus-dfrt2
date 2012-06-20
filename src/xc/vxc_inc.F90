@@ -15,10 +15,15 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: vxc_inc.F90 8658 2011-12-06 00:35:11Z dstrubbe $
+!! $Id: vxc_inc.F90 9093 2012-06-01 21:04:36Z xavier $
 
 ! ---------------------------------------------------------
-subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau)
+! <<<<<<< .mine
+! subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau)
+! =======
+! subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
+! >>>>>>> .r9133
+subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
   type(states_t),       intent(in)    :: st              !< State of the system (wavefunction,eigenvalues...)
@@ -28,6 +33,7 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   FLOAT,                intent(in)    :: qtot 
   FLOAT, optional,      intent(inout) :: ex              !< Exchange energy.
   FLOAT, optional,      intent(inout) :: ec              !< Correlation energy.
+  FLOAT, optional,      intent(inout) :: deltaxc         !< The XC derivative descontinuity
   FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
   FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
 
@@ -336,12 +342,16 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
     end do functl_loop
   end do space_loop
 
+  if(present(deltaxc)) then
+    deltaxc = M_ZERO
+  end if
+
   if(xcs%xc_density_correction == LR_XC) then
-    call xc_density_correction_calc(xcs, der, spin_channels, rho, dedd)
+    call xc_density_correction_calc(xcs, der, spin_channels, rho, dedd, deltaxc = deltaxc)
   end if
 
   if(xcs%xc_density_correction == LR_X) then
-    call xc_density_correction_calc(xcs, der, spin_channels, rho, vx)
+    call xc_density_correction_calc(xcs, der, spin_channels, rho, vx, deltaxc = deltaxc)
     dedd(1:der%mesh%np, 1:spin_channels) = dedd(1:der%mesh%np, 1:spin_channels) + vx(1:der%mesh%np, 1:spin_channels)
 
     if(calc_energy) then
@@ -359,6 +369,8 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
     end if
   end if
   
+!  print*, deltaxc
+
   ! this has to be done in inverse order
   if(present(vxc)) then
     if(mgga) call mgga_process()
@@ -689,12 +701,13 @@ end subroutine dxc_get_vxc
 
 ! -----------------------------------------------------
 
-subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc)
+subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc, deltaxc)
   type(xc_t),          intent(in)    :: xcs
   type(derivatives_t), intent(in)    :: der
   integer,             intent(in)    :: nspin
   FLOAT,               intent(in)    :: density(:, :)
   FLOAT,               intent(inout) :: vxc(:, :)
+  FLOAT, optional,     intent(out)   :: deltaxc
 
   logical :: find_root, done
   integer :: ip, iunit, ierr
@@ -859,6 +872,8 @@ subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc)
   if(mpi_world%rank == 0) then
     print*, "DD",  -CNST(2.0)*dd, -CNST(2.0)*mindd, -CNST(2.0)*maxdd
   end if
+
+  if(present(deltaxc)) deltaxc = -CNST(2.0)*dd
 
   call dio_function_output(C_OUTPUT_HOW_AXIS_X, "./static", "fnxc", der%mesh, nxc, unit_one, ierr)
 

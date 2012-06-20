@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: scf.F90 9062 2012-05-09 14:21:00Z umberto $
+!! $Id: scf.F90 9092 2012-06-01 19:45:14Z xavier $
 
 #include "global.h"
 
@@ -646,7 +646,7 @@ contains
 
       etime = loct_clock() - itime
       itime = etime + itime
-      call scf_write_iter
+      call scf_write_iter()
 
       ! mixing
       select case (scf%mix_field)
@@ -790,7 +790,7 @@ contains
 
 
     ! ---------------------------------------------------------
-    subroutine scf_write_iter
+    subroutine scf_write_iter()
       character(len=50) :: str
       FLOAT :: mem
 #ifdef HAVE_MPI

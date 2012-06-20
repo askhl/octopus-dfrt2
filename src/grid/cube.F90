@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube.F90 8995 2012-04-07 21:38:46Z xavier $
+!! $Id: cube.F90 9119 2012-06-12 21:16:08Z xavier $
 
 #include "global.h"
 
@@ -64,7 +64,7 @@ module cube_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine cube_init(cube, nn, sb, fft_type, fft_library, dont_optimize, nn_out)
+  subroutine cube_init(cube, nn, sb, fft_type, fft_library, dont_optimize, nn_out, verbose)
     type(cube_t),      intent(out) :: cube
     integer,           intent(in)  :: nn(3)
     type(simul_box_t), intent(in)  :: sb
@@ -73,8 +73,10 @@ contains
     logical, optional, intent(in)  :: dont_optimize !< if true, do not optimize grid for FFT
     integer, optional, intent(out) :: nn_out(3) !< What are the FFT dims?
                                                 !! If optimized, may be different from input nn.
+    logical, optional, intent(in)  :: verbose   !< Print info to the screen.
 
-    integer :: mpi_comm, tmp_n(3), fft_type_, ii, optimize_parity(3), default_lib, fft_library_
+    integer :: mpi_comm, tmp_n(3), fft_type_, optimize_parity(3), default_lib, fft_library_
+    integer :: effdim_fft
     logical :: optimize(3)
 
     PUSH_SUB(cube_init)
@@ -82,6 +84,8 @@ contains
     ASSERT(all(nn(1:3) > 0))
 
     fft_type_ = optional_default(fft_type, FFT_NONE)
+
+    effdim_fft = min (3, sb%dim)
 
     nullify(cube%fft)
 
@@ -105,9 +109,11 @@ contains
         !%End
         default_lib = FFTLIB_FFTW
 #ifdef HAVE_CLAMDFFT
-        if(opencl_is_enabled()) default_lib = FFTLIB_CLAMD
+        ! disabled by default since there are some problems for dim != 3
+        ! if(opencl_is_enabled() .and. sb%dim == 3) default_lib = FFTLIB_CLAMD
 #endif
         call parse_integer(datasets_check('FFTLibrary'), default_lib, fft_library_)
+        if(optional_default(verbose, .false.)) call messages_print_var_option(stdout, 'FFTLibrary', fft_library_)
       end if
 #ifndef HAVE_PFFT
       if (fft_library_ == FFTLIB_PFFT) then
@@ -148,8 +154,8 @@ contains
 
       optimize(1:3) = .false.
       optimize_parity(1:3) = 0
-      optimize(sb%periodic_dim+1:sb%dim) = .true.
-      optimize_parity(sb%periodic_dim+1:sb%dim) = 1
+      optimize(sb%periodic_dim+1:effdim_fft) = .true.
+      optimize_parity(sb%periodic_dim+1:effdim_fft) = 1
 
       if(present(dont_optimize)) then
         if(dont_optimize) optimize = .false.
