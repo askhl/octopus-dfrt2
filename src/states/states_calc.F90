@@ -226,19 +226,16 @@ contains
     do ist = 1, st%nst
        if ((args(ist) /= ist).and.(.not.(ok(ist)))) then
           call states_get_state(st, mesh, ist, ik, buf)
-!           buf(:) = st%psi%zR(:, idim, ist, ik)
           kst = ist
           do
              jst = args(kst)
              if (jst.eq.ist) then
                call states_set_state(st, mesh, rank(jst), ik, buf)
-!                 st%psi%zR(:, idim, rank(jst), ik) = buf(:)
                 ok(rank(jst)) = .true.
                 exit
              end if
              call states_get_state(st, mesh, jst, ik, buf1)
              call states_set_state(st, mesh, kst, ik, buf1)             
-!              st%psi%zR(:, idim, kst, ik) = st%psi%zR(:, idim, jst, ik)
              ok(kst) = .true.
              kst = jst
           end do
@@ -252,6 +249,7 @@ contains
     
   end subroutine reorder_states_by_args
 
+! ---------------------------------------------------------
   subroutine states_sort_complex( mesh, st, diff)
     type(mesh_t),      intent(in)    :: mesh
     type(states_t),    intent(inout) :: st
@@ -260,7 +258,6 @@ contains
     integer              :: ik, ist, idim
     integer, allocatable :: index(:)
     FLOAT, allocatable   :: diff_copy(:,:)
-    type(states_t) :: st_copy
     
     PUSH_SUB(states_sort_complex)
     
@@ -271,21 +268,16 @@ contains
     
     do ik = st%d%kpt%start, st%d%kpt%end
 
-    call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
-    do ist = 1 , st%nst
-      diff(ist, ik) = diff_copy(index(ist),ik)
-    end do
+      call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
+      do ist = 1 , st%nst !reorder the eigenstates error accordingly
+        diff(ist, ik) = diff_copy(index(ist),ik)
+      end do
     
-    call states_copy(st_copy, st)  !OK This is very unefficient 
       do idim =1, st%d%dim
          call reorder_states_by_args(st, mesh, index, idim, ik)
-!         do ist = 1 , st%nst 
-!            st%psi%zR(:, idim, ist, ik) =  st_copy%psi%zR(:, idim, index(ist), ik)          
-!         end do
       end do
     end do
     
-    call states_end(st_copy)
     
     SAFE_DEALLOCATE_A(index)
     SAFE_DEALLOCATE_A(diff_copy)

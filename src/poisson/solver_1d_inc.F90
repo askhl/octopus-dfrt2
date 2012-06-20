@@ -93,7 +93,7 @@ end subroutine poisson1D_solve
 !-----------------------------------------------------------------
 
 !
-! Complex scaled soft Coulom Hartree Solver
+! Complex scaled soft Coulomb Hartree Solver
 !
 subroutine zpoisson1D_solve(this, pot, rho, theta)
   type(poisson_t), intent(in)  :: this

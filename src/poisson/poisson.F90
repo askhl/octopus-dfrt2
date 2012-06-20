@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson.F90 9119 2012-06-12 21:16:08Z xavier $
+!! $Id: poisson.F90 9135 2012-06-20 10:21:35Z joseba $
 
 #include "global.h"
 
@@ -133,7 +133,7 @@ contains
     logical :: need_cube
     integer :: default_solver, default_kernel, box(MAX_DIM), fft_type
 
-    if(this%method.ne.-99) return ! already initialized
+    if(this%method /= -99) return ! already initialized
 
     PUSH_SUB(poisson_init)
 
@@ -279,7 +279,7 @@ contains
         if( (this%method /= POISSON_FFT) ) call input_error('PoissonSolver')
       end select
 
-      if(der%mesh%use_curvilinear.and.this%method.ne.POISSON_DIRECT_SUM_1D) then
+      if(der%mesh%use_curvilinear .and. this%method /= POISSON_DIRECT_SUM_1D) then
         message(1) = 'If curvilinear coordinates are used in 1D, then the only working'
         message(2) = 'Poisson solver is <tt>direct1D</tt>.'
         call messages_fatal(2)
@@ -287,11 +287,11 @@ contains
 
     case(2)
 
-      if( (this%method .ne. POISSON_FFT) .and. (this%method .ne. POISSON_DIRECT_SUM_2D) ) then
+      if( (this%method /= POISSON_FFT) .and. (this%method /= POISSON_DIRECT_SUM_2D) ) then
         call input_error('PoissonSolver')
       end if
 
-      if(der%mesh%use_curvilinear .and. (this%method .ne. POISSON_DIRECT_SUM_2D) ) then
+      if(der%mesh%use_curvilinear .and. (this%method /= POISSON_DIRECT_SUM_2D) ) then
         message(1) = 'If curvilinear coordinates are used in 2D, then the only working'
         message(2) = 'Poisson solver is <tt>direct2D</tt>.'
         call messages_fatal(2)
@@ -321,7 +321,7 @@ contains
         call messages_warning(3)
       end if
 
-      if(der%mesh%use_curvilinear .and. (this%method.ne.POISSON_CG_CORRECTED)) then
+      if(der%mesh%use_curvilinear .and. (this%method/=POISSON_CG_CORRECTED)) then
         message(1) = 'If curvilinear coordinates are used, then the only working'
         message(2) = 'Poisson solver is cg_corrected.'
         call messages_fatal(2)
@@ -636,7 +636,7 @@ contains
       all_nodes_value = this%all_nodes_default
     end if
 
-    ASSERT(this%method.ne.-99)
+    ASSERT(this%method /= -99)
       
     select case(this%method)
     case(POISSON_DIRECT_SUM_1D)
@@ -747,8 +747,8 @@ contains
   !! This only makes sense for finite systems.
   subroutine poisson_test(mesh)
     type(mesh_t), intent(inout) :: mesh
-    FLOAT, allocatable :: rho(:), vh(:), vh2(:), vh3(:), vh_exact(:), rhop(:), xx(:, :)
-    FLOAT :: alpha, beta, rr, delta, norm, ralpha, range, hartree_nrg_num, &
+    FLOAT, allocatable :: rho(:), vh(:), vh_exact(:), rhop(:), xx(:, :)
+    FLOAT :: alpha, beta, rr, delta, norm, ralpha, hartree_nrg_num, &
          hartree_nrg_analyt, lcl_hartree_nrg 
     integer :: ip, idir, ierr, iunit, nn, n_gaussians
 
@@ -763,8 +763,6 @@ contains
     SAFE_ALLOCATE(     rho(1:mesh%np))
     SAFE_ALLOCATE(    rhop(1:mesh%np))
     SAFE_ALLOCATE(      vh(1:mesh%np))
-    SAFE_ALLOCATE(      vh2(1:mesh%np))
-    SAFE_ALLOCATE(      vh3(1:mesh%np))
     SAFE_ALLOCATE(vh_exact(1:mesh%np))
     SAFE_ALLOCATE(xx(1:mesh%sb%dim, 1:n_gaussians))
 
@@ -778,8 +776,6 @@ contains
 
     write(message(1), '(a)') 'Building the Gaussian distribution of charge...'
     call messages_info(1)
-
-    range = CNST(8.0)
 
     rho = M_ZERO
     do nn = 1, n_gaussians
@@ -841,32 +837,34 @@ contains
     write(iunit, '(a,f19.13)' ) 'Hartree test (rel.) = ', delta
     
     ! Calculate the numerical Hartree energy (serially)
-    lcl_hartree_nrg=M_ZERO
-    do ip=1, mesh%np
-      lcl_hartree_nrg=lcl_hartree_nrg+rho(ip)*vh(ip)
+    lcl_hartree_nrg = M_ZERO
+    do ip = 1, mesh%np
+      lcl_hartree_nrg = lcl_hartree_nrg + rho(ip) * vh(ip)
     end do
-    lcl_hartree_nrg=lcl_hartree_nrg*mesh%spacing(1)*mesh%spacing(2)*mesh%spacing(3)/M_TWO
+    lcl_hartree_nrg = lcl_hartree_nrg * mesh%spacing(1) * mesh%spacing(2) * mesh%spacing(3)/M_TWO
 #ifdef HAVE_MPI
     call MPI_Reduce(lcl_hartree_nrg, hartree_nrg_num, 1, &
          MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD, mpi_err)
-    if(mpi_err .ne. 0) then
-      write(*,*)"MPI error"
+    if(mpi_err /= 0) then
+      write(message(1),'(a)') "MPI error in MPI_Reduce; subroutine poisson_test of file poisson.F90"
+      call messages_warning(1)
     end if
 #else
     hartree_nrg_num = lcl_hartree_nrg
 #endif
 
     ! Calculate the anallytical Hartree energy (serially, discrete - not exactly exact)
-    lcl_hartree_nrg=M_ZERO
-    do ip=1, mesh%np
-      lcl_hartree_nrg=lcl_hartree_nrg+rho(ip)*vh_exact(ip)
+    lcl_hartree_nrg = M_ZERO
+    do ip = 1, mesh%np
+      lcl_hartree_nrg = lcl_hartree_nrg + rho(ip) * vh_exact(ip)
     end do
-    lcl_hartree_nrg=lcl_hartree_nrg*mesh%spacing(1)*mesh%spacing(2)*mesh%spacing(3)/M_TWO
+    lcl_hartree_nrg = lcl_hartree_nrg * mesh%spacing(1) * mesh%spacing(2) * mesh%spacing(3)/M_TWO
 #ifdef HAVE_MPI 
     call MPI_Reduce(lcl_hartree_nrg, hartree_nrg_analyt, 1, &
          MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD, mpi_err)
-    if(mpi_err .ne. 0) then
-      write(*,*)"MPI error"
+    if(mpi_err /= 0) then
+      write(message(1),'(a)') "MPI error in MPI_Reduce; subroutine poisson_test of file poisson.F90"
+      call messages_warning(1)
     end if
 #else
     hartree_nrg_analyt = lcl_hartree_nrg
@@ -893,8 +891,6 @@ contains
     SAFE_DEALLOCATE_A(vh)
     SAFE_DEALLOCATE_A(vh_exact)
     SAFE_DEALLOCATE_A(xx)
-    SAFE_DEALLOCATE_A(vh2)
-    SAFE_DEALLOCATE_A(vh3)
     POP_SUB(poisson_test)
   end subroutine poisson_test
 
