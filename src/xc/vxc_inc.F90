@@ -17,12 +17,6 @@
 !!
 !! $Id: vxc_inc.F90 9093 2012-06-01 21:04:36Z xavier $
 
-! ---------------------------------------------------------
-! <<<<<<< .mine
-! subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau)
-! =======
-! subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
-! >>>>>>> .r9133
 subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used

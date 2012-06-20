@@ -624,14 +624,10 @@ contains
             ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
             ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc, vtau = ks%calc%vtau)
         else
-! <<<<<<< .mine
           if(.not. cmplxscl) then
           call xc_get_vxc(ks%gr%fine%der, ks%xc, &
             st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
             ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
-!             call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-!               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-!               ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc)
           else
             call xc_get_vxc(ks%gr%fine%der, ks%xc, &
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
@@ -639,11 +635,6 @@ contains
               Imrho = ks%calc%Imdensity, Imex = energy%Imexchange, Imec = energy%Imcorrelation, &
               Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
           end if
-! =======
-!           call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-!             st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-!             ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
-! >>>>>>> .r9133
         end if
       else
         if(iand(hm%xc_family, XC_FAMILY_MGGA) .ne. 0) then

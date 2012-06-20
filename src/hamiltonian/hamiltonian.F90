@@ -1179,7 +1179,6 @@ contains
     eout%berry        = ein%berry
     eout%delta_xc     = ein%delta_xc
 
-! <<<<<<< .mine
     eout%Imtotal = ein%Imtotal
     eout%Imeigenvalues = ein%Imeigenvalues
     eout%Imexchange = ein%Imexchange
@@ -1193,10 +1192,6 @@ contains
     eout%Imts = ein%Imts
     eout%Imberry = ein%Imberry
 
-! =======
-!     eout%ztotal       = ein%ztotal
-!     eout%zeigenvalues = ein%zeigenvalues
-! >>>>>>> .r9133
     
     POP_SUB(energy_copy)
   end subroutine energy_copy
