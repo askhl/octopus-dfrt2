@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: energy.F90 9093 2012-06-01 21:04:36Z xavier $
+!! $Id: energy.F90 9138 2012-06-20 21:09:40Z umberto $
 
 #include "global.h"
 
@@ -93,7 +93,7 @@ contains
         hm%energy%kinetic   = real(etmp)
         hm%energy%Imkinetic = aimag(etmp)
          
-        etmp  = zelectronic_energy(hm, gr%der, st, terms = TERM_NON_LOCAL_POTENTIAL + TERM_LOCAL_EXTERNAL, cproduct = hm%cmplxscl)       
+        etmp  = zelectronic_energy(hm, gr%der, st, terms = TERM_NON_LOCAL_POTENTIAL + TERM_LOCAL_EXTERNAL, cproduct = hm%cmplxscl)
         hm%energy%extern   =  real(etmp)
         hm%energy%Imextern =  aimag(etmp)
         

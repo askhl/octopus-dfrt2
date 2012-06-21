@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson.F90 9135 2012-06-20 10:21:35Z joseba $
+!! $Id: poisson.F90 9151 2012-06-20 23:09:43Z umberto $
 
 #include "global.h"
 
@@ -1130,7 +1130,7 @@ contains
     PUSH_SUB(zpoisson_solve_finish)
     call profiling_in(prof, "ZPOISSON_FINISH")
 
-    call MPI_Bcast(pot(1), this%der%mesh%np, MPI_CMPLz, 0, this%intercomm, mpi_err)
+    call MPI_Bcast(pot(1), this%der%mesh%np, MPI_CMPLX, 0, this%intercomm, mpi_err)
 
     call profiling_out(prof)
     POP_SUB(zpoisson_solve_finish)

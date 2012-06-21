@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian_inc.F90 9115 2012-06-12 09:54:51Z acastro $
+!! $Id: hamiltonian_inc.F90 9142 2012-06-20 21:25:03Z umberto $
 
 ! ---------------------------------------------------------
 subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, terms)

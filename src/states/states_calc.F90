@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc.F90 9062 2012-05-09 14:21:00Z umberto $
+!! $Id: states_calc.F90 9151 2012-06-20 23:09:43Z umberto $
 
 #include "global.h"
 
@@ -212,6 +212,8 @@ contains
     CMPLX,   allocatable :: buf(:,:),buf1(:,:)
     logical, allocatable :: ok(:)
     integer, allocatable :: rank(:)
+    
+    PUSH_SUB(reorder_states_by_args)
 
     SAFE_ALLOCATE(ok(st%nst))
     SAFE_ALLOCATE(rank(st%nst))
@@ -231,8 +233,8 @@ contains
              jst = args(kst)
              if (jst.eq.ist) then
                call states_set_state(st, mesh, rank(jst), ik, buf)
-                ok(rank(jst)) = .true.
-                exit
+               ok(rank(jst)) = .true.
+               exit
              end if
              call states_get_state(st, mesh, jst, ik, buf1)
              call states_set_state(st, mesh, kst, ik, buf1)             
@@ -247,6 +249,7 @@ contains
     SAFE_DEALLOCATE_A(buf)
     SAFE_DEALLOCATE_A(buf1)
     
+    POP_SUB(reorder_states_by_args)
   end subroutine reorder_states_by_args
 
 ! ---------------------------------------------------------

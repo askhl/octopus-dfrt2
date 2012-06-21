@@ -146,9 +146,6 @@ contains
     !%Option arpack 12
     !% Implicitly Restarted Arnoldi Method. Requires the ARPACK package. 
     !% method.
-    !%Option bicg 13
-    !% (Experimental) biconjugate gradient method.
-    !% method.
     !%End
 
     if(st%parallel_in_states) then
