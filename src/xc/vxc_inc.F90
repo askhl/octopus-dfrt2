@@ -921,12 +921,17 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   FLOAT, intent(inout)     :: Imec
   FLOAT, intent(in)        :: cmplxscl_th
   
-  CMPLX :: zex, zec, zrho, zvxc, eps_c, last_zvxc
-  INTEGER :: i, N
+  CMPLX :: zex, zec, zrho, zvxc, eps_c, last_zvxc, correct_branch_phase
+  INTEGER :: i, N, izero
   CMPLX :: rs, rtrs, Q0, Q1, dQ1drs, dedrs, tmpphase, dimphase, vtrial2, vtrial3
   CMPLX, allocatable :: zvxc_arr(:)
 
   FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4, Cx
+  FLOAT :: scaling_origin_position(MAX_DIM)
+
+  INTEGER :: rankmin_unused ! unused except it's a mandatory output parameter
+  ! when calling a certain function
+  FLOAT :: dmin_unused
 
   ! LDA constants.
   ! Only C0I is used for spin-paired calculations among these five
@@ -1003,15 +1008,27 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
      
      zvxc_arr(i) = zvxc
   end do
-  
-  tmpphase = exp(M_TWO * M_PI * M_zI / M_THREE)
-  do i=1, 2 ! multiply by the phase up to two times
-     if (real(zex * tmpphase).lt.real(zex)) then
-        zex = zex * tmpphase
-        zvxc_arr(:) = zvxc_arr(:) * tmpphase
-     end if
-  end do
 
+  scaling_origin_position = 0.0 ! M_d0 ?
+  izero = mesh_nearest_point(mesh, scaling_origin_position, dmin_unused, rankmin_unused)
+  zvxc = zvxc_arr(izero)
+  vtrial2 = zvxc * exp(M_TWO * M_PI * M_zI / M_THREE)
+  vtrial3 = zvxc / exp(M_TWO * M_PI * M_zI / M_THREE)
+  correct_branch_phase = 1.0
+  
+  ! if there's any problem with the below code, maybe we need to use
+  ! the abs(complex argument) rather than abs(aimag(..))
+  if (abs(aimag(vtrial2)).lt.abs(aimag(zvxc))) then
+     zvxc = vtrial2
+     correct_branch_phase = exp(M_TWO * M_PI * M_zI / M_THREE)
+  end if
+  if (abs(aimag(vtrial3)).lt.abs(aimag(zvxc))) then
+     zvxc = vtrial3
+     correct_branch_phase = exp(-M_TWO * M_PI * M_zI / M_THREE)
+  end if
+  zvxc_arr(:) = zvxc_arr(:) * correct_branch_phase
+  zex = zex * correct_branch_phase
+  
   vxc(:, 1) = real(zvxc_arr)
   Imvxc(:, 1) = aimag(zvxc_arr)
 
