@@ -909,6 +909,97 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
   POP_SUB('vxc_inc.get_qxc')
 end function get_qxc
 
+
+! Subroutine to stitch discontinuous values of a multiple-valued function
+! together to a single continuous, single-valued function by smoothly
+! joining at the branch cuts.
+subroutine stitch(get_branch, functionvalues, istart)
+  
+  ! Function for getting values of multiple-valued functions.
+  ! Each value of the parameter 'branch' corresponds to one such value.
+  interface 
+     CMPLX function get_branch(x, branch)
+       CMPLX :: x
+       integer :: branch
+     end function get_branch
+  end interface
+  
+  CMPLX, intent(inout) :: functionvalues(:)
+  integer, intent(in) :: istart
+  
+  integer :: currentbranch, npts, i
+  CMPLX :: prev_value, err
+
+  npts = size(functionvalues, 1)
+
+  ! First loop forwards from zero and stitch along the way
+  currentbranch = 0
+  prev_value = functionvalues(istart)
+  do i=istart + 1, npts
+     call stitch_single_point()
+  end do
+  
+  ! Now loop backwards
+  currentbranch = 0
+  prev_value = functionvalues(istart)
+  do i=istart - 1, 1, -1
+     call stitch_single_point()
+  end do
+  
+contains
+
+  subroutine stitch_single_point()
+    CMPLX :: v1, v2, v3, v
+    FLOAT :: err1, err2, err3
+    integer :: j, adj
+    v1 = get_branch(functionvalues(i), currentbranch)
+    v2 = get_branch(functionvalues(i), currentbranch - 1)
+    v3 = get_branch(functionvalues(i), currentbranch + 1)
+    err1 = abs(v1 - prev_value)
+    err2 = abs(v2 - prev_value)
+    err3 = abs(v3 - prev_value)
+    
+    adj = 0
+    v = v1
+    if (abs(v2 - prev_value).lt.abs(v - prev_value)) then
+       v = v2
+       adj = -1
+    end if
+    if (abs(v3 - prev_value).lt.abs(v - prev_value)) then
+       v = v3
+       adj = +1
+    end if
+    currentbranch = currentbranch + adj
+    functionvalues(i) = v
+    prev_value = v
+  end subroutine stitch_single_point
+  
+end subroutine stitch
+
+! For evaluating values of multiple-valued functions when one value,
+! e.g. the principal value, is known.  Used to stitch
+CMPLX function get_root3_branch(x, branch) result(y)
+  CMPLX, intent(in) :: x
+  integer, intent(in) :: branch
+  
+  y = x * exp(branch * M_TWO * M_zI * M_PI / M_THREE)
+end function get_root3_branch
+
+CMPLX function get_root6_branch(x, branch) result(y)
+  CMPLX, intent(in) :: x
+  integer, intent(in) :: branch
+  
+  y = x * exp(branch * M_zI * M_PI / M_THREE)
+end function get_root6_branch
+
+CMPLX function get_logarithm_branch(x, branch) result(y)
+  CMPLX, intent(in) :: x
+  integer, intent(in) :: branch
+  
+  y = x + branch * M_TWO * M_zI * M_PI
+end function get_logarithm_branch
+
+
 subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
   type(mesh_t), intent(in) :: mesh
   FLOAT, intent(in)        :: rho(:, :)
@@ -920,133 +1011,89 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   FLOAT, intent(inout)     :: Imex
   FLOAT, intent(inout)     :: Imec
   FLOAT, intent(in)        :: cmplxscl_th
-  
-  CMPLX :: zex, zec, zrho, zvxc, eps_c, last_zvxc, correct_branch_phase
-  INTEGER :: i, N, izero
-  CMPLX :: rs, rtrs, Q0, Q1, dQ1drs, dedrs, tmpphase, dimphase, vtrial2, vtrial3
-  CMPLX, allocatable :: zvxc_arr(:)
 
-  FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4, Cx
-  FLOAT :: scaling_origin_position(MAX_DIM)
+  ! Exchange potential prefactor
+  FLOAT, parameter :: Wx = -0.98474502184269641
 
-  INTEGER :: rankmin_unused ! unused except it's a mandatory output parameter
-  ! when calling a certain function
+  ! LDA correlation parameters
+  FLOAT, parameter :: gamma = 0.031091, alpha1 = 0.21370, beta1 = 7.5957, beta2 = 3.5876, beta3 = 1.6382, beta4 = 0.49294
+
+  CMPLX, allocatable :: zrho_arr(:), zvx_arr(:), zvc_arr(:), rootrs(:), Q0(:), Q1(:), dQ1drs(:), epsc(:), depsdrs(:)
+  CMPLX :: dimphase, tmp, zex, zec
+
+  FLOAT :: scaling_origin(MAX_DIM)
   FLOAT :: dmin_unused
-
-  ! LDA constants.
-  ! Only C0I is used for spin-paired calculations among these five
-  C0I = 0.238732414637843
-  C1 = -0.45816529328314287
-  CC1 = 1.9236610509315362
-  CC2 = 2.5648814012420482
-  IF2 = 0.58482236226346462
+  integer :: N, izero, rankmin_unused
   
-  gamma = 0.031091
-  alpha1 = 0.21370
-  beta1 = 7.5957
-  beta2 = 3.5876
-  beta3 = 1.6382
-  beta4 = 0.49294
-
   N = size(rho, 1)
-  SAFE_ALLOCATE(zvxc_arr(1:N))
-
-  zex = M_z0
-  zec = M_z0
+  SAFE_ALLOCATE(zrho_arr(1:N))
+  SAFE_ALLOCATE(zvx_arr(1:N))
+  SAFE_ALLOCATE(zvc_arr(1:N))
+  SAFE_ALLOCATE(rootrs(1:N))
+  SAFE_ALLOCATE(Q0(1:N))
+  SAFE_ALLOCATE(Q1(1:N))
+  SAFE_ALLOCATE(dQ1drs(1:N))
+  SAFE_ALLOCATE(epsc(1:N))
+  SAFE_ALLOCATE(depsdrs(1:N))
+  
 
   dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
-
-  !Cx = -3.0 / 4.0 * (3.0 / M_PI)**(1.0 / 3.0)
-  Cx = 0.73855876638202234 
-
-  last_zvxc = M_ONE ! entirely arbitrary
-
-  do i=1, N
-     zrho = rho(i, 1) + M_zI * Imrho(i, 1)
-
-     ! "simplified", linear exchange potential
-     !zex = zex + 0.5 * lda_exchange_prefactor * zrho * zrho * dimphase
-     !zvxc = lda_exchange_prefactor * zrho * dimphase !+ 2.0 * 3.1415926535897931 * M_zI
-
-     ! quadratic positive exchange potential
-     !zex = zex - lda_exchange_prefactor * (zrho * dimphase)**3.0 / dimphase / 10.
-     !zvxc = -3.0 * lda_exchange_prefactor * (zrho * dimphase)**2.0 / 10.
-
-     ! 3d exchange
-     zvxc = -Cx * 4.0 / 3.0 * (zrho * dimphase)**(1.0 / 3.0)
-
-     ! Among the three cube roots, choose the one closest to that of
-     ! the last iteration.  This choice is quite arbitrary and
-     ! probably wrong.  We will correct it later since it only rotates
-     ! the potential by a specific phase.
-     vtrial2 = zvxc * exp(M_TWO * M_PI * M_zI / M_THREE)
-     vtrial3 = zvxc / exp(M_TWO * M_PI * M_zI / M_THREE)
-     if (abs(vtrial2 - last_zvxc).lt.abs(zvxc - last_zvxc)) then
-        zvxc = vtrial2
-     end if
-     if (abs(vtrial3 - last_zvxc).lt.abs(zvxc - last_zvxc)) then
-        zvxc = vtrial3
-     end if
-     last_zvxc = zvxc
-     
-     zex = zex + 3.0 / 4.0 * zvxc * zrho
-
-     ! 2d exchange
-     !zex = zex - (4./3.) * sqrt(2./3.1415926535897931) * zrho**(3.0/2.0)
-     !zvxc = -1.5 * (4./3.) * sqrt(2./3.1415926535897931) * zrho**(3.0/2.0)
-
-     ! correlation
-     !rs = (C0I / zrho)**(1.0 / 3.0)
-     !rtrs = sqrt(rs)
-     !Q0 = -2.0 * gamma * (1.0 + alpha1 * rs)
-     !Q1 = 2.0 * gamma * rtrs * (beta1 + rtrs * (beta2 + rtrs * (beta3 + rtrs * beta4)))
-     !eps_c = Q0 * log(1.0 + 1.0 / Q1)
-     zec = M_z0 !!!!zec + eps_c * zrho
-     !dQ1drs = gamma * (beta1 / rtrs + 2.0 * beta2 + rtrs * (3.0 * beta3 + 4.0 * beta4 * rtrs))
-     !dedrs = -2.0 * gamma * alpha1 * eps_c / Q0 - Q0 * dQ1drs / (Q1 * (Q1 + 1.0))
-     !zvxc = zvxc + eps_c - rs * dedrs / 3.0
-     
-     zvxc_arr(i) = zvxc
-  end do
-
-  scaling_origin_position = 0.0 ! M_d0 ?
-  izero = mesh_nearest_point(mesh, scaling_origin_position, dmin_unused, rankmin_unused)
-  zvxc = zvxc_arr(izero)
-  vtrial2 = zvxc * exp(M_TWO * M_PI * M_zI / M_THREE)
-  vtrial3 = zvxc / exp(M_TWO * M_PI * M_zI / M_THREE)
-  correct_branch_phase = 1.0
+  scaling_origin = M_z0
   
-  ! if there's any problem with the below code, maybe we need to use
-  ! the abs(complex argument) rather than abs(aimag(..))
-  if (abs(aimag(vtrial2)).lt.abs(aimag(zvxc))) then
-     zvxc = vtrial2
-     correct_branch_phase = exp(M_TWO * M_PI * M_zI / M_THREE)
-  end if
-  if (abs(aimag(vtrial3)).lt.abs(aimag(zvxc))) then
-     zvxc = vtrial3
-     correct_branch_phase = exp(-M_TWO * M_PI * M_zI / M_THREE)
-  end if
-  zvxc_arr(:) = zvxc_arr(:) * correct_branch_phase
-  zex = zex * correct_branch_phase
+  izero = mesh_nearest_point(mesh, scaling_origin, dmin_unused, rankmin_unused)
   
-  vxc(:, 1) = real(zvxc_arr)
-  Imvxc(:, 1) = aimag(zvxc_arr)
+  zrho_arr(:) = rho(:, 1) + M_zI * Imrho(:, 1)
 
-  zex = zex * mesh%volume_element
-  zec = zec * mesh%volume_element
+  ! Okay, now it starts.  First initialize the only point we know something
+  ! definite about, namely the one where the scaling transformation does
+  ! nothing.
+
+  zvx_arr(:) = Wx * (zrho_arr(:) * dimphase)**(M_ONE / M_THREE)
+  call stitch(get_root3_branch, zvx_arr, izero)
+
+  zex = M_THREE / M_FOUR * sum(zvx_arr(:) * zrho_arr(:)) * mesh%volume_element
+
+  ! Right.  Next is correlation which is much more complicated.  We
+  ! use the PW91 parametrization.  We have to stitch the square root
+  ! of the Wigner-Seitz radius and also the logarithm.
+  
+  rootrs(:) = (M_THREE / (M_FOUR * M_PI * zrho_arr(:) * dimphase))**(M_ONE / M_SIX)
+  call stitch(get_root6_branch, rootrs, izero)
+  Q0(:) = -M_TWO * gamma * (M_ONE + alpha1 * rootrs(:)**2)
+  Q1(:) = M_TWO * gamma * rootrs(:) * (beta1 + rootrs(:) * (beta2 + rootrs(:) * (beta3 + rootrs(:) * beta4)))
+  
+  dQ1drs(:) = gamma * (beta1 / rootrs(:) + M_TWO * beta2 + rootrs(:) * (M_THREE * beta3 + M_FOUR * beta4 * rootrs(:)))
+
+  epsc(:) = log(M_ONE + M_ONE / Q1)
+  call stitch(get_logarithm_branch, epsc, izero)
+  epsc(:) = Q0(:) * epsc(:)
+
+  depsdrs(:) = -M_TWO * gamma * alpha1 * epsc(:) / Q0(:) - Q0(:) * dQ1drs(:) / (Q1(:) * (Q1(:) + M_ONE))
+
+  zvc_arr(:) = epsc(:) - rootrs(:)**2 * depsdrs(:) / M_THREE
+
+  zec = sum(epsc(:) * zrho_arr(:)) * mesh%volume_element
 
   ex = real(zex)
-  ec = real(zec)
   Imex = aimag(zex)
+  ec = real(zec)
   Imec = aimag(zec)
 
-  SAFE_DEALLOCATE_A(zvxc_arr)
-  
-  print*, 'lda exchange', zex
-  print*, 'lda correlation', zec
+  vxc(:, 1) = real(zvx_arr(:)) + real(zvc_arr(:))
+  Imvxc(:, 1) = aimag(zvx_arr(:)) + aimag(zvc_arr(:))
 
-  
+  SAFE_DEALLOCATE_A(zrho_arr)
+  SAFE_DEALLOCATE_A(zvx_arr)
+  SAFE_DEALLOCATE_A(zvc_arr)
+  SAFE_DEALLOCATE_A(rootrs)
+  SAFE_DEALLOCATE_A(Q0)
+  SAFE_DEALLOCATE_A(Q1)
+  SAFE_DEALLOCATE_A(dQ1drs)
+  SAFE_DEALLOCATE_A(epsc)
+  SAFE_DEALLOCATE_A(depsdrs)
+
 end subroutine zxc_complex_lda
+
 
 ! ----------------------------------------------------------------------------- 
 ! This is the complex scaled interface for xc functionals.
