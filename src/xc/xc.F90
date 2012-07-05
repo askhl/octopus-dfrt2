@@ -24,6 +24,7 @@ module xc_m
   use derivatives_m
   use global_m
   use grid_m
+  use index_m
   use io_m
   use io_function_m
   use lalg_basic_m

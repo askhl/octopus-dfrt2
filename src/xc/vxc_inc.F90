@@ -910,10 +910,108 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
 end function get_qxc
 
 
+subroutine stitch2d(mesh, get_branch, functionvalues, istart)
+
+  interface 
+     CMPLX function get_branch(x, branch)
+       CMPLX :: x
+       integer :: branch
+     end function get_branch
+  end interface
+
+  type(mesh_t), intent(in) :: mesh
+    
+  CMPLX, intent(inout) :: functionvalues(:)
+  integer, intent(in)  :: istart
+
+  integer :: jstart(2), j(2),i,ii, ix, iy, nr, nl, N, dj(2), ifrom, ito, jmax, jmin
+  integer, allocatable :: idx(:)
+
+  if (mesh%sb%dim.ne.2) then
+     return
+  end if
+
+  N = size(functionvalues, 1)
+  nr = countpoints(mesh, istart, (/0, 1/))
+  nl = countpoints(mesh, istart, (/0, -1/))
+  call index_to_coords(mesh%idx, mesh%sb%dim, istart, jstart)
+  
+  call stitchline(mesh, get_branch, functionvalues, istart, 2)
+
+  SAFE_ALLOCATE(idx(1:1 + nr + nl))
+  call mesh_subset_indices(mesh, (/jstart(1), jstart(2) - nl, 0/), (/jstart(1), jstart(2) + nr, 0/), idx)
+  do i=1, nr + nl + 1
+     call stitchline(mesh, get_branch, functionvalues, idx(i), 1)
+  end do
+  SAFE_DEALLOCATE_A(idx)
+
+contains
+
+end subroutine stitch2d
+
+integer function countpoints(mesh, istart, displacement) result(npts)
+  type(mesh_t), intent(in) :: mesh
+  integer,      intent(in) :: istart
+  integer,      intent(in) :: displacement(:)
+  
+  integer :: i
+  
+  i = istart
+  npts = -1
+  do while (i.ne.-1)
+     npts = npts + 1
+     i = translate_point(mesh, i, displacement)
+  end do
+end function countpoints
+  
+  subroutine stitchline(mesh, get_branch, functionvalues, istart, axis)
+    type(mesh_t), intent(in) :: mesh
+
+  interface 
+     CMPLX function get_branch(x, branch)
+       CMPLX :: x
+       integer :: branch
+     end function get_branch
+  end interface
+
+  CMPLX, intent(inout) :: functionvalues(:)
+    integer, intent(in)      :: istart
+    integer, intent(in)      :: axis ! x=1, y=2, z=3
+    
+    integer :: direction(3)
+    integer :: otherdirection(3), nl, nr, jmax(3), jmin(3), jstart(3)
+    integer, allocatable :: idx(:)
+    
+    jmax = 0
+    jmin = 0
+    jstart = 0
+    
+    direction = 0
+    otherdirection = 0
+    direction(axis) = 1
+    otherdirection(axis) = -1
+
+    nr = countpoints(mesh, istart, direction)
+    nl = countpoints(mesh, istart, otherdirection)
+    
+    call index_to_coords(mesh%idx, mesh%sb%dim, istart, jstart)
+    jmin = jstart
+    jmax = jstart
+    jmin(axis) = jmin(axis) - nl
+    jmax(axis) = jmax(axis) + nr
+    
+    SAFE_ALLOCATE(idx(1:nr + nl + 1))
+    call mesh_subset_indices(mesh, jmin, jmax, idx)
+    call stitch(get_branch, functionvalues, nl + 1, idx)
+    SAFE_DEALLOCATE_A(idx)
+  end subroutine stitchline
+
+
+
 ! Subroutine to stitch discontinuous values of a multiple-valued function
 ! together to a single continuous, single-valued function by smoothly
 ! joining at the branch cuts.
-subroutine stitch(get_branch, functionvalues, istart)
+subroutine stitch(get_branch, functionvalues, istart, idx)
   
   ! Function for getting values of multiple-valued functions.
   ! Each value of the parameter 'branch' corresponds to one such value.
@@ -926,22 +1024,23 @@ subroutine stitch(get_branch, functionvalues, istart)
   
   CMPLX, intent(inout) :: functionvalues(:)
   integer, intent(in) :: istart
+  integer, intent(in) :: idx(:)
   
   integer :: currentbranch, npts, i
   CMPLX :: prev_value, err
 
-  npts = size(functionvalues, 1)
+  npts = size(idx, 1)
 
   ! First loop forwards from zero and stitch along the way
   currentbranch = 0
-  prev_value = functionvalues(istart)
+  prev_value = functionvalues(idx(istart))
   do i=istart + 1, npts
      call stitch_single_point()
   end do
   
   ! Now loop backwards
   currentbranch = 0
-  prev_value = functionvalues(istart)
+  prev_value = functionvalues(idx(istart))
   do i=istart - 1, 1, -1
      call stitch_single_point()
   end do
@@ -950,14 +1049,10 @@ contains
 
   subroutine stitch_single_point()
     CMPLX :: v1, v2, v3, v
-    FLOAT :: err1, err2, err3
     integer :: j, adj
-    v1 = get_branch(functionvalues(i), currentbranch)
-    v2 = get_branch(functionvalues(i), currentbranch - 1)
-    v3 = get_branch(functionvalues(i), currentbranch + 1)
-    err1 = abs(v1 - prev_value)
-    err2 = abs(v2 - prev_value)
-    err3 = abs(v3 - prev_value)
+    v1 = get_branch(functionvalues(idx(i)), currentbranch)
+    v2 = get_branch(functionvalues(idx(i)), currentbranch - 1)
+    v3 = get_branch(functionvalues(idx(i)), currentbranch + 1)
     
     adj = 0
     v = v1
@@ -970,7 +1065,7 @@ contains
        adj = +1
     end if
     currentbranch = currentbranch + adj
-    functionvalues(i) = v
+    functionvalues(idx(i)) = v
     prev_value = v
   end subroutine stitch_single_point
   
@@ -1018,12 +1113,13 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   ! LDA correlation parameters
   FLOAT, parameter :: gamma = 0.031091, alpha1 = 0.21370, beta1 = 7.5957, beta2 = 3.5876, beta3 = 1.6382, beta4 = 0.49294
 
-  CMPLX, allocatable :: zrho_arr(:), zvx_arr(:), zvc_arr(:), rootrs(:), Q0(:), Q1(:), dQ1drs(:), epsc(:), depsdrs(:)
-  CMPLX :: dimphase, tmp, zex, zec
+  CMPLX, allocatable   :: zrho_arr(:), zvx_arr(:), zvc_arr(:), rootrs(:), Q0(:), Q1(:), dQ1drs(:), epsc(:), depsdrs(:)
+  integer, allocatable :: stitch_idx(:)
+  CMPLX                :: dimphase, tmp, zex, zec
+  FLOAT                :: scaling_origin(MAX_DIM)
+  FLOAT                :: dmin_unused
+  integer              :: N, izero, rankmin_unused, i
 
-  FLOAT :: scaling_origin(MAX_DIM)
-  FLOAT :: dmin_unused
-  integer :: N, izero, rankmin_unused
   
   N = size(rho, 1)
   SAFE_ALLOCATE(zrho_arr(1:N))
@@ -1035,7 +1131,11 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   SAFE_ALLOCATE(dQ1drs(1:N))
   SAFE_ALLOCATE(epsc(1:N))
   SAFE_ALLOCATE(depsdrs(1:N))
-  
+  SAFE_ALLOCATE(stitch_idx(1:N))
+
+  do i=1, N
+     stitch_idx(i) = i
+  end do
 
   dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
   scaling_origin = M_z0
@@ -1048,8 +1148,13 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   ! definite about, namely the one where the scaling transformation does
   ! nothing.
 
+
   zvx_arr(:) = Wx * (zrho_arr(:) * dimphase)**(M_ONE / M_THREE)
-  call stitch(get_root3_branch, zvx_arr, izero)
+  if(mesh%sb%dim.eq.2) then
+     call stitch2d(mesh, get_root3_branch, zvx_arr, izero)
+  else
+     call stitch(get_root3_branch, zvx_arr, izero, stitch_idx)
+  end if
 
   zex = M_THREE / M_FOUR * sum(zvx_arr(:) * zrho_arr(:)) * mesh%volume_element
 
@@ -1058,14 +1163,22 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   ! of the Wigner-Seitz radius and also the logarithm.
   
   rootrs(:) = (M_THREE / (M_FOUR * M_PI * zrho_arr(:) * dimphase))**(M_ONE / M_SIX)
-  call stitch(get_root6_branch, rootrs, izero)
+  if(mesh%sb%dim.eq.2) then
+     call stitch2d(mesh, get_root6_branch, rootrs, izero)
+  else
+     call stitch(get_root6_branch, rootrs, izero, stitch_idx)
+  end if
   Q0(:) = -M_TWO * gamma * (M_ONE + alpha1 * rootrs(:)**2)
   Q1(:) = M_TWO * gamma * rootrs(:) * (beta1 + rootrs(:) * (beta2 + rootrs(:) * (beta3 + rootrs(:) * beta4)))
   
   dQ1drs(:) = gamma * (beta1 / rootrs(:) + M_TWO * beta2 + rootrs(:) * (M_THREE * beta3 + M_FOUR * beta4 * rootrs(:)))
 
   epsc(:) = log(M_ONE + M_ONE / Q1)
-  call stitch(get_logarithm_branch, epsc, izero)
+  if(mesh%sb%dim.eq.2) then
+     call stitch2d(mesh, get_logarithm_branch, epsc, izero)
+  else
+     call stitch(get_logarithm_branch, epsc, izero, stitch_idx)
+  end if
   epsc(:) = Q0(:) * epsc(:)
 
   depsdrs(:) = -M_TWO * gamma * alpha1 * epsc(:) / Q0(:) - Q0(:) * dQ1drs(:) / (Q1(:) * (Q1(:) + M_ONE))
@@ -1091,7 +1204,7 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   SAFE_DEALLOCATE_A(dQ1drs)
   SAFE_DEALLOCATE_A(epsc)
   SAFE_DEALLOCATE_A(depsdrs)
-
+  SAFE_DEALLOCATE_A(stitch_idx)
 end subroutine zxc_complex_lda
 
 

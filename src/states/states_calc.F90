@@ -253,27 +253,57 @@ contains
   end subroutine reorder_states_by_args
 
 ! ---------------------------------------------------------
-  subroutine states_sort_complex( mesh, st, diff)
+  subroutine states_sort_complex( mesh, st, diff, cmplxscl_th)
     type(mesh_t),      intent(in)    :: mesh
     type(states_t),    intent(inout) :: st
     FLOAT,             intent(inout) :: diff(:,:) !eigenstates convergence error
+    FLOAT,             intent(in)    :: cmplxscl_th
 
     integer              :: ik, ist, idim
     integer, allocatable :: index(:)
     FLOAT, allocatable   :: diff_copy(:,:)
+    FLOAT, allocatable   :: buf(:)
+    CMPLX, allocatable   :: cbuf(:)
     
     PUSH_SUB(states_sort_complex)
     
     SAFE_ALLOCATE(index(st%nst))
+    SAFE_ALLOCATE(cbuf(st%nst))
+    SAFE_ALLOCATE(buf(st%nst))
     SAFE_ALLOCATE(diff_copy(1:size(diff,1),1:size(diff,2)))
     
     diff_copy = diff
-    
-    do ik = st%d%kpt%start, st%d%kpt%end
 
-      call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
+
+!real(st%zeigenval%Re(:, ik))
+
+    do ik = st%d%kpt%start, st%d%kpt%end
+      cbuf(:) = st%zeigenval%Re(:, ik) + M_zI * st%zeigenval%Im(:, ik)
+      buf(:) = aimag(log(cbuf(:)))
+      !buf(:) = aimag(log(cbuf(:) * exp(-M_zI * M_HALF * M_PI))) + M_zI * M_PI * M_HALF
+      print*, 'SORTING'
+      do ist=1, st%nst
+         print*, ist, buf(ist), cbuf(ist)
+         if ((buf(ist).lt.(-cmplxscl_th)).and.((-M_THREE / M_FOUR * M_PI).lt.buf(ist))) then
+            cbuf(ist) = cbuf(ist) + 1e3 ! We cheat and assign very high energies
+            ! to states that we think are continuum states
+            !st%zeigelval%Re(ist, ik) = st%zeigelval%Re(ist, ik) + 1e3
+         end if
+      end do
+      buf(:) = real(cbuf)
+      !buf(:) = st%zeigenval%Re(:, ik) / abs(cbuf(:))**(M_SEVEN / M_EIGHT) / cos(buf(:))**2
+      
+      !print*, 'ENERGIES', cbuf(1:3)
+      !print*, 'SCORES', buf(1:6)
+      call sort(buf, index)
+      !print*, 'ENERGIES AFTER', cbuf(1:3)
+      !print*, 'SCORES AFTER', buf(1:6)
+      !print*, 'SORT ARGS', index(1:6)
+      !call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
       do ist = 1 , st%nst !reorder the eigenstates error accordingly
         diff(ist, ik) = diff_copy(index(ist),ik)
+        st%zeigenval%Re(ist, ik) = real(cbuf(index(ist)))
+        st%zeigenval%Im(ist, ik) = aimag(cbuf(index(ist)))
       end do
     
       do idim =1, st%d%dim
@@ -284,6 +314,8 @@ contains
     
     SAFE_DEALLOCATE_A(index)
     SAFE_DEALLOCATE_A(diff_copy)
+    SAFE_DEALLOCATE_A(buf)
+    SAFE_DEALLOCATE_A(cbuf)
     
     POP_SUB(states_sort_complex)
   end subroutine states_sort_complex

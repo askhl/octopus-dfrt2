@@ -455,7 +455,7 @@ contains
     ! Moreover the eigenvalues ordering need to be imposed as there is no eigensolver 
     ! supporting this ordering (yet).
     if(hm%cmplxscl) then !cmplxscl
-      call states_sort_complex(gr%mesh, st, eigens%diff )
+      call states_sort_complex(gr%mesh, st, eigens%diff, hm%cmplxscl_th)
       call states_orthogonalize_cproduct(st, gr%mesh)
     end if
     

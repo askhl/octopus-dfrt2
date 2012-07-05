@@ -235,11 +235,13 @@ contains
         end do
       end do
       
-      if (cmplxscl) then
-        call sort(eigenval_list, Imeigenval_list, reorder)
-      else
+      !if (cmplxscl) then ! already sorted!
+         ! We shall only bother to implement gamma-point stuff
+         ! with complex scaling
+        !call sort(eigenval_list, Imeigenval_list, reorder)
+      !else
         call sort(eigenval_list, reorder)
-      end if
+      !end if
       
       do iter = 1, nst * nik
         xx = kweights(k_list(reorder(iter)))
@@ -319,22 +321,22 @@ contains
     if(this%method == SMEAR_FIXED_OCC) then
       ! do nothing
     else if(this%method == SMEAR_SEMICONDUCTOR) then
-      if(cmplxscl) then ! fill states with Im(E_F) <= Im(e) <= 0 and Re(e) <= Re(E_F)
-        do ik = 1, nik
-          do ist = 1, nst
-            xx = eigenvalues(ist, ik) - this%e_fermi
-            ixx = Imeigenvalues(ist,ik) - this%Ime_fermi
-            if(xx < M_ZERO .and. (ixx > M_ZERO .and. Imeigenvalues(ist,ik) <= M_ZERO .or. &
-                abs(Imeigenvalues(ist,ik)) < CNST(1E-6)) ) then
-              occupations(ist, ik) = this%el_per_state
-            else if(xx == M_ZERO .and. ixx == M_ZERO ) then 
-              occupations(ist, ik) = this%ef_occ * this%el_per_state
-            else
-              occupations(ist, ik) = M_ZERO
-            end if
-          end do
-        end do
-      else
+      !if(cmplxscl) then ! fill states with Im(E_F) <= Im(e) <= 0 and Re(e) <= Re(E_F)
+      !  do ik = 1, nik
+      !    do ist = 1, nst
+      !      xx = eigenvalues(ist, ik) - this%e_fermi
+      !      ixx = Imeigenvalues(ist,ik) - this%Ime_fermi
+      !      if(xx < M_ZERO .and. (ixx > M_ZERO .and. Imeigenvalues(ist,ik) <= M_ZERO .or. &
+      !          abs(Imeigenvalues(ist,ik)) < CNST(1E-6)) ) then
+      !        occupations(ist, ik) = this%el_per_state
+      !      else if(xx == M_ZERO .and. ixx == M_ZERO ) then 
+      !        occupations(ist, ik) = this%ef_occ * this%el_per_state
+      !      else
+      !        occupations(ist, ik) = M_ZERO
+      !      end if
+      !    end do
+      !  end do
+      !else
         do ik = 1, nik
           do ist = 1, nst
             xx = eigenvalues(ist, ik) - this%e_fermi
@@ -347,7 +349,7 @@ contains
             end if
           end do
         end do
-      end if
+      !end if
 
     else 
       dsmear = max(CNST(1e-14), this%dsmear)
