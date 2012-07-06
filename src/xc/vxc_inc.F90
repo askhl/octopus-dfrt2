@@ -910,7 +910,7 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
 end function get_qxc
 
 
-subroutine stitch2d(mesh, get_branch, functionvalues, istart)
+subroutine stitch_convex(mesh, get_branch, functionvalues, istart)
 
   interface 
      CMPLX function get_branch(x, branch)
@@ -924,30 +924,45 @@ subroutine stitch2d(mesh, get_branch, functionvalues, istart)
   CMPLX, intent(inout) :: functionvalues(:)
   integer, intent(in)  :: istart
 
-  integer :: jstart(2), j(2),i,ii, ix, iy, nr, nl, N, dj(2), ifrom, ito, jmax, jmin
-  integer, allocatable :: idx(:)
+  integer :: jstart(3), j, jj, nr, nl, N, jmin, jmax, tmp1, tmp2, i
+  integer, allocatable :: idx(:), manyjmin(:), manyjmax(:)
 
-  if (mesh%sb%dim.ne.2) then
-     return
-  end if
+  ! First stitch a single line along one direction
+  call stitchline(mesh, get_branch, functionvalues, istart, 1, jmin, jmax)
 
-  N = size(functionvalues, 1)
-  nr = countpoints(mesh, istart, (/0, 1/))
-  nl = countpoints(mesh, istart, (/0, -1/))
   call index_to_coords(mesh%idx, mesh%sb%dim, istart, jstart)
-  
-  call stitchline(mesh, get_branch, functionvalues, istart, 2)
 
-  SAFE_ALLOCATE(idx(1:1 + nr + nl))
-  call mesh_subset_indices(mesh, (/jstart(1), jstart(2) - nl, 0/), (/jstart(1), jstart(2) + nr, 0/), idx)
-  do i=1, nr + nl + 1
-     call stitchline(mesh, get_branch, functionvalues, idx(i), 1)
+  ! Now we stitch the next direction.  In case this is 3d, we will need
+  ! to stitch along a third direction also; for this reason we will take
+  ! care to remember the bounding indices
+  SAFE_ALLOCATE(idx(1:1 + jmax - jmin))
+  SAFE_ALLOCATE(manyjmin(jmin:jmax))
+  SAFE_ALLOCATE(manyjmax(jmin:jmax))
+
+  call mesh_subset_indices(mesh, (/jmin, jstart(2), 0/), (/jmax, jstart(2), 0/), idx)
+  do j=jmin, jmax
+     call stitchline(mesh, get_branch, functionvalues, idx(1 + j - jmin), 2, manyjmin(j), manyjmax(j))
   end do
+
+  ! Now we have stitched one entire plane containing jstart.
+  ! We can loop over all points in that plane and just stitch along the
+  ! third direction now.
+  if (mesh%sb%dim.eq.3) then
+     do j=jmin, jmax
+        do jj=manyjmin(j), manyjmax(j)
+           i = index_from_coords(mesh%idx, mesh%sb%dim, (/j, jj, 0/))
+           call stitchline(mesh, get_branch, functionvalues, i, 3, tmp1, tmp2)
+        end do
+     end do
+  end if
+  
   SAFE_DEALLOCATE_A(idx)
+  SAFE_DEALLOCATE_A(manyjmin)
+  SAFE_DEALLOCATE_A(manyjmax)
 
 contains
 
-end subroutine stitch2d
+end subroutine stitch_convex
 
 integer function countpoints(mesh, istart, displacement) result(npts)
   type(mesh_t), intent(in) :: mesh
@@ -964,7 +979,7 @@ integer function countpoints(mesh, istart, displacement) result(npts)
   end do
 end function countpoints
   
-  subroutine stitchline(mesh, get_branch, functionvalues, istart, axis)
+  subroutine stitchline(mesh, get_branch, functionvalues, istart, axis, jmin, jmax)
     type(mesh_t), intent(in) :: mesh
 
   interface 
@@ -977,14 +992,15 @@ end function countpoints
   CMPLX, intent(inout) :: functionvalues(:)
     integer, intent(in)      :: istart
     integer, intent(in)      :: axis ! x=1, y=2, z=3
+    integer, intent(out)     :: jmin, jmax
     
     integer :: direction(3)
-    integer :: otherdirection(3), nl, nr, jmax(3), jmin(3), jstart(3)
+    integer :: otherdirection(3), nl, nr, vecjmax(3), vecjmin(3), vecjstart(3)
     integer, allocatable :: idx(:)
     
-    jmax = 0
-    jmin = 0
-    jstart = 0
+    vecjmin = 0
+    vecjmax = 0
+    vecjstart = 0
     
     direction = 0
     otherdirection = 0
@@ -994,16 +1010,18 @@ end function countpoints
     nr = countpoints(mesh, istart, direction)
     nl = countpoints(mesh, istart, otherdirection)
     
-    call index_to_coords(mesh%idx, mesh%sb%dim, istart, jstart)
-    jmin = jstart
-    jmax = jstart
-    jmin(axis) = jmin(axis) - nl
-    jmax(axis) = jmax(axis) + nr
+    call index_to_coords(mesh%idx, mesh%sb%dim, istart, vecjstart)
+    vecjmin = vecjstart
+    vecjmax = vecjstart
+    vecjmin(axis) = vecjmin(axis) - nl
+    vecjmax(axis) = vecjmax(axis) + nr
     
     SAFE_ALLOCATE(idx(1:nr + nl + 1))
-    call mesh_subset_indices(mesh, jmin, jmax, idx)
+    call mesh_subset_indices(mesh, vecjmin, vecjmax, idx)
     call stitch(get_branch, functionvalues, nl + 1, idx)
     SAFE_DEALLOCATE_A(idx)
+    jmin = vecjmin(axis)
+    jmax = vecjmax(axis)
   end subroutine stitchline
 
 
@@ -1150,8 +1168,8 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
 
 
   zvx_arr(:) = Wx * (zrho_arr(:) * dimphase)**(M_ONE / M_THREE)
-  if(mesh%sb%dim.eq.2) then
-     call stitch2d(mesh, get_root3_branch, zvx_arr, izero)
+  if(mesh%sb%dim.ne.1) then
+     call stitch_convex(mesh, get_root3_branch, zvx_arr, izero)
   else
      call stitch(get_root3_branch, zvx_arr, izero, stitch_idx)
   end if
@@ -1163,8 +1181,8 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   ! of the Wigner-Seitz radius and also the logarithm.
   
   rootrs(:) = (M_THREE / (M_FOUR * M_PI * zrho_arr(:) * dimphase))**(M_ONE / M_SIX)
-  if(mesh%sb%dim.eq.2) then
-     call stitch2d(mesh, get_root6_branch, rootrs, izero)
+  if(mesh%sb%dim.ne.1) then
+     call stitch_convex(mesh, get_root6_branch, rootrs, izero)
   else
      call stitch(get_root6_branch, rootrs, izero, stitch_idx)
   end if
@@ -1174,8 +1192,8 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   dQ1drs(:) = gamma * (beta1 / rootrs(:) + M_TWO * beta2 + rootrs(:) * (M_THREE * beta3 + M_FOUR * beta4 * rootrs(:)))
 
   epsc(:) = log(M_ONE + M_ONE / Q1)
-  if(mesh%sb%dim.eq.2) then
-     call stitch2d(mesh, get_logarithm_branch, epsc, izero)
+  if(mesh%sb%dim.ne.1) then
+     call stitch_convex(mesh, get_logarithm_branch, epsc, izero)
   else
      call stitch(get_logarithm_branch, epsc, izero, stitch_idx)
   end if
