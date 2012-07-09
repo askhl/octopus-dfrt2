@@ -960,8 +960,6 @@ subroutine stitch_convex(mesh, get_branch, functionvalues, istart)
   SAFE_DEALLOCATE_A(manyjmin)
   SAFE_DEALLOCATE_A(manyjmax)
 
-contains
-
 end subroutine stitch_convex
 
 integer function countpoints(mesh, istart, displacement) result(npts)
