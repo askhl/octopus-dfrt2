@@ -909,6 +909,11 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
   POP_SUB('vxc_inc.get_qxc')
 end function get_qxc
 
+!------------------------------------------------------------
+!
+! Complex scaled XC
+!
+!------------------------------------------------------------
 
 subroutine stitch_convex(mesh, get_branch, functionvalues, istart)
 
@@ -927,6 +932,8 @@ subroutine stitch_convex(mesh, get_branch, functionvalues, istart)
   integer :: jstart(3), j, jj, nr, nl, N, jmin, jmax, tmp1, tmp2, i
   integer, allocatable :: idx(:), manyjmin(:), manyjmax(:)
 
+  PUSH_SUB(stitch_convex)
+  
   ! First stitch a single line along one direction
   call stitchline(mesh, get_branch, functionvalues, istart, 1, jmin, jmax)
 
@@ -960,6 +967,7 @@ subroutine stitch_convex(mesh, get_branch, functionvalues, istart)
   SAFE_DEALLOCATE_A(manyjmin)
   SAFE_DEALLOCATE_A(manyjmax)
 
+  POP_SUB(stitch_convex)
 end subroutine stitch_convex
 
 integer function countpoints(mesh, istart, displacement) result(npts)
@@ -969,12 +977,16 @@ integer function countpoints(mesh, istart, displacement) result(npts)
   
   integer :: i
   
+  PUSH_SUB(countpoints)
+  
   i = istart
   npts = -1
   do while (i.ne.-1)
      npts = npts + 1
      i = translate_point(mesh, i, displacement)
   end do
+
+  POP_SUB(countpoints)
 end function countpoints
   
   subroutine stitchline(mesh, get_branch, functionvalues, istart, axis, jmin, jmax)
@@ -995,6 +1007,8 @@ end function countpoints
     integer :: direction(3)
     integer :: otherdirection(3), nl, nr, vecjmax(3), vecjmin(3), vecjstart(3)
     integer, allocatable :: idx(:)
+    
+    PUSH_SUB(stitchline)
     
     vecjmin = 0
     vecjmax = 0
@@ -1020,6 +1034,8 @@ end function countpoints
     SAFE_DEALLOCATE_A(idx)
     jmin = vecjmin(axis)
     jmax = vecjmax(axis)
+    
+    POP_SUB(stitchline)
   end subroutine stitchline
 
 
@@ -1045,6 +1061,7 @@ subroutine stitch(get_branch, functionvalues, istart, idx)
   integer :: currentbranch, npts, i
   CMPLX :: prev_value, err
 
+  PUSH_SUB(stitch)
   npts = size(idx, 1)
 
   ! First loop forwards from zero and stitch along the way
@@ -1061,11 +1078,15 @@ subroutine stitch(get_branch, functionvalues, istart, idx)
      call stitch_single_point()
   end do
   
+  POP_SUB(stitch)
 contains
 
   subroutine stitch_single_point()
     CMPLX :: v1, v2, v3, v
     integer :: j, adj
+    
+    PUSH_SUB(stitch.stitch_single_point)
+    
     v1 = get_branch(functionvalues(idx(i)), currentbranch)
     v2 = get_branch(functionvalues(idx(i)), currentbranch - 1)
     v3 = get_branch(functionvalues(idx(i)), currentbranch + 1)
@@ -1083,6 +1104,8 @@ contains
     currentbranch = currentbranch + adj
     functionvalues(idx(i)) = v
     prev_value = v
+    
+    POP_SUB(stitch.stitch_single_point)
   end subroutine stitch_single_point
   
 end subroutine stitch
@@ -1136,6 +1159,7 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   FLOAT                :: dmin_unused
   integer              :: N, izero, rankmin_unused, i
 
+  PUSH_SUB(zxc_complex_lda)
   
   N = size(rho, 1)
   SAFE_ALLOCATE(zrho_arr(1:N))
@@ -1221,6 +1245,8 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   SAFE_DEALLOCATE_A(epsc)
   SAFE_DEALLOCATE_A(depsdrs)
   SAFE_DEALLOCATE_A(stitch_idx)
+  
+  POP_SUB(zxc_complex_lda)
 end subroutine zxc_complex_lda
 
 
