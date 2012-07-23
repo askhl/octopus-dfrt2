@@ -1,0 +1,9 @@
+
+cwd=`pwd`
+cd ./testsuite
+
+./oct-run_regression_test.pl  -f./finite_systems_1d/01-hydrogen.test -D $cwd/src/main/
+./oct-run_regression_test.pl  -f./finite_systems_1d/09-morse.test -D $cwd/src/main/
+
+cd $cwd
+
