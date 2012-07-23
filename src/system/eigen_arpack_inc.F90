@@ -37,24 +37,28 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
              i, j, ishfts, maxitr, mode1, ist
   FLOAT :: tol, sigmar, sigmai
   FLOAT, allocatable :: rwork(:), d(:, :) 
-  CMPLX :: sigma 	
-	!!!!WARNING: No support for spinors, yet. No support for complex wavefunctions.
-  PUSH_SUB('eigen_arpack.eigen_solver_arpack')
+  CMPLX :: sigma 
+  integer :: mpi_comm 
+  	
+	!!!!WARNING: No support for spinors, yet. 
+ 
+  PUSH_SUB(eigen_arpack.eigen_solver_arpack)
 	
 
-	
-#if defined(HAVE_MPI)
-!  if(gr%mesh%parallel_in_domains) then
-!    message(1) = 'Error: Arpack-Solver not parallelized for domain decomposition.'
-!    call messages_fatal(1)
-    !  FIXME: Need to adjust mesh%x and mesh%vol_pp occurences in the code below
-    !         appropriately for domain decomposition. Also parallelization
-    !         of the vectors has to be taken care of.
-!  end if
-#endif
-	
+
+  if(st%parallel_in_states) then
+    message(1) = 'Arpack-Solver not parallelized for states decomposition.'
+    message(2) = 'Change ParallelizationStrategy and rerun.'
+    call messages_fatal(2)
+  end if
+
+	mpi_comm = mpi_world%comm
+  if (gr%mesh%parallel_in_domains) mpi_comm = gr%mesh%mpi_grp%comm
+  
   ldv = gr%mesh%np
   n = gr%mesh%np
+!   ldv = gr%mesh%np_part
+!   n = gr%mesh%np_part
   nev = st%nst
   lworkl  = 3*ncv**2+6*ncv
   SAFE_ALLOCATE(ax(ldv))
@@ -78,7 +82,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   ido    = 0
   info = 1
   
-  do i = 1, gr%mesh%np
+  do i = 1, ldv
 !      resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
       resid(i) = R_TOTYPE(M_ONE)
   end do
@@ -93,25 +97,33 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 	
   do
 #if defined(R_TCOMPLEX)
-#if defined(HAVE_PARPACK)
-print *,"pznaupd!!!"
-    call pznaupd  ( mpi_world%comm, &
+ #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
+
+    call pznaupd  ( mpi_comm, &
          ido, 'I', n, 'SR', nev, tol, resid, ncv, &
          v, ldv, iparam, ipntr, workd, workl, lworkl, &
          rwork,info )
-print *,"after pznaupd!!!"
-#else
-    call znaupd  ( & !mpi_world, 
+
+ #else
+    call znaupd  ( & 
     ido, 'I', n, 'SR', nev, tol, resid, ncv, &
                v, ldv, iparam, ipntr, workd, workl, lworkl, &
                rwork,info )
-#endif
+ #endif
 
 #else 
-    call dnaupd  ( & !mpi_world, 
+  #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
+    call pdnaupd  ( mpi_comm, &
     ido, 'I', n, 'SR', nev, tol, resid, ncv, &
                v, ldv, iparam, ipntr, workd, workl, lworkl, & 
                info )
+  
+  #else
+    call dnaupd  ( & 
+    ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+               v, ldv, iparam, ipntr, workd, workl, lworkl, & 
+               info )
+  #endif
 #endif      
       
     if( abs(ido).ne.1) exit
@@ -120,21 +132,21 @@ print *,"after pznaupd!!!"
   ! If info is larger than zero, it may not be an error (i.e., not all eigenvectors
   ! were converged)
   if(info .lt. 0) then
-    write(message(1),'(a,i5)') 'Error with ARPACK _naupd, info = ', info
+    write(message(1),'(a,i5)') 'Error with P/ARPACK _naupd, info = ', info
     write(message(2),'(a)')    'Check the documentation of _naupd.'
     call messages_fatal(2)
   end if
 
 #if defined(R_TCOMPLEX) 
-#if defined(HAVE_PARPACK)
-  call pzneupd  (mpi_world%comm, .true., 'A', select, zd, v, ldv, sigma, &
+ #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
+  call pzneupd  (mpi_comm, .true., 'A', select, zd, v, ldv, sigma, &
         workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
         v, ldv, iparam, ipntr, workd, workl, lworkl, &
         rwork, ierr)
         d(:,1)=real(zd(:))
         d(:,2)=aimag(zd(:))
         d(:,3)=M_ZERO
-#else
+ #else
   call zneupd  (.true., 'A', select, zd, v, ldv, sigma, &
         workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
         v, ldv, iparam, ipntr, workd, workl, lworkl, &
@@ -142,37 +154,50 @@ print *,"after pznaupd!!!"
         d(:,1)=real(zd(:))
         d(:,2)=aimag(zd(:))
         d(:,3)=M_ZERO
-#endif
+ #endif
         
 #else	
+ #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
+  call pdneupd (mpi_comm, .true., 'A', select, d, d(1,2), v, ldv, &
+       sigmar, sigmai, workev, 'I', n, 'SR', nev, tol, &
+       resid, ncv, v, ldv, iparam, ipntr, workd, workl, &
+       lworkl, ierr )
+ 
+ #else
   call dneupd ( .true., 'A', select, d, d(1,2), v, ldv, &
        sigmar, sigmai, workev, 'I', n, 'SR', nev, tol, &
        resid, ncv, v, ldv, iparam, ipntr, workd, workl, &
        lworkl, ierr )
+ #endif
 #endif
        
   if(ierr .ne. 0) then
-    write(message(1),'(a,i5)') 'Error with ARPACK _neupd, info = ', info
-    write(message(2),'(a)')    'Check the documentation of _neupd.'
-    call messages_fatal(2)
+    if(mpi_grp_is_root(mpi_world)) then
+      write(message(1),'(a,i5)') 'Error with ARPACK _neupd, info = ', info
+      write(message(2),'(a)')    'Check the documentation of _neupd.'
+      call messages_fatal(2)
+    end if
   end if
 
   ! This sets the number of converged eigenvectors.
   converged =  iparam(5)
 
-  call dmout(6, converged, 3, d, ncv+1, -6, 'Ritz values (Real, Imag) and residual residuals')
+!   call dmout(6, converged, 3, d, ncv+1, -6, 'Ritz values (Real, Imag) and residual residuals')
 
   ! This sets niter to the number of matrix-vector operations.
   niter = iparam(9)
   do j = 1, converged
     do i = 1, gr%mesh%np
-!       st%X(psi)(i, 1, j, ik) = v(i, j)/sqrt(gr%mesh%vol_pp(1))
       psi(i,1) = v(i, j)/sqrt(gr%mesh%volume_element) 
     end do
+    do i = gr%mesh%np + 1, gr%mesh%np_part
+      psi(i,1) = R_TOTYPE(M_ZERO) 
+    end do
+    
     call states_set_state(st, gr%mesh, j, ik, psi)
     
-    print *,"st", j, "norm", sqrt(X(mf_dotp)(gr%mesh, st%d%dim, psi, psi, dotu = .true.))!,&
-!      sqrt(sum(psi(:, 1)*psi(:, 1))*gr%mesh%volume_element), sqrt(X(mf_integrate)(gr%mesh,psi(:,1)**2))
+!     print *,"st", j, "norm", sqrt(X(mf_dotp)(gr%mesh, st%d%dim, psi, psi, dotu = .true.))
+
         
     st%eigenval(j, ik) = d(j, 1)
     if(associated(st%zeigenval%Im))then 
@@ -220,13 +245,15 @@ print *,"after pznaupd!!!"
 
 
 
-   POP_SUB('eigen_arpack.eigen_solver_arpack')
+   POP_SUB(eigen_arpack.eigen_solver_arpack)
 contains
 
   ! ---------------------------------------------------------
   subroutine av (n, v, w)
-    integer :: n
-    R_TYPE :: v(n), w(n)
+    integer, intent(in) :: n
+    R_TYPE,  intent(in) :: v(n)
+    R_TYPE,  intent(out):: w(n)
+    
     integer :: i, NP, NP_PART
     R_TYPE, allocatable :: psi(:, :), hpsi(:, :)
     

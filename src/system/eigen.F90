@@ -540,7 +540,7 @@ contains
 #include "eigen_plan_inc.F90"
 #include "eigen_evolution_inc.F90"
 
-#if defined(HAVE_ARPACK) 
+#if defined(HAVE_ARPACK) || defined(HAVE_PARPACK) 
 #include "undef.F90" 
 #include "real.F90" 
 #include "eigen_arpack_inc.F90" 
