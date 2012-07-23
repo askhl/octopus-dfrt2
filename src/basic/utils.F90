@@ -243,6 +243,9 @@ contains
 #ifdef HAVE_ARPACK
     message(2) = trim(message(2))//' arpack'
 #endif
+#ifdef HAVE_PARPACK
+    message(2) = trim(message(2))//' parpack'
+#endif
 #ifdef HAVE_LIBFM
     message(2) = trim(message(2))//' libfm'
 #endif
