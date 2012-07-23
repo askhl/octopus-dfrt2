@@ -23,6 +23,5 @@ share/vari*
 .svn/*
 autom4te.cache/*
 build-aux/*
-libxc/*
 .deps
 doc/*

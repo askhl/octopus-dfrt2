@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_batch_inc.F90 8967 2012-04-02 22:23:32Z xavier $
+!! $Id: mesh_batch_inc.F90 9139 2012-06-20 21:12:10Z umberto $
 
 subroutine X(mesh_batch_dotp_matrix)(mesh, aa, bb, dot, symm, reduce)
   type(mesh_t),      intent(in)    :: mesh

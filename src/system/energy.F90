@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: energy.F90 8921 2012-03-20 16:07:18Z micael $
+!! $Id: energy.F90 9138 2012-06-20 21:09:40Z umberto $
 
 #include "global.h"
 
@@ -93,7 +93,7 @@ contains
         hm%energy%kinetic   = real(etmp)
         hm%energy%Imkinetic = aimag(etmp)
          
-        etmp  = zelectronic_energy(hm, gr%der, st, terms = TERM_NON_LOCAL_POTENTIAL + TERM_LOCAL_EXTERNAL, cproduct = hm%cmplxscl)       
+        etmp  = zelectronic_energy(hm, gr%der, st, terms = TERM_NON_LOCAL_POTENTIAL + TERM_LOCAL_EXTERNAL, cproduct = hm%cmplxscl)
         hm%energy%extern   =  real(etmp)
         hm%energy%Imextern =  aimag(etmp)
         
@@ -180,9 +180,10 @@ contains
       if(cmplxscl) write(message(5), '(a, es18.6)') trim(message(5)), units_from_atomic(units_out%energy, hm%energy%Imexchange)
       write(message(6), '(6x,a, f18.8)')'Correlation = ', units_from_atomic(units_out%energy, hm%energy%correlation)
       if(cmplxscl) write(message(6), '(a, es18.6)') trim(message(6)), units_from_atomic(units_out%energy, hm%energy%Imcorrelation)
-      write(message(7), '(6x,a, f18.8)')'Entropy     = ', hm%energy%entropy ! the dimensionless sigma of Kittel&Kroemer
-      write(message(8), '(6x,a, f18.8)')'-TS         = ', -units_from_atomic(units_out%energy, hm%energy%TS)
-      call messages_info(8, iunit)
+      write(message(7), '(6x,a, f18.8)')'Delta XC    = ', units_from_atomic(units_out%energy, hm%energy%delta_xc)
+      write(message(8), '(6x,a, f18.8)')'Entropy     = ', hm%energy%entropy ! the dimensionless sigma of Kittel&Kroemer
+      write(message(9), '(6x,a, f18.8)')'-TS         = ', -units_from_atomic(units_out%energy, hm%energy%TS)
+      call messages_info(9, iunit)
       if(full_) then
         write(message(1), '(6x,a, f18.8)')'Kinetic     = ', units_from_atomic(units_out%energy, hm%energy%kinetic)
         if(cmplxscl) write(message(1), '(a, es18.6)') trim(message(1)), units_from_atomic(units_out%energy, hm%energy%Imkinetic)

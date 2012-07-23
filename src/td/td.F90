@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td.F90 8905 2012-03-06 22:36:02Z dstrubbe $
+!! $Id: td.F90 9118 2012-06-12 20:54:57Z xavier $
 
 #include "global.h"
 
@@ -570,6 +570,9 @@ contains
       !% of orbitals, but not completely.
       !%End
       call parse_integer(datasets_check('TDFreezeOrbitals'), 0, freeze_orbitals)
+
+      if(freeze_orbitals /= 0) call messages_experimental('TDFreezeOrbitals')
+
       if(freeze_orbitals > 0) then
         ! In this case, we first freeze the orbitals, then calculate the Hxc potential.
         call states_freeze_orbitals(st, gr, sys%mc, freeze_orbitals)

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: solver_1d_inc.F90 9000 2012-04-08 18:49:11Z xavier $
+!! $Id: solver_1d_inc.F90 9149 2012-06-20 22:37:34Z umberto $
 
 
 !-----------------------------------------------------------------
@@ -93,7 +93,7 @@ end subroutine poisson1D_solve
 !-----------------------------------------------------------------
 
 !
-! Complex scaled soft Coulom Hartree Solver
+! Complex scaled soft Coulomb Hartree Solver
 !
 subroutine zpoisson1D_solve(this, pot, rho, theta)
   type(poisson_t), intent(in)  :: this
@@ -125,7 +125,7 @@ subroutine zpoisson1D_solve(this, pot, rho, theta)
         pvec(jp) = rho(jp)/sqrt(this%poisson_soft_coulomb_param**2 +&
          (xx-yy)**2 * exp(M_zI*M_TWO*theta))
       end do
-      tmp = dmf_integrate(this%der%mesh, pvec)
+      tmp = zmf_integrate(this%der%mesh, pvec)
       if (this%der%mesh%vp%part(ip).eq.this%der%mesh%vp%partno) then
         pot(vec_global2local(this%der%mesh%vp, ip, this%der%mesh%vp%partno)) = tmp
       end if

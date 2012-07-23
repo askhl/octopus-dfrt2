@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc.F90 9062 2012-05-09 14:21:00Z umberto $
+!! $Id: states_calc.F90 9151 2012-06-20 23:09:43Z umberto $
 
 #include "global.h"
 
@@ -212,6 +212,8 @@ contains
     CMPLX,   allocatable :: buf(:,:),buf1(:,:)
     logical, allocatable :: ok(:)
     integer, allocatable :: rank(:)
+    
+    PUSH_SUB(reorder_states_by_args)
 
     SAFE_ALLOCATE(ok(st%nst))
     SAFE_ALLOCATE(rank(st%nst))
@@ -226,19 +228,16 @@ contains
     do ist = 1, st%nst
        if ((args(ist) /= ist).and.(.not.(ok(ist)))) then
           call states_get_state(st, mesh, ist, ik, buf)
-!           buf(:) = st%psi%zR(:, idim, ist, ik)
           kst = ist
           do
              jst = args(kst)
              if (jst.eq.ist) then
                call states_set_state(st, mesh, rank(jst), ik, buf)
-!                 st%psi%zR(:, idim, rank(jst), ik) = buf(:)
-                ok(rank(jst)) = .true.
-                exit
+               ok(rank(jst)) = .true.
+               exit
              end if
              call states_get_state(st, mesh, jst, ik, buf1)
              call states_set_state(st, mesh, kst, ik, buf1)             
-!              st%psi%zR(:, idim, kst, ik) = st%psi%zR(:, idim, jst, ik)
              ok(kst) = .true.
              kst = jst
           end do
@@ -250,45 +249,73 @@ contains
     SAFE_DEALLOCATE_A(buf)
     SAFE_DEALLOCATE_A(buf1)
     
+    POP_SUB(reorder_states_by_args)
   end subroutine reorder_states_by_args
 
-  subroutine states_sort_complex( mesh, st, diff)
+! ---------------------------------------------------------
+  subroutine states_sort_complex( mesh, st, diff, cmplxscl_th)
     type(mesh_t),      intent(in)    :: mesh
     type(states_t),    intent(inout) :: st
     FLOAT,             intent(inout) :: diff(:,:) !eigenstates convergence error
+    FLOAT,             intent(in)    :: cmplxscl_th
 
     integer              :: ik, ist, idim
     integer, allocatable :: index(:)
     FLOAT, allocatable   :: diff_copy(:,:)
-    type(states_t) :: st_copy
+    FLOAT, allocatable   :: buf(:)
+    CMPLX, allocatable   :: cbuf(:)
     
     PUSH_SUB(states_sort_complex)
     
     SAFE_ALLOCATE(index(st%nst))
+    SAFE_ALLOCATE(cbuf(st%nst))
+    SAFE_ALLOCATE(buf(st%nst))
     SAFE_ALLOCATE(diff_copy(1:size(diff,1),1:size(diff,2)))
     
     diff_copy = diff
-    
-    do ik = st%d%kpt%start, st%d%kpt%end
 
-    call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
-    do ist = 1 , st%nst
-      diff(ist, ik) = diff_copy(index(ist),ik)
-    end do
+
+!real(st%zeigenval%Re(:, ik))
+
+    do ik = st%d%kpt%start, st%d%kpt%end
+      cbuf(:) = st%zeigenval%Re(:, ik) + M_zI * st%zeigenval%Im(:, ik)
+      buf(:) = aimag(log(cbuf(:)))
+      !buf(:) = aimag(log(cbuf(:) * exp(-M_zI * M_HALF * M_PI))) + M_zI * M_PI * M_HALF
+      print*, 'SORTING'
+      do ist=1, st%nst
+         print*, ist, buf(ist), cbuf(ist)
+         if ((buf(ist).lt.(-cmplxscl_th)).and.((-M_THREE / M_FOUR * M_PI).lt.buf(ist))) then
+            cbuf(ist) = cbuf(ist) + 1e3 ! We cheat and assign very high energies
+            ! to states that we think are continuum states
+            !st%zeigelval%Re(ist, ik) = st%zeigelval%Re(ist, ik) + 1e3
+         end if
+      end do
+      buf(:) = real(cbuf)
+      !buf(:) = st%zeigenval%Re(:, ik) / abs(cbuf(:))**(M_SEVEN / M_EIGHT) / cos(buf(:))**2
+      
+      !print*, 'ENERGIES', cbuf(1:3)
+      !print*, 'SCORES', buf(1:6)
+      call sort(buf, index)
+      !print*, 'ENERGIES AFTER', cbuf(1:3)
+      !print*, 'SCORES AFTER', buf(1:6)
+      !print*, 'SORT ARGS', index(1:6)
+      !call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
+      do ist = 1 , st%nst !reorder the eigenstates error accordingly
+        diff(ist, ik) = diff_copy(index(ist),ik)
+        st%zeigenval%Re(ist, ik) = real(cbuf(index(ist)))
+        st%zeigenval%Im(ist, ik) = aimag(cbuf(index(ist)))
+      end do
     
-    call states_copy(st_copy, st)  !OK This is very unefficient 
       do idim =1, st%d%dim
          call reorder_states_by_args(st, mesh, index, idim, ik)
-!         do ist = 1 , st%nst 
-!            st%psi%zR(:, idim, ist, ik) =  st_copy%psi%zR(:, idim, index(ist), ik)          
-!         end do
       end do
     end do
     
-    call states_end(st_copy)
     
     SAFE_DEALLOCATE_A(index)
     SAFE_DEALLOCATE_A(diff_copy)
+    SAFE_DEALLOCATE_A(buf)
+    SAFE_DEALLOCATE_A(cbuf)
     
     POP_SUB(states_sort_complex)
   end subroutine states_sort_complex

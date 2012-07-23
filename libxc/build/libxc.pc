@@ -1,0 +1,11 @@
+prefix=/Users/umbe/octopus
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libxc
+Description: Library of exchange and correlation functionals to be used in DFT codes
+Requires: 
+Version: diurnus
+Libs: -L${libdir} -lxc
+Cflags: -I${includedir}

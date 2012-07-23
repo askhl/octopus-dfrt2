@@ -15,10 +15,9 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: vxc_inc.F90 8658 2011-12-06 00:35:11Z dstrubbe $
+!! $Id: vxc_inc.F90 9152 2012-06-21 08:30:22Z umberto $
 
-! ---------------------------------------------------------
-subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau)
+subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
   type(states_t),       intent(in)    :: st              !< State of the system (wavefunction,eigenvalues...)
@@ -28,6 +27,7 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   FLOAT,                intent(in)    :: qtot 
   FLOAT, optional,      intent(inout) :: ex              !< Exchange energy.
   FLOAT, optional,      intent(inout) :: ec              !< Correlation energy.
+  FLOAT, optional,      intent(inout) :: deltaxc         !< The XC derivative descontinuity
   FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
   FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
 
@@ -90,7 +90,7 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   ! is there anything to do ?
   families = XC_FAMILY_LDA + XC_FAMILY_GGA + XC_FAMILY_HYB_GGA + XC_FAMILY_MGGA
   if(iand(xcs%family, families) == 0) then
-    POP_SUB(xc_get_vxc)
+    POP_SUB(dxc_get_vxc)
     call profiling_out(prof)
     return
   endif
@@ -336,12 +336,16 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
     end do functl_loop
   end do space_loop
 
+  if(present(deltaxc)) then
+    deltaxc = M_ZERO
+  end if
+
   if(xcs%xc_density_correction == LR_XC) then
-    call xc_density_correction_calc(xcs, der, spin_channels, rho, dedd)
+    call xc_density_correction_calc(xcs, der, spin_channels, rho, dedd, deltaxc = deltaxc)
   end if
 
   if(xcs%xc_density_correction == LR_X) then
-    call xc_density_correction_calc(xcs, der, spin_channels, rho, vx)
+    call xc_density_correction_calc(xcs, der, spin_channels, rho, vx, deltaxc = deltaxc)
     dedd(1:der%mesh%np, 1:spin_channels) = dedd(1:der%mesh%np, 1:spin_channels) + vx(1:der%mesh%np, 1:spin_channels)
 
     if(calc_energy) then
@@ -359,6 +363,8 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
     end if
   end if
   
+!  print*, deltaxc
+
   ! this has to be done in inverse order
   if(present(vxc)) then
     if(mgga) call mgga_process()
@@ -689,12 +695,13 @@ end subroutine dxc_get_vxc
 
 ! -----------------------------------------------------
 
-subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc)
+subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc, deltaxc)
   type(xc_t),          intent(in)    :: xcs
   type(derivatives_t), intent(in)    :: der
   integer,             intent(in)    :: nspin
   FLOAT,               intent(in)    :: density(:, :)
   FLOAT,               intent(inout) :: vxc(:, :)
+  FLOAT, optional,     intent(out)   :: deltaxc
 
   logical :: find_root, done
   integer :: ip, iunit, ierr
@@ -860,6 +867,8 @@ subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc)
     print*, "DD",  -CNST(2.0)*dd, -CNST(2.0)*mindd, -CNST(2.0)*maxdd
   end if
 
+  if(present(deltaxc)) deltaxc = -CNST(2.0)*dd
+
   call dio_function_output(C_OUTPUT_HOW_AXIS_X, "./static", "fnxc", der%mesh, nxc, unit_one, ierr)
 
   call profiling_out(prof)
@@ -900,6 +909,231 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
   POP_SUB('vxc_inc.get_qxc')
 end function get_qxc
 
+!------------------------------------------------------------
+!
+! Complex scaled XC
+!
+!------------------------------------------------------------
+
+subroutine stitch_convex(mesh, get_branch, functionvalues, istart)
+
+  interface 
+     CMPLX function get_branch(x, branch)
+       CMPLX :: x
+       integer :: branch
+     end function get_branch
+  end interface
+
+  type(mesh_t), intent(in) :: mesh
+    
+  CMPLX, intent(inout) :: functionvalues(:)
+  integer, intent(in)  :: istart
+
+  integer :: jstart(3), j, jj, nr, nl, N, jmin, jmax, tmp1, tmp2, i
+  integer, allocatable :: idx(:), manyjmin(:), manyjmax(:)
+
+  PUSH_SUB(stitch_convex)
+  
+  ! First stitch a single line along one direction
+  call stitchline(mesh, get_branch, functionvalues, istart, 1, jmin, jmax)
+
+  call index_to_coords(mesh%idx, mesh%sb%dim, istart, jstart)
+
+  ! Now we stitch the next direction.  In case this is 3d, we will need
+  ! to stitch along a third direction also; for this reason we will take
+  ! care to remember the bounding indices
+  SAFE_ALLOCATE(idx(1:1 + jmax - jmin))
+  SAFE_ALLOCATE(manyjmin(jmin:jmax))
+  SAFE_ALLOCATE(manyjmax(jmin:jmax))
+
+  call mesh_subset_indices(mesh, (/jmin, jstart(2), 0/), (/jmax, jstart(2), 0/), idx)
+  do j=jmin, jmax
+     call stitchline(mesh, get_branch, functionvalues, idx(1 + j - jmin), 2, manyjmin(j), manyjmax(j))
+  end do
+
+  ! Now we have stitched one entire plane containing jstart.
+  ! We can loop over all points in that plane and just stitch along the
+  ! third direction now.
+  if (mesh%sb%dim.eq.3) then
+     do j=jmin, jmax
+        do jj=manyjmin(j), manyjmax(j)
+           i = index_from_coords(mesh%idx, mesh%sb%dim, (/j, jj, 0/))
+           call stitchline(mesh, get_branch, functionvalues, i, 3, tmp1, tmp2)
+        end do
+     end do
+  end if
+  
+  SAFE_DEALLOCATE_A(idx)
+  SAFE_DEALLOCATE_A(manyjmin)
+  SAFE_DEALLOCATE_A(manyjmax)
+
+  POP_SUB(stitch_convex)
+end subroutine stitch_convex
+
+integer function countpoints(mesh, istart, displacement) result(npts)
+  type(mesh_t), intent(in) :: mesh
+  integer,      intent(in) :: istart
+  integer,      intent(in) :: displacement(:)
+  
+  integer :: i
+  
+  PUSH_SUB(countpoints)
+  
+  i = istart
+  npts = -1
+  do while (i.ne.-1)
+     npts = npts + 1
+     i = translate_point(mesh, i, displacement)
+  end do
+
+  POP_SUB(countpoints)
+end function countpoints
+  
+  subroutine stitchline(mesh, get_branch, functionvalues, istart, axis, jmin, jmax)
+    type(mesh_t), intent(in) :: mesh
+
+  interface 
+     CMPLX function get_branch(x, branch)
+       CMPLX :: x
+       integer :: branch
+     end function get_branch
+  end interface
+
+  CMPLX, intent(inout) :: functionvalues(:)
+    integer, intent(in)      :: istart
+    integer, intent(in)      :: axis ! x=1, y=2, z=3
+    integer, intent(out)     :: jmin, jmax
+    
+    integer :: direction(3)
+    integer :: otherdirection(3), nl, nr, vecjmax(3), vecjmin(3), vecjstart(3)
+    integer, allocatable :: idx(:)
+    
+    PUSH_SUB(stitchline)
+    
+    vecjmin = 0
+    vecjmax = 0
+    vecjstart = 0
+    
+    direction = 0
+    otherdirection = 0
+    direction(axis) = 1
+    otherdirection(axis) = -1
+
+    nr = countpoints(mesh, istart, direction)
+    nl = countpoints(mesh, istart, otherdirection)
+    
+    call index_to_coords(mesh%idx, mesh%sb%dim, istart, vecjstart)
+    vecjmin = vecjstart
+    vecjmax = vecjstart
+    vecjmin(axis) = vecjmin(axis) - nl
+    vecjmax(axis) = vecjmax(axis) + nr
+    
+    SAFE_ALLOCATE(idx(1:nr + nl + 1))
+    call mesh_subset_indices(mesh, vecjmin, vecjmax, idx)
+    call stitch(get_branch, functionvalues, nl + 1, idx)
+    SAFE_DEALLOCATE_A(idx)
+    jmin = vecjmin(axis)
+    jmax = vecjmax(axis)
+    
+    POP_SUB(stitchline)
+  end subroutine stitchline
+
+
+
+! Subroutine to stitch discontinuous values of a multiple-valued function
+! together to a single continuous, single-valued function by smoothly
+! joining at the branch cuts.
+subroutine stitch(get_branch, functionvalues, istart, idx)
+  
+  ! Function for getting values of multiple-valued functions.
+  ! Each value of the parameter 'branch' corresponds to one such value.
+  interface 
+     CMPLX function get_branch(x, branch)
+       CMPLX :: x
+       integer :: branch
+     end function get_branch
+  end interface
+  
+  CMPLX, intent(inout) :: functionvalues(:)
+  integer, intent(in) :: istart
+  integer, intent(in) :: idx(:)
+  
+  integer :: currentbranch, npts, i
+  CMPLX :: prev_value, err
+
+  PUSH_SUB(stitch)
+  npts = size(idx, 1)
+
+  ! First loop forwards from zero and stitch along the way
+  currentbranch = 0
+  prev_value = functionvalues(idx(istart))
+  do i=istart + 1, npts
+     call stitch_single_point()
+  end do
+  
+  ! Now loop backwards
+  currentbranch = 0
+  prev_value = functionvalues(idx(istart))
+  do i=istart - 1, 1, -1
+     call stitch_single_point()
+  end do
+  
+  POP_SUB(stitch)
+contains
+
+  subroutine stitch_single_point()
+    CMPLX :: v1, v2, v3, v
+    integer :: j, adj
+    
+    PUSH_SUB(stitch.stitch_single_point)
+    
+    v1 = get_branch(functionvalues(idx(i)), currentbranch)
+    v2 = get_branch(functionvalues(idx(i)), currentbranch - 1)
+    v3 = get_branch(functionvalues(idx(i)), currentbranch + 1)
+    
+    adj = 0
+    v = v1
+    if (abs(v2 - prev_value).lt.abs(v - prev_value)) then
+       v = v2
+       adj = -1
+    end if
+    if (abs(v3 - prev_value).lt.abs(v - prev_value)) then
+       v = v3
+       adj = +1
+    end if
+    currentbranch = currentbranch + adj
+    functionvalues(idx(i)) = v
+    prev_value = v
+    
+    POP_SUB(stitch.stitch_single_point)
+  end subroutine stitch_single_point
+  
+end subroutine stitch
+
+! For evaluating values of multiple-valued functions when one value,
+! e.g. the principal value, is known.  Used to stitch
+CMPLX function get_root3_branch(x, branch) result(y)
+  CMPLX, intent(in) :: x
+  integer, intent(in) :: branch
+  
+  y = x * exp(branch * M_TWO * M_zI * M_PI / M_THREE)
+end function get_root3_branch
+
+CMPLX function get_root6_branch(x, branch) result(y)
+  CMPLX, intent(in) :: x
+  integer, intent(in) :: branch
+  
+  y = x * exp(branch * M_zI * M_PI / M_THREE)
+end function get_root6_branch
+
+CMPLX function get_logarithm_branch(x, branch) result(y)
+  CMPLX, intent(in) :: x
+  integer, intent(in) :: branch
+  
+  y = x + branch * M_TWO * M_zI * M_PI
+end function get_logarithm_branch
+
+
 subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
   type(mesh_t), intent(in) :: mesh
   FLOAT, intent(in)        :: rho(:, :)
@@ -911,87 +1145,110 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   FLOAT, intent(inout)     :: Imex
   FLOAT, intent(inout)     :: Imec
   FLOAT, intent(in)        :: cmplxscl_th
+
+  ! Exchange potential prefactor
+  FLOAT, parameter :: Wx = -0.98474502184269641
+
+  ! LDA correlation parameters
+  FLOAT, parameter :: gamma = 0.031091, alpha1 = 0.21370, beta1 = 7.5957, beta2 = 3.5876, beta3 = 1.6382, beta4 = 0.49294
+
+  CMPLX, allocatable   :: zrho_arr(:), zvx_arr(:), zvc_arr(:), rootrs(:), Q0(:), Q1(:), dQ1drs(:), epsc(:), depsdrs(:)
+  integer, allocatable :: stitch_idx(:)
+  CMPLX                :: dimphase, tmp, zex, zec
+  FLOAT                :: scaling_origin(MAX_DIM)
+  FLOAT                :: dmin_unused
+  integer              :: N, izero, rankmin_unused, i
+
+  PUSH_SUB(zxc_complex_lda)
   
-  CMPLX :: zex, zec, zrho, zvxc, eps_c
-  INTEGER :: i, N
-  FLOAT :: lda_exchange_prefactor
-  CMPLX :: rs, rtrs, Q0, Q1, vxc0, dQ1drs, dedrs, phase, phase_linear, phase2d
-
-  FLOAT :: C0I, C1, CC1, CC2, IF2, gamma, alpha1, beta1, beta2, beta3, beta4
-
-  ! LDA constants.
-  ! Only C0I is used for spin-paired calculations among these five
-  C0I = 0.238732414637843
-  C1 = -0.45816529328314287
-  CC1 = 1.9236610509315362
-  CC2 = 2.5648814012420482
-  IF2 = 0.58482236226346462
-  
-  gamma = 0.031091
-  alpha1 = 0.21370
-  beta1 = 7.5957
-  beta2 = 3.5876
-  beta3 = 1.6382
-  beta4 = 0.49294
-
   N = size(rho, 1)
-
-  zex = M_z0
-  zec = M_z0
-
-  phase_linear = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
-  phase = exp(-3./3.0*M_zI * cmplxscl_th)
-  phase2d = phase
-
-  lda_exchange_prefactor = -0.73855876638202234 !-3.0 / 4.0 * (3.0 / np.pi)**(1.0 / 3.0)
+  SAFE_ALLOCATE(zrho_arr(1:N))
+  SAFE_ALLOCATE(zvx_arr(1:N))
+  SAFE_ALLOCATE(zvc_arr(1:N))
+  SAFE_ALLOCATE(rootrs(1:N))
+  SAFE_ALLOCATE(Q0(1:N))
+  SAFE_ALLOCATE(Q1(1:N))
+  SAFE_ALLOCATE(dQ1drs(1:N))
+  SAFE_ALLOCATE(epsc(1:N))
+  SAFE_ALLOCATE(depsdrs(1:N))
+  SAFE_ALLOCATE(stitch_idx(1:N))
 
   do i=1, N
-     zrho = rho(i, 1) + M_zI * Imrho(i, 1)
-     
-     ! "simplified", linear exchange
-     zex = zex + 0.5 * lda_exchange_prefactor * zrho * zrho * phase_linear
-     zvxc = lda_exchange_prefactor * zrho * phase_linear
-
-     ! 3d exchange
-     ! This agrees with theta=0 with standard octopus 3d exchange
-     !zex = zex + lda_exchange_prefactor * zrho**(4.0 / 3.0) * phase
-     !zvxc = (4.0 / 3.0) * lda_exchange_prefactor * zrho**(1.0 / 3.0) * phase
-
-     ! 2d exchange
-     !zex = zex - (4./3.) * sqrt(2./3.1415926535897931) * zrho**(3.0/2.0)
-     !zvxc = -1.5 * (4./3.) * sqrt(2./3.1415926535897931) * zrho**(3.0/2.0)
-
-     ! correlation
-     !rs = (C0I / zrho)**(1.0 / 3.0)
-     !rtrs = sqrt(rs)
-     !Q0 = -2.0 * gamma * (1.0 + alpha1 * rs)
-     !Q1 = 2.0 * gamma * rtrs * (beta1 + rtrs * (beta2 + rtrs * (beta3 + rtrs * beta4)))
-     !eps_c = Q0 * log(1.0 + 1.0 / Q1)
-     zec = M_z0 !!!!zec + eps_c * zrho
-     !dQ1drs = gamma * (beta1 / rtrs + 2.0 * beta2 + rtrs * (3.0 * beta3 + 4.0 * beta4 * rtrs))
-     !dedrs = -2.0 * gamma * alpha1 * eps_c / Q0 - Q0 * dQ1drs / (Q1 * (Q1 + 1.0))
-
-     !zvxc = zvxc + eps_c - rs * dedrs / 3.0
-     
-     
-     vxc(i, 1) = real(zvxc)
-     Imvxc(i, 1) = aimag(zvxc)
-
+     stitch_idx(i) = i
   end do
+
+  dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
+  scaling_origin = M_z0
   
-  zex = zex * mesh%volume_element
-  zec = zec * mesh%volume_element
+  izero = mesh_nearest_point(mesh, scaling_origin, dmin_unused, rankmin_unused)
+  
+  zrho_arr(:) = rho(:, 1) + M_zI * Imrho(:, 1)
+
+  ! Okay, now it starts.  First initialize the only point we know something
+  ! definite about, namely the one where the scaling transformation does
+  ! nothing.
+
+
+  zvx_arr(:) = Wx * (zrho_arr(:) * dimphase)**(M_ONE / M_THREE)
+  if(mesh%sb%dim.ne.1) then
+     call stitch_convex(mesh, get_root3_branch, zvx_arr, izero)
+  else
+     call stitch(get_root3_branch, zvx_arr, izero, stitch_idx)
+  end if
+
+  zex = M_THREE / M_FOUR * sum(zvx_arr(:) * zrho_arr(:)) * mesh%volume_element
+
+  ! Right.  Next is correlation which is much more complicated.  We
+  ! use the PW91 parametrization.  We have to stitch the square root
+  ! of the Wigner-Seitz radius and also the logarithm.
+  
+  rootrs(:) = (M_THREE / (M_FOUR * M_PI * zrho_arr(:) * dimphase))**(M_ONE / M_SIX)
+  if(mesh%sb%dim.ne.1) then
+     call stitch_convex(mesh, get_root6_branch, rootrs, izero)
+  else
+     call stitch(get_root6_branch, rootrs, izero, stitch_idx)
+  end if
+  Q0(:) = -M_TWO * gamma * (M_ONE + alpha1 * rootrs(:)**2)
+  Q1(:) = M_TWO * gamma * rootrs(:) * (beta1 + rootrs(:) * (beta2 + rootrs(:) * (beta3 + rootrs(:) * beta4)))
+  
+  dQ1drs(:) = gamma * (beta1 / rootrs(:) + M_TWO * beta2 + rootrs(:) * (M_THREE * beta3 + M_FOUR * beta4 * rootrs(:)))
+
+  epsc(:) = log(M_ONE + M_ONE / Q1)
+  if(mesh%sb%dim.ne.1) then
+     call stitch_convex(mesh, get_logarithm_branch, epsc, izero)
+  else
+     call stitch(get_logarithm_branch, epsc, izero, stitch_idx)
+  end if
+  epsc(:) = Q0(:) * epsc(:)
+
+  depsdrs(:) = -M_TWO * gamma * alpha1 * epsc(:) / Q0(:) - Q0(:) * dQ1drs(:) / (Q1(:) * (Q1(:) + M_ONE))
+
+  zvc_arr(:) = epsc(:) - rootrs(:)**2 * depsdrs(:) / M_THREE
+
+  zec = sum(epsc(:) * zrho_arr(:)) * mesh%volume_element
 
   ex = real(zex)
-  ec = real(zec)
   Imex = aimag(zex)
+  ec = real(zec)
   Imec = aimag(zec)
-  
-  print*, 'lda exchange', zex
-  print*, 'lda correlation', zec
 
+  vxc(:, 1) = real(zvx_arr(:)) + real(zvc_arr(:))
+  Imvxc(:, 1) = aimag(zvx_arr(:)) + aimag(zvc_arr(:))
+
+  SAFE_DEALLOCATE_A(zrho_arr)
+  SAFE_DEALLOCATE_A(zvx_arr)
+  SAFE_DEALLOCATE_A(zvc_arr)
+  SAFE_DEALLOCATE_A(rootrs)
+  SAFE_DEALLOCATE_A(Q0)
+  SAFE_DEALLOCATE_A(Q1)
+  SAFE_DEALLOCATE_A(dQ1drs)
+  SAFE_DEALLOCATE_A(epsc)
+  SAFE_DEALLOCATE_A(depsdrs)
+  SAFE_DEALLOCATE_A(stitch_idx)
   
+  POP_SUB(zxc_complex_lda)
 end subroutine zxc_complex_lda
+
 
 ! ----------------------------------------------------------------------------- 
 ! This is the complex scaled interface for xc functionals.
@@ -1023,7 +1280,7 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   type(xc_functl_t), pointer :: functl(:)
   logical         :: calc_energy
 
-  PUSH_SUB('zxc_get_vxc')
+  PUSH_SUB(zxc_get_vxc)
 
   print *, "LDA calc energy exc"
   ASSERT(present(ex) .eqv. present(ec))
@@ -1089,7 +1346,7 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
     call messages_fatal(2)     
   end if
 
-  POP_SUB('zxc_get_vxc')
+  POP_SUB(zxc_get_vxc)
 end subroutine zxc_get_vxc
 
 

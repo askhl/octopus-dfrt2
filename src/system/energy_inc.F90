@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: energy_inc.F90 8808 2012-01-25 16:30:52Z joseba $
+!! $Id: energy_inc.F90 9138 2012-06-20 21:09:40Z umberto $
 
 
 ! ---------------------------------------------------------

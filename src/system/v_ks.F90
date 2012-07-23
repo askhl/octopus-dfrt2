@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: v_ks.F90 8971 2012-04-03 16:32:55Z jrfsousa $
+!! $Id: v_ks.F90 9146 2012-06-20 21:42:22Z umberto $
 
 #include "global.h"
  
@@ -622,12 +622,12 @@ contains
           if (cmplxscl) call messages_not_implemented('Complex Scaling with XC_FAMILY_MGGA')
           call xc_get_vxc(ks%gr%fine%der, ks%xc, st, &
             ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-            ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, vtau = ks%calc%vtau)
+            ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc, vtau = ks%calc%vtau)
         else
           if(.not. cmplxscl) then
-            call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-              ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc)
+          call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+            st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+            ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
           else
             call xc_get_vxc(ks%gr%fine%der, ks%xc, &
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &

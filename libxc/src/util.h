@@ -34,18 +34,29 @@ float  asinhf(float  x);
 
 #define M_CBRT2         1.259921049894873164767210607278228350570
 #define M_SQRTPI        1.772453850905516027298167483341145182798
+#define M_SQRT3         1.732050807568877293527446341505872366943
 
 /* Very useful macros */
 #define min(x,y)  ((x<y) ? (x) : (y))
 #define max(x,y)  ((x<y) ? (y) : (x))
 
+/* some constants stolen from the GSL */
+#define GSL_LOG_DBL_MIN   (-7.0839641853226408e+02)
+#define GSL_LOG_DBL_MAX    7.0978271289338397e+02
+#define GSL_SQRT_DBL_EPSILON   1.4901161193847656e-08
+#define GSL_DBL_MIN        2.2250738585072014e-308
+
 /* special functions */
 double lambert_w(double z);
-double bessi0(double x);
-double bessi1(double x);
-double bessk0(double x);
-double bessk1(double x);
-double expint(double x);
+
+inline double cheb_eval(const double x, const double *cs, const int N);
+double bessel_I0_scaled(const double x);
+double bessel_I0(const double x);
+double bessel_K0_scaled(const double x);
+double bessel_K0(const double x);
+double bessel_K1_scaled(const double x);
+double bessel_K1(const double x);
+double expint_e1(const double x);
 
 /* integration */
 typedef void integr_fn(FLOAT *x, int n, void *ex);
@@ -102,37 +113,23 @@ typedef struct XC(lda_rs_zeta) {
 void XC(lda_fxc_fd)(const XC(func_type) *p, int np, const FLOAT *rho, FLOAT *fxc);
 void XC(lda_kxc_fd)(const XC(func_type) *p, int np, const FLOAT *rho, FLOAT *kxc);
 
-/* internal versions of set_params routines */
-void XC(lda_x_1d_set_params_)     (XC(lda_type) *p, int interaction, FLOAT bb);
-void XC(lda_c_1d_csc_set_params_) (XC(lda_type) *p, int interaction, FLOAT bb);
-void XC(lda_x_set_params_)        (XC(lda_type) *p, FLOAT alpha, int relativistic, FLOAT omega);
-void XC(lda_c_2d_prm_set_params_) (XC(lda_type) *p, FLOAT N);
-void XC(lda_c_vwn_set_params_)    (XC(lda_type) *p, int spin_interpolation);
+void XC(lda_x_attenuation_function)(int interaction, int order, FLOAT aa, FLOAT *f, FLOAT *df, FLOAT *d2f, FLOAT *d3f);
 
 /* direct access to the internal functions */
-void XC(lda_c_hl_func)(const XC(lda_type) *p, XC(lda_rs_zeta) *r);
-void XC(lda_c_pw_func)(const XC(lda_type) *p, XC(lda_rs_zeta) *r);
-void XC(lda_c_pz_func)(const XC(lda_type) *p, XC(lda_rs_zeta) *r);
+void XC(lda_c_hl_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
+void XC(lda_c_pw_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
+void XC(lda_c_pz_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
 
 /* GGAs */
-void XC(gga_x_wc_enhance)  (const XC(gga_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
-void XC(gga_x_pbe_enhance) (const XC(gga_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
-void XC(gga_x_rpbe_enhance)(const XC(gga_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
-void XC(gga_x_htbs_enhance)(const XC(gga_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 
-void XC(gga_init_mix)(XC(gga_type) *p, int n_funcs, const int *funcs_id, const FLOAT *mix_coef);
+/* enhancement factors: if you add one, please add it also to the gga_x_ityh.c */
+void XC(gga_x_wc_enhance)  (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
+void XC(gga_x_pbe_enhance) (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
+void XC(gga_x_rpbe_enhance)(const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
+void XC(gga_x_htbs_enhance)(const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
+void XC(gga_x_b88_enhance) (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 
-/* internal versions of set_params routines */
-void XC(gga_x_b88_set_params_)  (XC(gga_type) *p, FLOAT beta, FLOAT gamma);
-void XC(gga_x_pbe_set_params_)  (XC(gga_type) *p, FLOAT kappa, FLOAT mu);
-void XC(gga_x_rpbe_set_params_) (XC(gga_type) *p, FLOAT kappa, FLOAT mu);
-void XC(gga_x_optx_set_params_) (XC(gga_type) *p, FLOAT a, FLOAT b, FLOAT gamma);
-void XC(gga_c_lyp_set_params_)  (XC(gga_type) *p, FLOAT A, FLOAT B, FLOAT c, FLOAT d);
-void XC(gga_lb_set_params_)     (XC(gga_type) *p, int modified, FLOAT threshold, FLOAT ip, FLOAT qtot);
-void XC(gga_k_tflw_set_params_) (XC(gga_type) *p, FLOAT gamma, FLOAT lambda, FLOAT N);
-void XC(gga_x_pbe_sr_set_params_) (XC(gga_type) *p, FLOAT omega);
-void XC(hyb_gga_xc_hse_set_params_)(XC(gga_type) *p, FLOAT omega);
-
+void XC(gga_init_mix)(XC(func_type) *p, int n_funcs, const int *funcs_id, const FLOAT *mix_coef);
 
 /* meta GGAs */
 typedef struct XC(work_mgga_x_params) {
@@ -149,10 +146,5 @@ typedef struct XC(work_mgga_x_params) {
 /* direct access to the internal functions */
 void XC(mgga_x_gvt4_func)(int order, FLOAT x, FLOAT z, FLOAT alpha, const FLOAT *d, 
 			  FLOAT *h, FLOAT *dhdx, FLOAT *dhdz);
-
-/* internal versions of set_params routines */
-void XC(mgga_x_tb09_set_params_)(XC(mgga_type) *p, FLOAT c);
-
-
 
 #endif

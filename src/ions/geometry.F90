@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: geometry.F90 9049 2012-05-02 07:59:06Z joseba $
+!! $Id: geometry.F90 9095 2012-06-02 02:39:35Z xavier $
 
 #include "global.h"
 
@@ -831,7 +831,7 @@ contains
     logical,             intent(in), optional :: append
     character(len=*),    intent(in), optional :: comment
 
-    integer iatom, idir, iunit
+    integer :: iatom, iunit
     character(len=6) position
 
     if( .not. mpi_grp_is_root(mpi_world)) return

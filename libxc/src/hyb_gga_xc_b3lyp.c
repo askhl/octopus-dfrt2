@@ -28,14 +28,13 @@
 #define XC_HYB_GGA_XC_mPW3LYP 419 /* mixture of mPW and LYP */
 
 void
-XC(hyb_gga_xc_b3pw91_init)(void *p_)
+XC(hyb_gga_xc_b3pw91_init)(XC(func_type) *p)
 {
   static int   funcs_id  [4] = {XC_LDA_X, XC_GGA_X_B88, XC_LDA_C_PW, XC_GGA_C_PW91};
   static FLOAT funcs_coef[4] = {1.0 - 0.20 - 0.72, 0.72, 1.0 - 0.81, 0.81};
-  XC(gga_type) *p = (XC(gga_type) *)p_;
 
   XC(gga_init_mix)(p, 4, funcs_id, funcs_coef);
-  p->exx_coef = 0.20;
+  p->cam_alpha = 0.20;
 }
 
 const XC(func_info_type) XC(func_info_hyb_gga_xc_b3pw91) = {
@@ -52,15 +51,14 @@ const XC(func_info_type) XC(func_info_hyb_gga_xc_b3pw91) = {
 
 
 void
-XC(hyb_gga_xc_b3lyp_init)(void *p_)
+XC(hyb_gga_xc_b3lyp_init)(XC(func_type) *p)
 {
   static int   funcs_id  [4] = {XC_LDA_X, XC_GGA_X_B88, XC_LDA_C_VWN_RPA, XC_GGA_C_LYP};
   static FLOAT funcs_coef[4] = {1.0 - 0.20 - 0.72, 0.72, 1.0 - 0.81, 0.81};
-  XC(gga_type) *p = (XC(gga_type) *)p_;
 
   XC(gga_init_mix)(p, 4, funcs_id, funcs_coef);
   XC(lda_c_vwn_set_params)(p->func_aux[2], 1);
-  p->exx_coef = 0.20;
+  p->cam_alpha = 0.20;
 }
 
 const XC(func_info_type) XC(func_info_hyb_gga_xc_b3lyp) = {
@@ -77,15 +75,14 @@ const XC(func_info_type) XC(func_info_hyb_gga_xc_b3lyp) = {
 
 
 void
-XC(hyb_gga_xc_b3p86_init)(void *p_)
+XC(hyb_gga_xc_b3p86_init)(XC(func_type) *p)
 {
   static int   funcs_id  [4] = {XC_LDA_X, XC_GGA_X_B88, XC_LDA_C_VWN_RPA, XC_GGA_C_P86};
   static FLOAT funcs_coef[4] = {1.0 - 0.20 - 0.72, 0.72, 1.0 - 0.81, 0.81};
-  XC(gga_type) *p = (XC(gga_type) *)p_;
 
   XC(gga_init_mix)(p, 4, funcs_id, funcs_coef);
   XC(lda_c_vwn_set_params)(p->func_aux[2], 1);
-  p->exx_coef = 0.20;
+  p->cam_alpha = 0.20;
 }
 
 const XC(func_info_type) XC(func_info_hyb_gga_xc_b3p86) = {
@@ -102,15 +99,14 @@ const XC(func_info_type) XC(func_info_hyb_gga_xc_b3p86) = {
 
 
 void
-XC(hyb_gga_xc_mpw3pw_init)(void *p_)
+XC(hyb_gga_xc_mpw3pw_init)(XC(func_type) *p)
 {
   static int   funcs_id  [4] = {XC_LDA_X, XC_GGA_X_mPW91, XC_LDA_C_VWN_RPA, XC_GGA_C_PW91};
   static FLOAT funcs_coef[4] = {1.0 - 0.20 - 0.72, 0.72, 1.0 - 0.81, 0.81};
-  XC(gga_type) *p = (XC(gga_type) *)p_;
 
   XC(gga_init_mix)(p, 4, funcs_id, funcs_coef);
   XC(lda_c_vwn_set_params)(p->func_aux[2], 1);
-  p->exx_coef = 0.20;
+  p->cam_alpha = 0.20;
 }
 
 const XC(func_info_type) XC(func_info_hyb_gga_xc_mpw3pw) = {
@@ -127,15 +123,14 @@ const XC(func_info_type) XC(func_info_hyb_gga_xc_mpw3pw) = {
 
 
 void
-XC(hyb_gga_xc_mpw3lyp_init)(void *p_)
+XC(hyb_gga_xc_mpw3lyp_init)(XC(func_type) *p)
 {
   static int   funcs_id  [4] = {XC_LDA_X, XC_GGA_X_mPW91, XC_LDA_C_VWN_RPA, XC_GGA_C_LYP};
   static FLOAT funcs_coef[4] = {1.0 - 0.218 - 0.709, 0.709, 1.0 - 0.871, 0.871};
-  XC(gga_type) *p = (XC(gga_type) *)p_;
 
   XC(gga_init_mix)(p, 4, funcs_id, funcs_coef);
   XC(lda_c_vwn_set_params)(p->func_aux[2], 1);
-  p->exx_coef = 0.218;
+  p->cam_alpha = 0.218;
 }
 
 const XC(func_info_type) XC(func_info_hyb_gga_xc_mpw3lyp) = {

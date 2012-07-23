@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube_function.F90 8991 2012-04-07 14:52:18Z xavier $
+!! $Id: cube_function.F90 9101 2012-06-03 23:57:46Z xavier $
 
 #include "global.h"
 
@@ -86,6 +86,8 @@ contains
 
     integer :: ii, jj, kk, ix, iy, iz, npoints
     FLOAT :: tmp_x
+
+    ASSERT(.not. cf%in_device_memory)
 
     PUSH_SUB(cube_function_surface_average)
 

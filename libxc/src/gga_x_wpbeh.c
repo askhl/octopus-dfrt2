@@ -21,39 +21,29 @@
 #include <assert.h>
 #include "util.h"
 
-#define XC_GGA_X_PBE_SR 524 /* short-range version of the PBE */
+#define XC_GGA_X_WPBEH 524 /* short-range version of the PBE */
 
 typedef struct{
   FLOAT omega;
-} gga_x_pbe_sr_params;
+} gga_x_wpbeh_params;
 
 static void
-gga_x_pbe_sr_init(void *p_)
+gga_x_wpbeh_init(XC(func_type) *p)
 {
-  XC(gga_type) *p = (XC(gga_type) *)p_;
-
   assert(p->params == NULL);
-  p->params = malloc(sizeof(gga_x_pbe_sr_params));
+  p->params = malloc(sizeof(gga_x_wpbeh_params));
 
-  /* some (not so random) value */
-  XC(gga_x_pbe_sr_set_params_)(p, 0.11);
+  /* The default value is actually PBEh */
+  XC(gga_x_wpbeh_set_params)(p, 0.0);
 }
 
 void 
-XC(gga_x_pbe_sr_set_params)(XC(func_type) *p, FLOAT omega)
+XC(gga_x_wpbeh_set_params)(XC(func_type) *p, FLOAT omega)
 {
-  assert(p != NULL && p->gga != NULL);
-  XC(gga_x_pbe_sr_set_params_)(p->gga, omega);
-}
+  gga_x_wpbeh_params *params;
 
-
-void 
-XC(gga_x_pbe_sr_set_params_)(XC(gga_type) *p, FLOAT omega)
-{
-  gga_x_pbe_sr_params *params;
-
-  assert(p->params != NULL);
-  params = (gga_x_pbe_sr_params *) (p->params);
+  assert(p != NULL && p->params != NULL);
+  params = (gga_x_wpbeh_params *) (p->params);
 
   params->omega = omega;
 }
@@ -62,8 +52,9 @@ XC(gga_x_pbe_sr_set_params_)(XC(gga_type) *p, FLOAT omega)
 #define HEADER 3
 
 /* This implementation follows the one from espresso, that, in turn,
-   follows the one of vasp. Analytic derivatives are only implemented
-   in espresso though. These implementations can be found in:
+   follows the one of the thesis of Jochen Heyd. Analytic derivatives
+   are only implemented in espresso though. These implementations can
+   be found in:
 
    vasp: xclib_grad.F, MODULE wpbe, and in particular SUBROUTINE EXCHWPBE_R
    espresso: flib/functionals.f90, SUBROUTINE wpbe_analy_erfc_approx_grad
@@ -74,10 +65,97 @@ XC(gga_x_pbe_sr_set_params_)(XC(gga_type) *p, FLOAT omega)
       Erratum: J. Chem. Phys. 124, 219906 (2006).
    *) M Ernzerhof and JP Perdew, J. Chem. Phys. 109, 3313 (1998)
    *) J Heyd and GE Scuseria, J. Chem. Phys. 120, 7274 (2004)
+
+   Also the whole mess with the rescaling of s is explained in
+
+   *) TM Henderson, AF Izmaylov, G Scalmani, and GE Scuseria, J. Chem. Phys. 131, 044108 (2009)
 */
 
+static inline void
+s_scaling(int version, int order, FLOAT s1, FLOAT *s2, FLOAT *ds2ds1)
+{
+  /* parameters for the re-scaling of s */
+  static const FLOAT strans=8.3, smax=8.572844, sconst=18.79622316;
+  static const FLOAT s0=8.572844, p4=0.615482, p5=1.136921, p6=-0.449154,
+    q4=1.229195, q5=-0.0269253, q6=0.313417, q7=-0.0508314, q8=0.0175739;
+
+  FLOAT expms1, expmsmax, s12, s14, num, den, dnum, dden;
+
+  switch(version){
+  case 0: /* no scaling */
+    *s2 = s1;
+    break;
+
+  case 1: /* original scaling of Heyd */
+    *s2  = (s1 < strans) ? s1 : smax - sconst/(s1*s1);
+    break;
+
+  case 2: /* first version of the scaling by TM Henderson, apparently used by Gaussian */
+    if(s1 < 1.0)
+      *s2 = s1;
+    else if(s1 > 15.0)
+      *s2 = smax;
+    else{
+      expms1   = exp(-s1);
+      expmsmax = exp(-smax);
+      *s2  = s1 - LOG(1.0 + expmsmax/expms1);
+    }
+    break;
+
+  case 3: /* second version of the scaling by TM Henderson */
+    expms1   = exp(-s1);
+    expmsmax = exp(-smax);
+    *s2 = s1 - (1.0 - expms1)*LOG(1.0 + expmsmax/expms1);
+    break;
+
+  case 4: /* appendix of JCP 128, 194105 (2008) */
+    s12 = s1*s1;
+    s14 = s12*s12;
+
+    num = s1*(1.0 + s14*(p4 + s1*(p5 + s1*(p6 + s1*q8*s0))));
+    den = 1.0 + s14*(q4 + s1*(q5 + s1*(q6 + s1*(q7 + s1*q8))));
+
+    *s2 = num/den;
+    break;
+
+  default:
+    fprintf(stderr, "Internal error in gga_x_hse\n");
+    exit(1);
+  }
+
+  if(order < 1) return;
+
+  switch(version){
+  case 0:
+    *ds2ds1 = 1.0;
+    break;
+
+  case 1:
+    *ds2ds1 = (s1 < strans) ? 1.0 : 2.0*sconst/(s1*s1*s1);
+    break;
+
+  case 2:
+    if(s1 < 1.0)
+      *ds2ds1 = 1.0;
+    else if(s1 > 15.0)
+      *ds2ds1 = 0.0;
+    else
+      *ds2ds1 = expms1/(expms1 + expmsmax);
+    break;
+
+  case 3:
+    *ds2ds1 = expms1*(1.0 + expmsmax)/(expms1 + expmsmax) - expms1*LOG(1.0 + expmsmax/expms1);
+
+  case 4: /* appendix of JCP 128, 194105 (2008) */
+    dnum = 1.0 + s14*(5.0*p4 + s1*(6.0*p5 + s1*(7.0*p6 + s1*8.0*q8*s0)));
+    dden = s12*s1*(4.0*q4 + s1*(5.0*q5 + s1*(6.0*q6 + s1*(7.0*q7 + s1*8.0*q8))));
+
+    *ds2ds1 = (dnum*den - num*dden)/(den*den);
+  }
+}
+
 static inline void 
-func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
+func(const XC(func_type) *p, int order, FLOAT x, FLOAT ds,
      FLOAT *f, FLOAT *dfdx, FLOAT *lvrho)
 {
   static const FLOAT AA=1.0161144, BB=-0.37170836, CC=-0.077215461, DD=0.57786348, EE=-0.051955731;
@@ -86,12 +164,9 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
   /* Cutoff criterion below which to use polynomial expansion */
   static const FLOAT EGscut=0.08, wcutoff=14, expfcutoff=700.0;
 
-  /* parameters for the re-scaling of s */
-  static const FLOAT strans=8.3, smax=8.5728844, sconst=18.79622316;
-
   FLOAT omega, kF, ww, ww2, ww3, ww4, ww5, ww6, ww7, ww8, dwdrho;
   FLOAT ss, ss2, ss3, ss4, ss5, ss6, dssdx;
-  FLOAT AA2, AA3, AA4, AA12, AA32, AA52, AA72;
+  FLOAT AA2, AA3, AA12, AA32, AA52;
   FLOAT DHs, DHs2, DHs3, DHs4, DHs72, DHs92;
   FLOAT eb1, f94Hs2_A, DHsw, DHsw2, DHsw52, DHsw72;
   FLOAT Hsbw, Hsbw2, Hsbw3, Hsbw4, Hsbw12, Hsbw32, Hsbw52, Hsbw72;
@@ -103,14 +178,23 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
   FLOAT dt10ds, dt10dw, dpiexperfds, dpiexperfdw, dexpeids, dexpeidw;
 
   assert(p->params != NULL);
-  omega = ((gga_x_pbe_sr_params *)(p->params))->omega;
+  omega = ((gga_x_wpbeh_params *)(p->params))->omega;
 
-  kF  = POW(3.0*M_PI*M_PI*ds, 1.0/3.0);
+  /* Note that kF has a 6 and not a 3 as it should in principle
+     be. This is because the HSE formula, if one would take the papers
+     seriously, does not fulfill the spin sum-rule. This is probably
+     an oversight from them. So, we have to choose, either a 6 or a 3.
+     
+     Nwchem seems to have the factor of 6, but VASP and espresso have
+     a 3. This would amount to rescaling omega by a factor of
+     cbrt(2). We follow the quantum chemistry community and put the 6.
+  */
+  kF  = POW(6.0*M_PI*M_PI*ds, 1.0/3.0);
   ww  = omega/kF;
   ww2 = ww*ww; ww3 = ww*ww2; ww4 = ww*ww3; ww5 = ww*ww4; ww6 = ww*ww5; ww7 = ww*ww6; ww8 = ww*ww7;
 
-  /*  Rescaling the s values to ensure the Lieb-Oxford bound for s>8.3 */
-  ss  = (X2S*x < strans) ? X2S*x : smax - sconst/(X2S*X2S*x*x);
+  /*  Rescaling the s values to ensure the Lieb-Oxford bound */
+  s_scaling(2, order, X2S*x, &ss, &dssdx);
   ss2 = ss*ss; 
   ss3 = ss*ss2; 
   ss4 = ss*ss3; 
@@ -119,16 +203,14 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
 
   if(order >= 1){
     dwdrho = -ww/(3.0*ds);
-    dssdx  = (X2S*x < strans) ? X2S : 2.0*sconst/(X2S*X2S*x*x*x);
+    dssdx  *= X2S;
   }
 
   AA2  = AA*AA;
   AA3  = AA2*AA;
-  AA4  = AA3*AA;
   AA12 = SQRT(AA);
   AA32 = AA12*AA;
   AA52 = AA32*AA;
-  AA72 = AA52*AA;
 
   /* first let us calculate H(s) */
   {
@@ -152,8 +234,11 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
   {
     FLOAT Fc1, Fc2;
 
-    Fc1 = 4.0*AA*AA/(9.0*CC) + (BB - AA*DD)/CC;
-    Fc2 = -4.0/(3.0*36.0*CC);
+    //Fc1 = 4.0*AA*AA/(9.0*CC) + (BB - AA*DD)/CC;
+    //Fc2 = -4.0/(3.0*36.0*CC);
+
+    Fc1 = 6.4753871;
+    Fc2 = 0.47965830;
 
     F = Fc1*H + Fc2;
 
@@ -169,16 +254,12 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
   DHs72 = DHs3*SQRT(DHs); 
   DHs92 = DHs72*DHs;
 
-  dDHsds = 2.0*ss*H + ss2*dHds;
-
   f94Hs2_A = 9.0*H*ss2/(4.0*AA);
 
   DHsw   = DHs + ww2;
   DHsw2  = DHsw*DHsw; 
   DHsw52 = SQRT(DHsw)*DHsw2; 
   DHsw72 = DHsw52*DHsw;
-
-  dDHswdw = 2.0*ww;
 
   eb1 = (ww < wcutoff) ? 1.455915450052607 : 2.0;
 
@@ -192,6 +273,8 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
   Hsbw72 = Hsbw52*Hsbw;
 
   if(order >= 1){
+    dDHsds  = 2.0*ss*H + ss2*dHds;
+    dDHswdw = 2.0*ww;
     dHsbwds = ss2*dHds + 2.0*ss*H;
     dHsbwdw = 2.0*eb1*ww;
   }
@@ -298,7 +381,8 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
   /* Calculate exp(x)*f(x) depending on size of x */
   if(HsbwA94 < expfcutoff){
     piexperf = M_PI*exp(HsbwA94)*erfc(HsbwA9412);
-    expei    = exp(HsbwA94)*(-expint(HsbwA94));
+    expei    = exp(HsbwA94)*(-expint_e1(HsbwA94));
+
   }else{
     static const FLOAT expei1=4.03640, expei2=1.15198, expei3=5.03627, expei4=4.19160;
 
@@ -362,13 +446,13 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
       ea4=0.971824836115601, ea5=-0.568861079687373, ea6=0.246880514820192, ea7=-0.065032363850763,
       ea8=0.008401793031216;
 
-    FLOAT np1, np2, t1, f1, f2, f3, f4, f5, f6, f7, f8, f9, t2t9;
+    FLOAT np1, np2, t1, f2, f3, f4, f5, f6, f7, f8, f9, t2t9;
     FLOAT dnp1dw, dnp2dw, dt1ds, dt1dw, df2, df2ds, df2dw, df3, df3ds, df3dw;
     FLOAT df4, df4ds, df4dw, df5, df5ds, df5dw, df6, df6ds, df6dw, df7ds, df7dw;
     FLOAT df8, df8ds, df8dw, df9, df9ds, df9dw, dt2t9ds, dt2t9dw;
 
     np1 = -1.5*ea1*AA12*ww + 27.0*ea3*ww3/(8.0*AA12) - 243.0*ea5*ww5/(32.0*AA32) + 2187.0*ea7*ww7/(128.0*AA52);
-    np2 = -AA + 9.0*ea2*ww2/4.0 - 81.0*ea4*ww4/(16.0*AA);
+    np2 = -AA + 9.0*ea2*ww2/4.0 - 81.0*ea4*ww4/(16.0*AA) + 729.0*ea6*ww6/(64.0*AA2) - 6561.0*ea8*ww8/(256.0*AA3);
 
     t1 = 0.5*(np1*piexperf + np2*expei);
 
@@ -454,15 +538,15 @@ func(const XC(gga_type) *p, int order, FLOAT x, FLOAT ds,
 
 #include "work_gga_x.c"
 
-const XC(func_info_type) XC(func_info_gga_x_pbe_sr) = {
-  XC_GGA_X_PBE_SR,
+const XC(func_info_type) XC(func_info_gga_x_wpbeh) = {
+  XC_GGA_X_WPBEH,
   XC_EXCHANGE,
-  "short-range part of the PBE",
+  "short-range part of the PBE (default w=0 gives PBEh)",
   XC_FAMILY_GGA,
   "J Heyd, GE Scuseria, and M Ernzerhof, J. Chem. Phys. 118, 8207 (2003)",
   XC_FLAGS_3D | XC_FLAGS_HAVE_EXC | XC_FLAGS_HAVE_VXC,
   1e-32, 1e-32, 0.0, 1e-32,
-  gga_x_pbe_sr_init,
+  gga_x_wpbeh_init,
   NULL, NULL, 
   work_gga_x
 };

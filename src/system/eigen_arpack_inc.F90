@@ -44,13 +44,13 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 
 	
 #if defined(HAVE_MPI)
-  if(gr%m%parallel_in_domains) then
-    message(1) = 'Error: Arpack-Solver not parallelized for domain decomposition.'
-    call messages_fatal(1)
-    !  FIXME: Need to adjust m%x and m%vol_pp occurences in the code below
+!  if(gr%mesh%parallel_in_domains) then
+!    message(1) = 'Error: Arpack-Solver not parallelized for domain decomposition.'
+!    call messages_fatal(1)
+    !  FIXME: Need to adjust mesh%x and mesh%vol_pp occurences in the code below
     !         appropriately for domain decomposition. Also parallelization
     !         of the vectors has to be taken care of.
-  end if
+!  end if
 #endif
 	
   ldv = gr%mesh%np
@@ -92,12 +92,24 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   iparam(7) = mode1
 	
   do
-#if defined(R_TCOMPLEX)      
-    call znaupd  ( ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+#if defined(R_TCOMPLEX)
+#if defined(HAVE_PARPACK)
+print *,"pznaupd!!!"
+    call pznaupd  ( mpi_world%comm, &
+         ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+         v, ldv, iparam, ipntr, workd, workl, lworkl, &
+         rwork,info )
+print *,"after pznaupd!!!"
+#else
+    call znaupd  ( & !mpi_world, 
+    ido, 'I', n, 'SR', nev, tol, resid, ncv, &
                v, ldv, iparam, ipntr, workd, workl, lworkl, &
                rwork,info )
+#endif
+
 #else 
-    call dnaupd  ( ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+    call dnaupd  ( & !mpi_world, 
+    ido, 'I', n, 'SR', nev, tol, resid, ncv, &
                v, ldv, iparam, ipntr, workd, workl, lworkl, & 
                info )
 #endif      
@@ -114,6 +126,15 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   end if
 
 #if defined(R_TCOMPLEX) 
+#if defined(HAVE_PARPACK)
+  call pzneupd  (mpi_world%comm, .true., 'A', select, zd, v, ldv, sigma, &
+        workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
+        v, ldv, iparam, ipntr, workd, workl, lworkl, &
+        rwork, ierr)
+        d(:,1)=real(zd(:))
+        d(:,2)=aimag(zd(:))
+        d(:,3)=M_ZERO
+#else
   call zneupd  (.true., 'A', select, zd, v, ldv, sigma, &
         workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
         v, ldv, iparam, ipntr, workd, workl, lworkl, &
@@ -121,6 +142,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
         d(:,1)=real(zd(:))
         d(:,2)=aimag(zd(:))
         d(:,3)=M_ZERO
+#endif
         
 #else	
   call dneupd ( .true., 'A', select, d, d(1,2), v, ldv, &

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: ps.F90 8543 2011-11-10 21:24:00Z dstrubbe $
+!! $Id: ps.F90 9095 2012-06-02 02:39:35Z xavier $
 
 #include "global.h"
 
@@ -59,7 +59,7 @@ module ps_m
     PS_TYPE_UPF = 104
 
   integer, parameter, public :: &
-    PS_FILTER_NONE = 1,         &
+    PS_FILTER_NONE = 0,         &
     PS_FILTER_TS   = 2,         &
     PS_FILTER_BSB  = 3
 
@@ -154,7 +154,7 @@ contains
 
       call valconf_copy(ps%conf, ps_psf%conf)
       ps%z      = z
-      ps%conf%z = z     ! atomic number
+      ps%conf%z = nint(z) ! atomic number
       ps%kbc    = 1     ! only one projector per angular momentum
       ps%l_loc  = lloc  ! the local part of the pseudo
 
@@ -169,7 +169,7 @@ contains
       call ps_cpi_init(ps_cpi, trim(label))
 
       call valconf_null(ps%conf)
-      ps%conf%z      = z
+      ps%conf%z      = nint(z)
       ps%conf%symbol = label(1:2)
       ps%conf%type   = 1
       ps%conf%p      = ps_cpi%ps_grid%no_l_channels
@@ -188,7 +188,7 @@ contains
       call ps_fhi_init(ps_fhi, trim(label))
 
       call valconf_null(ps%conf)
-      ps%conf%z      = z
+      ps%conf%z      = nint(z)
       ps%conf%symbol = label(1:2)
       ps%conf%type   = 1
       ps%conf%p      = ps_fhi%ps_grid%no_l_channels
@@ -220,7 +220,7 @@ contains
 
       call valconf_copy(ps%conf, ps_upf%conf)
       ps%z      = z
-      ps%conf%z = z
+      ps%conf%z = nint(z)
       ps%kbc    = ps_upf%kb_nc
       lmax      = ps_upf%l_max
       ps%l_max  = ps_upf%l_max

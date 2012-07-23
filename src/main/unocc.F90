@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: unocc.F90 9012 2012-04-14 04:16:37Z xavier $
+!! $Id: unocc.F90 9095 2012-06-02 02:39:35Z xavier $
 
 #include "global.h"
 
@@ -182,7 +182,6 @@ contains
       type(states_t), intent(inout) :: st
 
       integer :: nus
-      FLOAT, pointer :: new_occ(:,:)
 
       PUSH_SUB(unocc_run.init_)
 
