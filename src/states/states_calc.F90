@@ -189,7 +189,7 @@ contains
         psi = psi /cnorm
         call states_set_state(st, mesh, ist, ik, psi)
         
-        print *,"cnorm", ist, cnorm, abs(cnorm), atan2 (aimag(cnorm), real(cnorm) )
+!         print *,"cnorm", ist, cnorm, abs(cnorm), atan2 (aimag(cnorm), real(cnorm) )
         
       end do
     end do
@@ -281,9 +281,9 @@ contains
       cbuf(:) = st%zeigenval%Re(:, ik) + M_zI * st%zeigenval%Im(:, ik)
       buf(:) = aimag(log(cbuf(:)))
       !buf(:) = aimag(log(cbuf(:) * exp(-M_zI * M_HALF * M_PI))) + M_zI * M_PI * M_HALF
-      print*, 'SORTING'
+!       print*, 'SORTING'
       do ist=1, st%nst
-         print*, ist, buf(ist), cbuf(ist)
+!          print*, ist, buf(ist), cbuf(ist)
          if ((buf(ist).lt.(-cmplxscl_th)).and.((-M_THREE / M_FOUR * M_PI).lt.buf(ist))) then
             cbuf(ist) = cbuf(ist) + 1e3 ! We cheat and assign very high energies
             ! to states that we think are continuum states
