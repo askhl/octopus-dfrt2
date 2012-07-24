@@ -55,16 +55,16 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 	mpi_comm = mpi_world%comm
   if (gr%mesh%parallel_in_domains) mpi_comm = gr%mesh%mpi_grp%comm
   
-  ldv = gr%mesh%np
+
   n = gr%mesh%np
-!   ldv = gr%mesh%np_part
 !   n = gr%mesh%np_part
+  ldv = n
   nev = st%nst
   lworkl  = 3*ncv**2+6*ncv
 
   SAFE_ALLOCATE(d(ncv+1, 3))
-  SAFE_ALLOCATE(resid(ldv))
-  SAFE_ALLOCATE(v(ldv, ncv))
+  SAFE_ALLOCATE(resid(ldv))       !residual vector 
+  SAFE_ALLOCATE(v(ldv, ncv))      !Arnoldi basis vectors / Eigenstates
   SAFE_ALLOCATE(workd(3*ldv))
   SAFE_ALLOCATE(workev(3*ncv))
   SAFE_ALLOCATE(workl(lworkl))
@@ -77,10 +77,15 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   SAFE_ALLOCATE(zd(ncv+1))
 #endif
 	
-  select = .true.
-  tol    = tol_
-  ido    = 0
-  info = 1
+  select(:) = .true.
+  tol  = M_ZERO !tol_
+  ido  = 0
+!  info = 1 !resid contains the initial residual vector
+  info = 0 
+  
+  print *,mpi_world%rank,  "tol", tol
+  print *,mpi_world%rank, "Ncv", ncv, "nev", nev, "n", n
+
   
   do i = 1, ldv
 !      resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
@@ -127,17 +132,13 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 #endif      
       
     if( abs(ido).ne.1) exit
-    call av (n, workd(ipntr(1)), workd(ipntr(2)))
+    
+    call av (n, workd(ipntr(1)), workd(ipntr(2))) ! calculate H * psi
+    
   end do
-  ! If info is larger than zero, it may not be an error (i.e., not all eigenvectors
-  ! were converged)
-!   if(info .lt. 0) then
-!     write(message(1),'(a,i5)') 'Error with P/ARPACK _naupd, info = ', info
-!     write(message(2),'(a)')    'Check the documentation of _naupd.'
-!     call messages_fatal(2)
-!   end if
   
   call arpack_check_error('naupd', info)
+  
 
 #if defined(R_TCOMPLEX) 
  #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
@@ -175,13 +176,6 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
        
   call arpack_check_error('neupd', info)
 
-!   if(ierr .ne. 0) then
-!     if(mpi_grp_is_root(mpi_world)) then
-!       write(message(1),'(a,i5)') 'Error with ARPACK _neupd, info = ', ierr
-!       write(message(2),'(a)')    'Check the documentation of _neupd.'
-!       call messages_fatal(2)
-!     end if
-!   end if
 
   ! This sets the number of converged eigenvectors.
   converged =  iparam(5)
@@ -261,29 +255,27 @@ contains
     integer :: i, NP, NP_PART
     R_TYPE, allocatable :: psi(:, :), hpsi(:, :)
     
+   
+    
     NP = gr%mesh%np
     NP_PART = gr%mesh%np_part
+
+    ASSERT(n == NP .or. n == NP_PART)
 
     SAFE_ALLOCATE(psi(NP_PART, hm%d%dim))
     SAFE_ALLOCATE(hpsi(NP_PART, hm%d%dim))
 
     do i = 1, NP
-!       print *,i, NP, NP_PART, ist
-      psi(i, 1) = v(i)/sqrt(gr%mesh%vol_pp(1))
+      psi(i, 1) = v(i)/sqrt(gr%mesh%volume_element)
     end do
     do i = NP+1, NP_PART
       psi(i, 1) = M_ZERO
     end do
-! psi(1:NP,1) = v(:)
-! psi(NP+1:NP_PART,1) = M_ZERO
-    
     
     call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, 1, ik)
     
-! w(:) = hpsi(1:NP,1)
-        
     do i = 1, NP
-      w(i) = hpsi(i, 1)*sqrt(gr%mesh%vol_pp(1))
+      w(i) = hpsi(i, 1)*sqrt(gr%mesh%volume_element)
     end do
 
 
@@ -292,6 +284,7 @@ contains
 
   end subroutine av
   
+  !----------------------------------------------------
   subroutine arpack_check_error(sub, info)
     integer,           intent(in) :: info
     character(len= *), intent(in) :: sub
@@ -395,11 +388,13 @@ contains
           write(message(3),'(a)'), 'All possible eigenvalues of OP has been found. IPARAM(5)'
           write(message(4),'(a)'), 'returns the number of wanted converged Ritz values.'
           msg_lines = 4
+          OK = .true.
           
         case (2)        
           write(message(2),'(a)'), 'No longer an informational error. Deprecated starting'
           write(message(3),'(a)'), 'with release 2 of ARPACK.'
           msg_lines = 3
+          OK = .true.
           
         case (3)
           write(message(2),'(a)'), 'No shifts could be applied during a cycle of the'
@@ -477,6 +472,9 @@ contains
     if(.not. OK) then
       write(message(1),'(a,a,a,i5)') 'Error with P/ARPACK ', sub, ', info = ', info
       call messages_fatal(msg_lines)
+    else if(msg_lines >= 2) then      
+      write(message(1),'(a)') 'P/ARPACK eigensolver:'
+      call messages_warning(msg_lines)
     end if
     
   end subroutine arpack_check_error

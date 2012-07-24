@@ -214,9 +214,9 @@ contains
 
       if(gr%mesh%use_curvilinear) call messages_experimental("RMMDIIS eigensolver for curvilinear coordinates")
 
-#if defined(HAVE_ARPACK) 
+
     case(RS_ARPACK) 
-      	 	 
+#if defined(HAVE_ARPACK) || defined(HAVE_PARPACK)       	 	 
       !%Variable EigenSolverArnoldiVectors 
       !%Type integer 
       !%Default 20 
@@ -230,12 +230,19 @@ contains
       call parse_integer(datasets_check('EigenSolverArnoldiVectors'), 2*st%nst, eigens%arnoldi_vectors) 
       if(eigens%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigenSolverArnoldiVectors') 
       	 	 
+      eigens%subspace_diag = .false. ! no need of subspace diagonalization in this case
+      default_iter = 500     
+           
       ! Arpack is not working in some cases, so let us check. 
       if(st%d%ispin .eq. SPINORS) then 
         write(message(1), '(a)') 'The ARPACK diagonalizer does not handle spinors (yet).' 
         write(message(2), '(a)') 'Please provide a different EigenSolver.' 
         call messages_fatal(2) 
       end if 
+#else 
+      write(message(1), '(a)') 'Eigensolver = arpack requires arpack or parpack libaries.' 
+      write(message(2), '(a)') 'Provide a different EigenSolver or recompile with p/arpack support.' 
+      call messages_fatal(2)       
 #endif 
 
     case default
@@ -293,7 +300,7 @@ contains
     eigens%converged(1:st%d%nik) = 0
     eigens%matvec    = 0
     
-    call subspace_init(eigens%sdiag, st)
+    if (eigens%subspace_diag) call subspace_init(eigens%sdiag, st)
         
     POP_SUB(eigensolver_init)
 
@@ -400,7 +407,7 @@ contains
 #endif 
         end select
 
-        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and. eigens%es_type /= RS_ARPACK) then
+        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS) then
           call dsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
         end if
 
@@ -440,8 +447,7 @@ contains
 #endif 
         end select
 
-        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and.eigens%es_type /= RS_ARPACK &
-          .and.eigens%es_type /= RS_DIRECT ) then
+        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and. eigens%es_type /= RS_DIRECT ) then
           call zsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
          
         end if
