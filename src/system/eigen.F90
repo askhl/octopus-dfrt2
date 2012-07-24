@@ -105,6 +105,7 @@ contains
     type(states_t),      intent(in)    :: st
 
     integer :: default_iter, default_es
+    FLOAT   :: default_tol
 
     PUSH_SUB(eigensolver_init)
 
@@ -176,6 +177,7 @@ contains
     call parse_logical(datasets_check('EigensolverSubspaceDiag'), .true., eigens%subspace_diag)
 
     default_iter = 25
+    default_tol = CNST(1e-6)
 
     select case(eigens%es_type)
     case(RS_CG_NEW)
@@ -231,7 +233,8 @@ contains
       if(eigens%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigenSolverArnoldiVectors') 
       	 	 
       eigens%subspace_diag = .false. ! no need of subspace diagonalization in this case
-      default_iter = 500     
+      default_iter = 500 
+      default_tol = M_ZERO    
            
       ! Arpack is not working in some cases, so let us check. 
       if(st%d%ispin .eq. SPINORS) then 
@@ -261,7 +264,7 @@ contains
     !%Description
     !% This is the tolerance for the eigenvectors. The default is 1e-6.
     !%End
-    call parse_float(datasets_check('EigensolverTolerance'), CNST(1.0e-6), eigens%tolerance)
+    call parse_float(datasets_check('EigensolverTolerance'), default_tol, eigens%tolerance)
 
     !%Variable EigensolverMaxIter
     !%Type integer

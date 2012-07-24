@@ -78,7 +78,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 #endif
 	
   select(:) = .true.
-  tol  = M_ZERO !tol_
+  tol  = tol_
   ido  = 0
 !  info = 1 !resid contains the initial residual vector
   info = 0 
