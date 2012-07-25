@@ -58,7 +58,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 
   n = gr%mesh%np
 !   n = gr%mesh%np_part
-  ldv = n
+  ldv = gr%mesh%np_global
   nev = st%nst
   lworkl  = 3*ncv**2+6*ncv
 
@@ -84,8 +84,8 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
            ! 1. calculate resid vector 
            ! 2. resid vector constant = 1 
   
-  print *,mpi_world%rank,  "tol", tol
-  print *,mpi_world%rank, "Ncv", ncv, "nev", nev, "n", n
+!   print *,mpi_world%rank,  "tol", tol
+!   print *,mpi_world%rank, "Ncv", ncv, "nev", nev, "n", n
 
   
   
@@ -102,7 +102,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
        if(associated(st%zeigenval%Im)) resid(1:ldv) = resid(1:ldv) - M_zI * st%zeigenval%Im(ist, ik) * psi(1:ldv, idim)
       end do
     end do
-    resid(:) = resid(:) * sqrt(gr%mesh%volume_element)
+    resid(:) = resid(:) !* sqrt(gr%mesh%volume_element)
     SAFE_DEALLOCATE_A(hpsi)
    
     resid_sum = abs(sum(resid(:)**2))
@@ -217,7 +217,7 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   niter = iparam(9)
   do j = 1, converged
     do i = 1, gr%mesh%np
-      psi(i,1) = v(i, j)/sqrt(gr%mesh%volume_element) 
+      psi(i,1) = v(i, j)!/sqrt(gr%mesh%volume_element) 
     end do
     do i = gr%mesh%np + 1, gr%mesh%np_part
       psi(i,1) = R_TOTYPE(M_ZERO) 
@@ -297,7 +297,7 @@ contains
     SAFE_ALLOCATE(hpsi(NP_PART, hm%d%dim))
 
     do i = 1, NP
-      psi(i, 1) = v(i)/sqrt(gr%mesh%volume_element)
+      psi(i, 1) = v(i)!/sqrt(gr%mesh%volume_element)
     end do
     do i = NP+1, NP_PART
       psi(i, 1) = M_ZERO
@@ -306,7 +306,7 @@ contains
     call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, 1, ik)
     
     do i = 1, NP
-      w(i) = hpsi(i, 1)*sqrt(gr%mesh%volume_element)
+      w(i) = hpsi(i, 1)!*sqrt(gr%mesh%volume_element)
     end do
 
 
