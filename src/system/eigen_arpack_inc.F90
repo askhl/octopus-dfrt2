@@ -31,11 +31,11 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   logical, allocatable :: select(:)
   R_TYPE, allocatable  :: resid(:), v(:, :),   &
                           workd(:), workev(:), workl(:), zd(:), &
-                          psi(:,:)
+                          psi(:,:), hpsi(:,:)
                      
   integer :: ldv, nev, iparam(11), ipntr(14), ido, n, lworkl, info, ierr, &
-             i, j, ishfts, maxitr, mode1, ist
-  FLOAT :: tol, sigmar, sigmai
+             i, j, ishfts, maxitr, mode1, ist, idim
+  FLOAT :: tol, sigmar, sigmai, resid_sum, tmp
   FLOAT, allocatable :: rwork(:), d(:, :) 
   CMPLX :: sigma 
   integer :: mpi_comm 
@@ -80,17 +80,45 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   select(:) = .true.
   tol  = tol_
   ido  = 0
-!  info = 1 !resid contains the initial residual vector
-  info = 0 
+  info = 2 ! 0. random resid vector 
+           ! 1. calculate resid vector 
+           ! 2. resid vector constant = 1 
   
   print *,mpi_world%rank,  "tol", tol
   print *,mpi_world%rank, "Ncv", ncv, "nev", nev, "n", n
 
   
-  do i = 1, ldv
-!      resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
-      resid(i) = R_TOTYPE(M_ONE)
-  end do
+  
+  if(info == 1) then !Calculate the residual vector
+    SAFE_ALLOCATE(hpsi(1:gr%mesh%np_part, 1:st%d%dim))
+  
+    resid(:) = R_TOTYPE(M_ZERO)
+    do ist = 1, st%nst
+      call states_get_state(st, gr%mesh, ist, ik, psi)      
+      do idim = 1, st%d%dim
+       call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, idim, ik)
+       if (st%eigenval(ist, ik) > CNST(1e3)) tmp = st%eigenval(ist, ik) -  CNST(1e3) ! compensate the ugly sorting trick
+       resid(1:ldv) = resid(1:ldv) + hpsi(1:ldv, idim) - tmp * psi(1:ldv, idim)
+       if(associated(st%zeigenval%Im)) resid(1:ldv) = resid(1:ldv) - M_zI * st%zeigenval%Im(ist, ik) * psi(1:ldv, idim)
+      end do
+    end do
+    resid(:) = resid(:) * sqrt(gr%mesh%volume_element)
+    SAFE_DEALLOCATE_A(hpsi)
+   
+    resid_sum = abs(sum(resid(:)**2))
+    print *,"residual", resid_sum
+    if(resid_sum < M_EPSILON .or. resid_sum > M_HUGE) then
+      resid(:) = R_TOTYPE(M_ONE) 
+    end if
+    
+  else 
+    resid(:) = R_TOTYPE(M_ONE)
+  end if
+  
+!   do i = 1, ldv
+! !      resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
+!       resid(i) = R_TOTYPE(M_ONE)
+!   end do
 
 	
   ishfts = 1
@@ -137,8 +165,10 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
     
   end do
   
+  !Error Check
   call arpack_check_error('naupd', info)
   
+ 
 
 #if defined(R_TCOMPLEX) 
  #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
@@ -173,11 +203,12 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
        lworkl, info )
  #endif
 #endif
-       
+
+  !Error Check    
   call arpack_check_error('neupd', info)
 
-
-  ! This sets the number of converged eigenvectors.
+   
+  ! The number of converged eigenvectors.
   converged =  iparam(5)
 
 !   call dmout(6, converged, 3, d, ncv+1, -6, 'Ritz values (Real, Imag) and residual residuals')
@@ -473,7 +504,7 @@ contains
       write(message(1),'(a,a,a,i5)') 'Error with P/ARPACK ', sub, ', info = ', info
       call messages_fatal(msg_lines)
     else if(msg_lines >= 2) then      
-      write(message(1),'(a)') 'P/ARPACK eigensolver:'
+      write(message(1),'(a,a,a,i5)') 'P/ARPACK ',sub, ', info = ', info
       call messages_warning(msg_lines)
     end if
     

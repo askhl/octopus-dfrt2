@@ -233,8 +233,8 @@ contains
       if(eigens%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigenSolverArnoldiVectors') 
       	 	 
       eigens%subspace_diag = .false. ! no need of subspace diagonalization in this case
-      default_iter = 500 
-      default_tol = M_ZERO    
+      default_iter = 500  ! empirical value based upon experience
+      default_tol = M_ZERO ! default is machine precision   
            
       ! Arpack is not working in some cases, so let us check. 
       if(st%d%ispin .eq. SPINORS) then 

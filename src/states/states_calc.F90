@@ -285,7 +285,7 @@ contains
       do ist=1, st%nst
 !          print*, ist, buf(ist), cbuf(ist)
          if ((buf(ist).lt.(-cmplxscl_th)).and.((-M_THREE / M_FOUR * M_PI).lt.buf(ist))) then
-            cbuf(ist) = cbuf(ist) + 1e3 ! We cheat and assign very high energies
+            cbuf(ist) = cbuf(ist) + CNST(1e3) ! We cheat and assign very high energies
             ! to states that we think are continuum states
             !st%zeigelval%Re(ist, ik) = st%zeigelval%Re(ist, ik) + 1e3
          end if
