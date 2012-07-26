@@ -224,9 +224,6 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
     end do
     
     call states_set_state(st, gr%mesh, j, ik, psi)
-    
-!     print *,"st", j, "norm", sqrt(X(mf_dotp)(gr%mesh, st%d%dim, psi, psi, dotu = .true.))
-
         
     st%eigenval(j, ik) = d(j, 1)
     if(associated(st%zeigenval%Im))then 
@@ -240,10 +237,9 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
     end if
   end do
 
-  !Fill unconverged states
+  !Fill unconverged states with (nice) garbage  
   do j = converged + 1, st%nst
     do i = 1, gr%mesh%np
-!       st%X(psi)(i, 1, j, ik) = R_TOTYPE(M_ONE)
       psi(i,1) = R_TOTYPE(M_ONE) 
     end do
     call states_set_state(st, gr%mesh, j, ik, psi)
