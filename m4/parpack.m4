@@ -1,6 +1,6 @@
 dnl looks for libparpack.a
 AC_DEFUN([ACX_PARPACK], [
-AC_REQUIRE([ACX_BLAS])
+AC_REQUIRE([ACX_ARPACK])
 acx_parpack_ok=no
 
 dnl We cannot use PARPACK if BLAS is not found
@@ -23,7 +23,8 @@ if test $acx_parpack_ok = no; then
   esac
 fi
 
-
+dnl PARPACK always wants ARPACK 
+LIBS_PARPACK="$LIBS_PARPACK $LIBS_ARPACK"
 
 dnl First, check LIBS_PARPACK environment variable
 if test $acx_parpack_ok = no; then
@@ -41,7 +42,7 @@ if test $acx_parpack_ok = no; then
 fi
 
 if test $acx_parpack_ok = no; then
-  LIBS="$LIBS_PARPACK -lparpack $LIBS_LAPACK $LIBS_BLAS $acx_parpack_save_LIBS $FLIBS"
+  LIBS="$LIBS_PARPACK -lparpack  $LIBS_LAPACK $LIBS_BLAS $acx_parpack_save_LIBS $FLIBS"
   AC_MSG_CHECKING([for parpack library with -lparpack])
   AC_LINK_IFELSE([
     program main
