@@ -1,12 +1,13 @@
-dnl looks for libparpack.a
+dnl looks for PARPACK library 
 AC_DEFUN([ACX_PARPACK], [
 AC_REQUIRE([ACX_ARPACK])
 acx_parpack_ok=no
 
-dnl We cannot use PARPACK if BLAS is not found
-if test "x$acx_blas_ok" != xyes; then
-  acx_parpack_ok=noblas
-fi
+dnl We cannot use PARPACK if MPI is not found
+if test x$acx_mpi_ok != xyes; then
+  acx_parpack_ok=nompi
+else
+
 
 dnl Backup LIBS 
 acx_parpack_save_LIBS="$LIBS"
@@ -68,5 +69,6 @@ else
     AC_MSG_WARN([Could not find PARPACK library. 
                *** Will compile without PARPACK support])
   $2
+fi
 fi
 ])dnl ACX_PARPACK
