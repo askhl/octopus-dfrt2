@@ -17,13 +17,13 @@
 !!
 	
 	
-subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, diff)
+subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik, diff)
+  type(arpack_t),       intent(in)   :: arpack
   type(grid_t),        intent(in)    :: gr
   type(states_t),      intent(inout) :: st
   type(hamiltonian_t), intent(in)    :: hm
   FLOAT,               intent(in)    :: tol_
   integer,             intent(inout) :: niter
-  integer,             intent(in)    :: ncv
   integer,             intent(inout) :: converged
   integer,             intent(in)    :: ik
   FLOAT,     optional, intent(out)   :: diff(1:st%nst)
@@ -34,17 +34,16 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
                           psi(:,:), hpsi(:,:)
                      
   integer :: ldv, nev, iparam(11), ipntr(14), ido, n, lworkl, info, ierr, &
-             i, j, ishfts, maxitr, mode1, ist, idim
+             i, j, ishfts, maxitr, mode1, ist, idim, ncv 
   FLOAT :: tol, sigmar, sigmai, resid_sum, tmp
   FLOAT, allocatable :: rwork(:), d(:, :) 
   CMPLX :: sigma 
   integer :: mpi_comm 
+  character(len=2) :: which
   	
 	!!!!WARNING: No support for spinors, yet. 
  
   PUSH_SUB(eigen_arpack.eigen_solver_arpack)
-	
-
 
   if(st%parallel_in_states) then
     message(1) = 'Arpack-Solver not parallelized for states decomposition.'
@@ -55,6 +54,8 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 	mpi_comm = mpi_world%comm
   if (gr%mesh%parallel_in_domains) mpi_comm = gr%mesh%mpi_grp%comm
   
+  ncv = arpack%arnoldi_vectors
+  which = arpack%sort
 
   n = gr%mesh%np
 !   n = gr%mesh%np_part
@@ -80,9 +81,9 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
   select(:) = .true.
   tol  = tol_
   ido  = 0
-  info = 2 ! 0. random resid vector 
-           ! 1. calculate resid vector 
-           ! 2. resid vector constant = 1 
+  info = arpack%init_resid ! 0. random resid vector 
+                           ! 1. calculate resid vector 
+                           ! 2. resid vector constant = 1 
   
 !   print *,mpi_world%rank,  "tol", tol
 !   print *,mpi_world%rank, "Ncv", ncv, "nev", nev, "n", n
@@ -133,13 +134,13 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
  #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
 
     call pznaupd  ( mpi_comm, &
-          ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+          ido, 'I', n, which, nev, tol, resid, ncv, &
           v, ldv, iparam, ipntr, workd, workl, lworkl, &
           rwork,info )
 
  #else
     call znaupd  ( & 
-          ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+          ido, 'I', n, which, nev, tol, resid, ncv, &
           v, ldv, iparam, ipntr, workd, workl, lworkl, &
           rwork,info )
  #endif
@@ -147,13 +148,13 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 #else 
   #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
     call pdnaupd  ( mpi_comm, &
-          ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+          ido, 'I', n, which, nev, tol, resid, ncv, &
           v, ldv, iparam, ipntr, workd, workl, lworkl, & 
           info )
   
   #else
     call dnaupd  ( & 
-          ido, 'I', n, 'SR', nev, tol, resid, ncv, &
+          ido, 'I', n, which, nev, tol, resid, ncv, &
           v, ldv, iparam, ipntr, workd, workl, lworkl, & 
           info )
   #endif
@@ -173,14 +174,14 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 #if defined(R_TCOMPLEX) 
  #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
   call pzneupd  (mpi_comm, .true., 'A', select, zd, v, ldv, sigma, &
-        workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
+        workev, 'I', n, which, nev, tol, resid, ncv, & 
         v, ldv, iparam, ipntr, workd, workl, lworkl, &
         rwork, info)
         d(:,1)=real(zd(:))
         d(:,2)=aimag(zd(:))
         d(:,3)=M_ZERO
  #else
-  call zneupd  (.true., 'A', select, zd, v, ldv, sigma, &
+  call zneupd  (.true., which, select, zd, v, ldv, sigma, &
         workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
         v, ldv, iparam, ipntr, workd, workl, lworkl, &
         rwork, info)
@@ -192,13 +193,13 @@ subroutine X(eigen_solver_arpack)(gr, st, hm, tol_, niter, ncv, converged, ik, d
 #else	
  #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
   call pdneupd (mpi_comm, .true., 'A', select, d, d(1,2), v, ldv, &
-       sigmar, sigmai, workev, 'I', n, 'SR', nev, tol, &
+       sigmar, sigmai, workev, 'I', n, which, nev, tol, &
        resid, ncv, v, ldv, iparam, ipntr, workd, workl, &
        lworkl, info )
  
  #else
   call dneupd ( .true., 'A', select, d, d(1,2), v, ldv, &
-       sigmar, sigmai, workev, 'I', n, 'SR', nev, tol, &
+       sigmar, sigmai, workev, 'I', n, which, nev, tol, &
        resid, ncv, v, ldv, iparam, ipntr, workd, workl, &
        lworkl, info )
  #endif

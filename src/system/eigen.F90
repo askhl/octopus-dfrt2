@@ -60,6 +60,13 @@ module eigensolver_m
     eigensolver_end,   &
     eigensolver_run
 
+  !> ARPACK solver tuning
+  type arpack_t
+    integer          :: arnoldi_vectors !< number of Arnoldi vectors
+    character(len=2) :: sort            !< which eigenvalue sorting 
+    integer          :: init_resid      !< inital residual strategy 
+  end type arpack_t
+
   type eigensolver_t
     integer :: es_type    !< which eigensolver to use
 
@@ -68,6 +75,8 @@ module eigensolver_m
     FLOAT   :: tolerance
     integer :: es_maxiter
 
+    type(arpack_t) :: arpack !< arpack options
+    
     integer :: arnoldi_vectors
     FLOAT   :: imag_time
 
@@ -163,6 +172,8 @@ contains
       call messages_fatal(2)
     end if
 
+    call messages_print_var_option(stdout, "Eigensolver", eigens%es_type)
+    
     call messages_obsolete_variable('EigensolverVerbose')
 
     !%Variable EigensolverSubspaceDiag
@@ -219,19 +230,62 @@ contains
 
     case(RS_ARPACK) 
 #if defined(HAVE_ARPACK) || defined(HAVE_PARPACK)       	 	 
-      !%Variable EigenSolverArnoldiVectors 
+      !%Variable EigensolverArnoldiVectors 
       !%Type integer 
       !%Default 20 
-      !%Section SCF::EigenSolver 
+      !%Section SCF::Eigensolver 
       !%Description 
       !% This indicates how many Arnoldi vectors are generated 
       !% It must satisfy EigenSolverArnoldiVectors - Number Of Eigenvectors >= 2. 
       !% See the ARPACK documentation for more details. It will default to  
       !% twice the number of eigenvectors (which is the number of states) 
       !%End 
-      call parse_integer(datasets_check('EigenSolverArnoldiVectors'), 2*st%nst, eigens%arnoldi_vectors) 
-      if(eigens%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigenSolverArnoldiVectors') 
-      	 	 
+      call parse_integer(datasets_check('EigensolverArnoldiVectors'), 2*st%nst, eigens%arpack%arnoldi_vectors) 
+      if(eigens%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigensolverArnoldiVectors') 
+      call messages_print_var_value(stdout, "EigensolverArnoldiVectors", eigens%arpack%arnoldi_vectors)
+ 
+      !%Variable EigensolverArpackSort
+      !%Type string 
+      !%Default SR 
+      !%Section SCF::Eigensolver 
+      !%Description 
+      !% Eigenvalues sorting strategy (case sensitive).
+      !% From ARPACK documentation: 
+      !% 'LM' -> want eigenvalues of largest magnitude.
+      !% 'SM' -> want eigenvalues of smallest magnitude.
+      !% 'LR' -> want eigenvalues of largest real part.
+      !% 'SR' -> want eigenvalues of smallest real part.
+      !% 'LI' -> want eigenvalues of largest imaginary part.
+      !% 'SI' -> want eigenvalues of smallest imaginary part.
+      !%End 
+      call parse_string(datasets_check('EigensolverArpackSort'), "SR", eigens%arpack%sort)
+      if(eigens%arpack%sort /= "LM"  .and. &
+         eigens%arpack%sort /= "SM"  .and. &
+         eigens%arpack%sort /= "LR"  .and. &
+         eigens%arpack%sort /= "SR"  .and. &
+         eigens%arpack%sort /= "LI"  .and. &
+         eigens%arpack%sort /= "SI") call input_error('EigensolverArpackSort')
+      call messages_print_var_value(stdout, "EigensolverArpackSort", eigens%arpack%sort)
+ 
+      !%Variable EigensolverArpackIntialResid
+      !%Type integer
+      !%Default constant 
+      !%Section SCF::Eigensolver
+      !%Description
+      !% Initial residual vector.
+      !%Option constant 2
+      !% Initial residual vector constant = 1.
+      !%Option rand 0
+      !% Random residual vector.
+      !%Option calc 1
+      !% resid = H*psi - epsilon*psi.
+      !%End
+      call parse_integer(datasets_check('EigensolverArpackIntialResid'), 2, eigens%arpack%init_resid)
+      if(.not.varinfo_valid_option('EigensolverArpackIntialResid', eigens%arpack%init_resid))&
+          call input_error('EigensolverArpackIntialResid')
+      call messages_print_var_option(stdout, "EigensolverArpackIntialResid", eigens%arpack%init_resid)
+ 
+      !Some default values 
       eigens%subspace_diag = .false. ! no need of subspace diagonalization in this case
       default_iter = 500  ! empirical value based upon experience
       default_tol = M_ZERO ! default is machine precision   
@@ -251,7 +305,7 @@ contains
     case default
       call input_error('Eigensolver')
     end select
-    call messages_print_var_option(stdout, "Eigensolver", eigens%es_type)
+
 
     call messages_obsolete_variable('EigensolverInitTolerance', 'EigensolverTolerance')
     call messages_obsolete_variable('EigensolverFinalTolerance', 'EigensolverTolerance')
@@ -405,7 +459,7 @@ contains
           end if
 #if defined(HAVE_ARPACK) 
  	      case(RS_ARPACK) 
- 	        call deigen_solver_arpack(gr, st, hm, eigens%tolerance, maxiter, eigens%arnoldi_vectors, & 
+ 	        call deigen_solver_arpack(eigens%arpack, gr, st, hm, eigens%tolerance, maxiter, & 
  	             eigens%converged(ik), ik, eigens%diff(:,ik)) 
 #endif 
         end select
@@ -445,7 +499,7 @@ contains
           end if         
 #if defined(HAVE_ARPACK) 
        	case(RS_ARPACK) 
- 	        call zeigen_solver_arpack(gr, st, hm, eigens%tolerance, maxiter, eigens%arnoldi_vectors, & 
+ 	        call zeigen_solver_arpack(eigens%arpack, gr, st, hm, eigens%tolerance, maxiter, & 
  	             eigens%converged(ik), ik, eigens%diff(:,ik)) 
 #endif 
         end select
