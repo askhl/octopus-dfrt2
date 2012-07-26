@@ -181,8 +181,8 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
         d(:,2)=aimag(zd(:))
         d(:,3)=M_ZERO
  #else
-  call zneupd  (.true., which, select, zd, v, ldv, sigma, &
-        workev, 'I', n, 'SR', nev, tol, resid, ncv, & 
+  call zneupd  (.true.,'A', select, zd, v, ldv, sigma, &
+        workev, 'I', n,  which, nev, tol, resid, ncv, & 
         v, ldv, iparam, ipntr, workd, workl, lworkl, &
         rwork, info)
         d(:,1)=real(zd(:))
