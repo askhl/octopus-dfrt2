@@ -23,6 +23,7 @@ module eigensolver_m
   use batch_m
   use datasets_m
   use derivatives_m
+  use eigen_arpack_m
   use eigen_cg_m
   use eigen_lobpcg_m
   use eigen_rmmdiis_m
@@ -60,12 +61,6 @@ module eigensolver_m
     eigensolver_end,   &
     eigensolver_run
 
-  !> ARPACK solver tuning
-  type arpack_t
-    integer          :: arnoldi_vectors !< number of Arnoldi vectors
-    character(len=2) :: sort            !< which eigenvalue sorting 
-    integer          :: init_resid      !< inital residual strategy 
-  end type arpack_t
 
   type eigensolver_t
     integer :: es_type    !< which eigensolver to use
@@ -75,9 +70,8 @@ module eigensolver_m
     FLOAT   :: tolerance
     integer :: es_maxiter
 
-    type(arpack_t) :: arpack !< arpack options
+    type(eigen_arpack_t) :: arpack !< arpack solver
     
-    integer :: arnoldi_vectors
     FLOAT   :: imag_time
 
     !> Stores information about how well it performed.
@@ -241,7 +235,7 @@ contains
       !% twice the number of eigenvectors (which is the number of states) 
       !%End 
       call parse_integer(datasets_check('EigensolverArnoldiVectors'), 2*st%nst, eigens%arpack%arnoldi_vectors) 
-      if(eigens%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigensolverArnoldiVectors') 
+      if(eigens%arpack%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigensolverArnoldiVectors') 
       call messages_print_var_value(stdout, "EigensolverArnoldiVectors", eigens%arpack%arnoldi_vectors)
  
       !%Variable EigensolverArpackSort
@@ -603,14 +597,6 @@ contains
 #include "eigen_plan_inc.F90"
 #include "eigen_evolution_inc.F90"
 
-#if defined(HAVE_ARPACK) || defined(HAVE_PARPACK) 
-#include "undef.F90" 
-#include "real.F90" 
-#include "eigen_arpack_inc.F90" 
-#include "undef.F90" 
-#include "complex.F90" 
-#include "eigen_arpack_inc.F90" 
-#endif 
 
 end module eigensolver_m
 

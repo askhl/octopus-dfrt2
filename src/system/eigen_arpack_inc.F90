@@ -18,7 +18,7 @@
 	
 	
 subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik, diff)
-  type(arpack_t),       intent(in)   :: arpack
+  type(eigen_arpack_t),intent(in)   :: arpack
   type(grid_t),        intent(in)    :: gr
   type(states_t),      intent(inout) :: st
   type(hamiltonian_t), intent(in)    :: hm
@@ -42,6 +42,7 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   character(len=2) :: which
   	
 	!!!!WARNING: No support for spinors, yet. 
+
  
   PUSH_SUB(eigen_arpack.eigen_solver_arpack)
 
@@ -51,6 +52,8 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
     call messages_fatal(2)
   end if
 
+  if(in_debug_mode) call debug(conf%debug_level)
+  
 	mpi_comm = mpi_world%comm
   if (gr%mesh%parallel_in_domains) mpi_comm = gr%mesh%mpi_grp%comm
   
@@ -128,7 +131,11 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   iparam(1) = ishfts
   iparam(3) = maxitr
   iparam(7) = mode1
-	
+
+
+  
+  
+  
   do
 #if defined(R_TCOMPLEX)
  #if defined(HAVE_PARPACK) && defined(HAVE_MPI)
@@ -507,6 +514,40 @@ contains
     
   end subroutine arpack_check_error
  
+  subroutine debug(debug_level)
+    integer, intent(in) :: debug_level
+
+! Modified from ARPACK debug.h 
+! I don't think this is going to change too much.. well at least it didn't since 1997 :)
+!
+!\SCCS Information: @(#) 
+! FILE: debug.h   SID: 2.3   DATE OF SID: 11/16/95   RELEASE: 2 
+!
+!     %---------------------------------%
+!     | See debug.doc for documentation |
+!     %---------------------------------%
+    integer  logfil, ndigit, mgetv0, &
+             msaupd, msaup2, msaitr, mseigt, msapps, msgets, mseupd, &
+             mnaupd, mnaup2, mnaitr, mneigh, mnapps, mngets, mneupd, &
+             mcaupd, mcaup2, mcaitr, mceigh, mcapps, mcgets, mceupd
+    common /debug/ &
+             logfil, ndigit, mgetv0, &
+             msaupd, msaup2, msaitr, mseigt, msapps, msgets, mseupd, &
+             mnaupd, mnaup2, mnaitr, mneigh, mnapps, mngets, mneupd, &
+             mcaupd, mcaup2, mcaitr, mceigh, mcapps, mcgets, mceupd
+
+    
+    ndigit = -3
+    logfil = 6
+    mnaitr = 0
+    mnapps = 0
+    mnaupd = 3
+    mnaup2 = 0
+    mneigh = 0
+    mneupd = 3
+    
+    
+  end subroutine debug
         
          
 
