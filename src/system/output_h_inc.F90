@@ -81,7 +81,7 @@
                 hm%ep%vpsl + hm%vhxc(:, is), units_out%energy, err, geo = geo)
             else
               call zio_function_output(outp%how, dir, fname, der%mesh, &
-                hm%ep%vpsl +M_zI * hm%ep%Imvpsl+ hm%vhxc(:, is) + M_zI * hm%vhxc(:, is), units_out%energy, err, geo = geo)
+                hm%ep%vpsl +M_zI * hm%ep%Imvpsl+ hm%vhxc(:, is) + M_zI * hm%Imvhxc(:, is), units_out%energy, err, geo = geo)
             end if
           end if
         end do
