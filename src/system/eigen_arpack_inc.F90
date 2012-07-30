@@ -52,7 +52,7 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
     call messages_fatal(2)
   end if
 
-  if(in_debug_mode) call debug(conf%debug_level)
+  if(in_debug_mode) call arpack_debug(conf%debug_level)
   
 	mpi_comm = mpi_world%comm
   if (gr%mesh%parallel_in_domains) mpi_comm = gr%mesh%mpi_grp%comm

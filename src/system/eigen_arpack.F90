@@ -59,9 +59,10 @@ use batch_m
 
   contains
     
-  subroutine debug(debug_level)
+  subroutine arpack_debug(debug_level)
     integer, intent(in) :: debug_level
 
+   
 ! Modified from ARPACK debug.h 
 ! I don't think this is going to change too much.. well at least it didn't since 1997 :)
 !
@@ -81,6 +82,7 @@ use batch_m
              mnaupd, mnaup2, mnaitr, mneigh, mnapps, mngets, mneupd, &
              mcaupd, mcaup2, mcaitr, mceigh, mcapps, mcgets, mceupd
 
+    PUSH_SUB(arpack_debug)
     
     ndigit = -3
     logfil = 6
@@ -91,8 +93,8 @@ use batch_m
     mneigh = 0
     mneupd = 3
     
-    
-  end subroutine debug
+    POP_SUB(arpack_debug)
+  end subroutine arpack_debug
     
   !----------------------------------------------------
   subroutine arpack_check_error(sub, info)
@@ -101,6 +103,8 @@ use batch_m
     
     integer :: msg_lines
     logical :: OK
+    
+    PUSH_SUB(arpack_check_error)
     
     msg_lines = 1
     OK = .false.
@@ -287,6 +291,7 @@ use batch_m
       call messages_warning(msg_lines)
     end if
     
+    POP_SUB(arpack_check_error)
   end subroutine arpack_check_error
 
 
