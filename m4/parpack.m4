@@ -6,7 +6,11 @@ acx_parpack_ok=no
 dnl We cannot use PARPACK if MPI is not found
 if test x$acx_mpi_ok != xyes; then
   acx_parpack_ok=nompi
-else
+fi 
+dnl We cannot use PARPACK if ARPACKis not found
+if test x$acx_arpack_ok != xyes; then
+  acx_parpack_ok=noarpack
+fi
 
 
 dnl Backup LIBS 
@@ -15,7 +19,7 @@ acx_parpack_save_LIBS="$LIBS"
 
 dnl Check if the library was given in the command line
 if test $acx_parpack_ok = no; then
-  AC_ARG_WITH(parpack, [AS_HELP_STRING([--with-parpack=<lib>], [use PARPACK library <lib> http://forge.scilab.org/index.php/p/arpack-ng/])])
+  AC_ARG_WITH(parpack, [AS_HELP_STRING([--with-parpack=<lib>], [use PARPACK library <lib>. Requires ARPACK.])])
   case $with_parpack in
     yes | "") ;;
     no) acx_parpack_ok=disable ;;
@@ -43,13 +47,22 @@ if test $acx_parpack_ok = no; then
 fi
 
 if test $acx_parpack_ok = no; then
-  LIBS="$LIBS_PARPACK -lparpack  $LIBS_LAPACK $LIBS_BLAS $acx_parpack_save_LIBS $FLIBS"
   AC_MSG_CHECKING([for parpack library with -lparpack])
-  AC_LINK_IFELSE([
-    program main
-    call pdsaupd
-    end program main
-], [acx_parpack_ok=yes; LIBS_PARPACK="$LIBS_PARPACK -lparpack"], [])
+  if test "$LIBS_PARPACK" = ""; then
+    LIBS="-lparpack  $LIBS_LAPACK $LIBS_BLAS $acx_parpack_save_LIBS $FLIBS" 
+    AC_LINK_IFELSE([
+      program main
+      call pdsaupd
+      end program main
+    ], [acx_parpack_ok=yes; LIBS_PARPACK=" -lparpack"], [])
+  else
+    LIBS="-L$LIBS_PARPACK -lparpack  $LIBS_LAPACK $LIBS_BLAS $acx_parpack_save_LIBS $FLIBS" 
+    AC_LINK_IFELSE([
+      program main
+      call pdsaupd
+      end program main
+    ], [acx_parpack_ok=yes; LIBS_PARPACK="-L$LIBS_PARPACK -lparpack"], [])  
+  fi
   if test $acx_parpack_ok = no; then
     AC_MSG_RESULT([$acx_parpack_ok])
   else
@@ -66,9 +79,16 @@ if test x"$acx_parpack_ok" = xyes; then
   AC_DEFINE(HAVE_PARPACK,1,[Defined if you have PARPACK library.])
   $1
 else
-    AC_MSG_WARN([Could not find PARPACK library. 
-               *** Will compile without PARPACK support])
+  if test $acx_parpack_ok = nompi; then
+    AC_MSG_WARN([PARPACK requires MPI support.]) 
+  fi
+  if test $acx_parpack_ok = noarpack; then
+    AC_MSG_WARN([PARPACK requires ARPACK.]) 
+  fi   
+  AC_MSG_WARN([Could not find PARPACK library. 
+              *** Will compile without PARPACK support])
   $2
 fi
-fi
+
+
 ])dnl ACX_PARPACK
