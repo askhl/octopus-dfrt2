@@ -22,9 +22,10 @@
 
 module eigen_arpack_m
 
-#if defined(HAVE_ARPACK) || defined(HAVE_PARPACK)   
+
 use batch_m
   use comm_m
+  use datasets_m
   use global_m
   use grid_m
   use hamiltonian_m
@@ -39,9 +40,11 @@ use batch_m
   use messages_m
   use mpi_m
   use mpi_lib_m
+  use parser_m
   use profiling_m
   use states_m
   use states_calc_m
+  use varinfo_m
 
   implicit none
 
@@ -49,16 +52,116 @@ use batch_m
   public ::                     &
     eigen_arpack_t,             &
     deigen_solver_arpack,       &
-    zeigen_solver_arpack
+    zeigen_solver_arpack,       &
+    arpack_init
 
     type eigen_arpack_t
       integer          :: arnoldi_vectors !< number of Arnoldi vectors
       character(len=2) :: sort            !< which eigenvalue sorting 
       integer          :: init_resid      !< inital residual strategy 
+      logical          :: use_parpack  
     end type eigen_arpack_t
 
   contains
+
+  subroutine arpack_init(this, gr, nst)
+    type(eigen_arpack_t),  intent(inout) :: this
+    type(grid_t),          intent(in)    :: gr
+    integer,               intent(in)    :: nst
+
+    logical :: use_parpack
+
+    PUSH_SUB(arpack_init)
+#if defined(HAVE_ARPACK)  
+     
+    use_parpack = .false.
+#if defined(HAVE_PARPACK)    
+
+    use_parpack = gr%mesh%parallel_in_domains
     
+    !%Variable EigensolverParpack 
+    !%Type logical 
+    !%Section SCF::Eigensolver 
+    !%Description 
+    !% Use PARPACK.
+    !%End 
+    call parse_logical(datasets_check('EigensolverParpack'), use_parpack, this%use_parpack) 
+    call messages_print_var_value(stdout, "EigensolverParpack", this%use_parpack)
+    
+#endif
+
+
+    
+    
+    !%Variable EigensolverArnoldiVectors 
+    !%Type integer 
+    !%Section SCF::Eigensolver 
+    !%Description 
+    !% This indicates how many Arnoldi vectors are generated 
+    !% It must satisfy EigenSolverArnoldiVectors - Number Of Eigenvectors >= 2. 
+    !% See the ARPACK documentation for more details. It will default to  
+    !% twice the number of eigenvectors (which is the number of states) 
+    !%End 
+    call parse_integer(datasets_check('EigensolverArnoldiVectors'), 2*nst, this%arnoldi_vectors) 
+    if(this%arnoldi_vectors - nst < M_TWO) call input_error('EigensolverArnoldiVectors') 
+    call messages_print_var_value(stdout, "EigensolverArnoldiVectors", this%arnoldi_vectors)
+    
+    !%Variable EigensolverArpackSort
+    !%Type string 
+    !%Default SR 
+    !%Section SCF::Eigensolver 
+    !%Description 
+    !% Eigenvalues sorting strategy (case sensitive).
+    !% From ARPACK documentation: 
+    !% 'LM' -> want eigenvalues of largest magnitude.
+    !% 'SM' -> want eigenvalues of smallest magnitude.
+    !% 'LR' -> want eigenvalues of largest real part.
+    !% 'SR' -> want eigenvalues of smallest real part.
+    !% 'LI' -> want eigenvalues of largest imaginary part.
+    !% 'SI' -> want eigenvalues of smallest imaginary part.
+    !%End 
+    call parse_string(datasets_check('EigensolverArpackSort'), "SR", this%sort)
+    if(this%sort /= "LM"  .and. &
+       this%sort /= "SM"  .and. &
+       this%sort /= "LR"  .and. &
+       this%sort /= "SR"  .and. &
+       this%sort /= "LI"  .and. &
+       this%sort /= "SI") call input_error('EigensolverArpackSort')
+    call messages_print_var_value(stdout, "EigensolverArpackSort", this%sort)
+    
+
+ 
+    !%Variable EigensolverArpackIntialResid
+    !%Type integer
+    !%Default constant 
+    !%Section SCF::Eigensolver
+    !%Description
+    !% Initial residual vector.
+    !%Option constant 2
+    !% Initial residual vector constant = 1.
+    !%Option rand 0
+    !% Random residual vector.
+    !%Option calc 1
+    !% resid = H*psi - epsilon*psi.
+    !%End
+    call parse_integer(datasets_check('EigensolverArpackIntialResid'), 2, this%init_resid)
+    if(.not.varinfo_valid_option('EigensolverArpackIntialResid', this%init_resid))&
+       call input_error('EigensolverArpackIntialResid')
+    call messages_print_var_option(stdout, "EigensolverArpackIntialResid", this%init_resid)
+
+#else 
+
+    write(message(1), '(a)') 'Eigensolver = arpack requires arpack or parpack libaries.' 
+    write(message(2), '(a)') 'Provide a different EigenSolver or recompile with p/arpack support.' 
+    call messages_fatal(2)     
+
+#endif  #HAVE_ARPACK
+  
+    POP_SUB(arpack_init)    
+  end subroutine arpack_init
+  
+#if defined(HAVE_ARPACK)  
+  !--------------------------------------------    
   subroutine arpack_debug(debug_level)
     integer, intent(in) :: debug_level
 
@@ -88,13 +191,23 @@ use batch_m
     logfil = 6
     mnaitr = 0
     mnapps = 0
-    mnaupd = 3
-    mnaup2 = 3
+    mnaupd = debug_level + 1
+    mnaup2 = debug_level + 1
     mneigh = 0
-    mneupd = 3
+    mneupd = debug_level + 1
+    mngets = debug_level + 1
+    
+    mcaupd = debug_level + 1
+    mcaup2 = debug_level + 1
+    mceigh = 0
+    mceupd = debug_level + 1
+    mcgets = debug_level + 1
+  
+    
     
     POP_SUB(arpack_debug)
   end subroutine arpack_debug
+  
     
   !----------------------------------------------------
   subroutine arpack_check_error(sub, info)
@@ -216,6 +329,7 @@ use batch_m
           write(message(4),'(a)'), 'is to increase the size of NCV relative to NEV.'
           write(message(5),'(a)'), 'See remark 4 below.'
           msg_lines = 5
+          OK = .true.
                 
         case (-1)
            write(message(2),'(a)'), 'N must be positive.'
@@ -294,6 +408,7 @@ use batch_m
     POP_SUB(arpack_check_error)
   end subroutine arpack_check_error
 
+#endif #HAVE_ARPACK  
 
 #include "real.F90" 
 #include "eigen_arpack_inc.F90" 
@@ -303,10 +418,6 @@ use batch_m
 #include "eigen_arpack_inc.F90" 
 #include "undef.F90" 
 
-#else 
-! this avoids compilers complaining about empty module 
-  integer, public :: arpack_dummy 
-#endif 
 
   end module eigen_arpack_m
 
