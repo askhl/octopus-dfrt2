@@ -581,7 +581,9 @@ contains
         end if
       else
         if(cmplxscl) then
-          call epot_local_potential(ep, gr%der, gr%dgrid, geo, ia, ep%vpsl, ep%Imvpsl, density = density)
+          call epot_local_potential(ep, gr%der, gr%dgrid, geo, ia, ep%vpsl, ep%Imvpsl)!, density = density) ! XXX commented out or not??
+          ! evidently it doesn't work *unless* this is commented out so it must apparently be commented out, yes.
+          ! But why is that exactly?
         else
           call epot_local_potential(ep, gr%der, gr%dgrid, geo, ia, ep%vpsl, density = density)
         end if
@@ -663,19 +665,26 @@ contains
 
     integer :: ip
     FLOAT :: radius
-    FLOAT, allocatable :: vl(:), Imvl(:), rho(:)
+    FLOAT, allocatable :: vl(:), Imvl(:), rho(:), Imrho(:)
     type(submesh_t)  :: sphere
     type(profile_t), save :: prof
     integer :: counter, conversion(3), nx_half, ny_half, nz_half !ROA
     integer :: nx, ny, nz !ROA
+    logical :: cmplxscl
 
     PUSH_SUB(epot_local_potential)
     call profiling_in(prof, "EPOT_LOCAL")
 
+    cmplxscl = .false.
+    if(present(Imvpsl)) then !cmplxscl
+       cmplxscl = .true.
+    end if
+
     if(ep%local_potential_precalculated) then
 
       forall(ip = 1:der%mesh%np) vpsl(ip) = vpsl(ip) + ep%local_potential(ip, iatom)
-      if(present(Imvpsl)) then !cmplxscl
+      cmplxscl = .false.
+      if(cmplxscl) then !cmplxscl
         forall(ip = 1:der%mesh%np) Imvpsl(ip) = Imvpsl(ip) + ep%Imlocal_potential(ip, iatom)
       end if
     else
@@ -687,26 +696,44 @@ contains
       if(local_potential_has_density(ep, der%mesh%sb, geo%atom(iatom))) then
         SAFE_ALLOCATE(rho(1:der%mesh%np))
 
-        call species_get_density(geo%atom(iatom)%spec, geo%atom(iatom)%x, der%mesh, geo, rho)
+        if (cmplxscl) then
+          SAFE_ALLOCATE(Imrho(1:der%mesh%np))
+          call species_get_density(geo%atom(iatom)%spec, geo%atom(iatom)%x, der%mesh, geo, rho, Imrho)
+        else
+          call species_get_density(geo%atom(iatom)%spec, geo%atom(iatom)%x, der%mesh, geo, rho)
+        end if
+
+        ! cmplxscl: density is the ion density, and this we do not care
+        ! about for the moment.
 
         if(present(density)) then
           forall(ip = 1:der%mesh%np) density(ip) = density(ip) + rho(ip)
         else
 
           SAFE_ALLOCATE(vl(1:der%mesh%np))
+          if (cmplxscl) then
+            SAFE_ALLOCATE(Imvl(1:der%mesh%np))
+          end if
           
           if(poisson_solver_is_iterative(ep%poisson_solver)) then
             ! vl has to be initialized before entering routine
             ! and our best guess for the potential is zero
             vl(1:der%mesh%np) = M_ZERO
+            if (cmplxscl) Imvl(1:der%mesh%np) = M_ZERO
           end if
 
           call dpoisson_solve(ep%poisson_solver, vl, rho, all_nodes = .false.)
-          
+          if (cmplxscl) then
+             call dpoisson_solve(ep%poisson_solver, Imvl, Imrho, all_nodes = .false.)
+             print*, 'Imvl', Imvl(1:10)
+          end if
+          print*, '       vl', vl(1:10)
         end if
 
         count_atoms=iatom
 
+        ! cmplxscl: we won't be caring about whatever POISSON_SETE is
+        
         if (poisson_get_solver(ep%poisson_solver) == POISSON_SETE) then  !SEC
           write(68,*) "Calling rhonuc iatom", iatom
           rho_nuc(1:der%mesh%np) = rho_nuc(1:der%mesh%np) + rho(1:der%mesh%np)
@@ -734,7 +761,7 @@ contains
       else
 
         SAFE_ALLOCATE(vl(1:der%mesh%np))
-        if(present(Imvpsl)) then !cmplxscl
+        if(cmplxscl) then
           SAFE_ALLOCATE(Imvl(1:der%mesh%np))
           call species_get_local(geo%atom(iatom)%spec, der%mesh, geo%atom(iatom)%x(1:der%mesh%sb%dim), vl, Imvl)
         else
@@ -745,7 +772,7 @@ contains
       if(allocated(vl)) then
         forall(ip = 1:der%mesh%np) vpsl(ip) = vpsl(ip) + vl(ip)
         SAFE_DEALLOCATE_A(vl)
-        if(allocated(Imvl) ) then !cmplxscl
+        if(cmplxscl) then
           forall(ip = 1:der%mesh%np) Imvpsl(ip) = Imvpsl(ip) + Imvl(ip)
           SAFE_DEALLOCATE_A(Imvl)
         end if
@@ -777,6 +804,7 @@ contains
       call species_get_nlcc(geo%atom(iatom)%spec, geo%atom(iatom)%x, der%mesh, geo, rho)
       forall(ip = 1:der%mesh%np) rho_core(ip) = rho_core(ip) + rho(ip)
       SAFE_DEALLOCATE_A(rho)
+      SAFE_DEALLOCATE_A(Imrho)
     end if
 
 
