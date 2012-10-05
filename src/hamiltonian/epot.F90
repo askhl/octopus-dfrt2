@@ -675,16 +675,12 @@ contains
     PUSH_SUB(epot_local_potential)
     call profiling_in(prof, "EPOT_LOCAL")
 
-    cmplxscl = .false.
-    if(present(Imvpsl)) then !cmplxscl
-       cmplxscl = .true.
-    end if
+    cmplxscl = present(Imvpsl)
 
     if(ep%local_potential_precalculated) then
 
       forall(ip = 1:der%mesh%np) vpsl(ip) = vpsl(ip) + ep%local_potential(ip, iatom)
-      cmplxscl = .false.
-      if(cmplxscl) then !cmplxscl
+      if(cmplxscl) then
         forall(ip = 1:der%mesh%np) Imvpsl(ip) = Imvpsl(ip) + ep%Imlocal_potential(ip, iatom)
       end if
     else

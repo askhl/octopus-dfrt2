@@ -923,7 +923,7 @@ subroutine stitch(get_branch, functionvalues, startpoint)
 
   ! Function for getting values of multiple-valued functions.
   ! Each value of the parameter 'branch' corresponds to one such value.
-  interface 
+  interface
      CMPLX function get_branch(x, branch)
        CMPLX :: x
        integer :: branch
@@ -1044,11 +1044,6 @@ contains
     functionvalues(currentlocation(1), currentlocation(2), currentlocation(3)) = v
     prev_value = v
 
-     !if (direction1.lt.3) then
-        !print*, 'dir', direction1
-     !   call newstitch(get_branch, functionvalues, currentlocation, direction1 + 1, currentbranch)
-     !end if
-    
     POP_SUB(newstitch.stitch_single_point)
   end subroutine stitch_single_point
   
@@ -1165,8 +1160,6 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   FLOAT, intent(inout)     :: Imec
   FLOAT, intent(in)        :: cmplxscl_th
 
-  type(mesh_t) :: serialmesh
-
   ! Exchange potential prefactor
   FLOAT, parameter :: Wx = -0.98474502184269641
 
@@ -1174,7 +1167,6 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   FLOAT, parameter :: gamma = 0.031091, alpha1 = 0.21370, beta1 = 7.5957, beta2 = 3.5876, beta3 = 1.6382, beta4 = 0.49294
 
   CMPLX, allocatable   :: zvc_arr(:, :, :), Q0(:, :, :), Q1(:, :, :), dQ1drs(:, :, :), epsc(:, :, :), depsdrs(:, :, :), zrho_local(:), zvxc_local(:)
-  integer, allocatable :: stitch_idx(:)
   CMPLX                :: dimphase, tmp, zex, zec, zex2
   FLOAT                :: scaling_origin(MAX_DIM)
   FLOAT                :: dmin_unused
@@ -1186,8 +1178,6 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   type(cube_function_t) :: cf
 
   PUSH_SUB(zxc_complex_lda)
-  print*, 'zxc_complex_lda start'
-  !N = size(rho, 1)
 
   SAFE_ALLOCATE(zrho_local(1:mesh%np))
   zrho_local(:) = rho(:, 1) + M_zI * Imrho(:, 1)
@@ -1215,29 +1205,16 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
   scaling_origin = M_z0
   
-  !izero = cube%center(1) + cube%rs_n_global(1) * (cube%center(2) - 1 + cube%rs_n_global(2) * (cube%center(3) - 1))
-  
-  !zvx_arr(:) = Wx * (zbufglobal(:) * dimphase)**(M_ONE / M_THREE)
   vxbuf(:, :, :) = Wx * (cf%zRS(:, :, :) * dimphase)**(M_ONE / M_THREE)
   
   call stitch(get_root3_branch, vxbuf, cube%center)
 
-  !if(mesh%sb%dim.ne.1) then
-  !   call stitch_convex(mesh, get_root3_branch, zvx_arr, izero)
-  !else
-  !   call stitch(get_root3_branch, zvx_arr, izero, stitch_idx)
-  !end if
-
-  !zex = M_THREE / M_FOUR * sum(zvx_arr(:) * zbufglobal(:)) * mesh%volume_element
   zex = M_THREE / M_FOUR * sum(vxbuf(:, :, :) * cf%zRS(:, :, :)) * mesh%volume_element
 
   ! Right.  Next is correlation which is much more complicated.  We
   ! use the PW91 parametrization.  We have to stitch the square root
   ! of the Wigner-Seitz radius and also the logarithm.
   
-  !rootrs(:) = (M_THREE / (M_FOUR * M_PI * zbufglobal(:) * dimphase))**(M_ONE / M_SIX)
-
-
   ! add a tiny arbitrary number so we don't get NaN when the density is zero
   rootrs(:, :, :) = (M_THREE / (1e-20 + M_FOUR * M_PI * (cf%zRS(:, :, :)) * dimphase))**(M_ONE / M_SIX)
 
@@ -1268,6 +1245,8 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   ! okay, now we write the potential back into cf and distribute that
   cf%zRS(:, :, :) = vxbuf(:, :, :) + zvc_arr(:, :, :)
   call zcube_to_mesh(cube, cf, mesh, zvxc_local, .true.)
+  call zcube_function_free_rs(cube, cf)
+  call cube_end(cube)
 
   vxc(:, 1) = real(zvxc_local(:))
   Imvxc(:, 1) = aimag(zvxc_local(:))
@@ -1276,18 +1255,13 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   SAFE_DEALLOCATE_A(rootrs)
 
   SAFE_DEALLOCATE_A(zrho_local)
-  !SAFE_DEALLOCATE_A(zbufglobal)
   SAFE_DEALLOCATE_A(zvxc_local)
-  !SAFE_DEALLOCATE_A(zvx_arr)
   SAFE_DEALLOCATE_A(zvc_arr)
-  SAFE_DEALLOCATE_A(rootrs)
   SAFE_DEALLOCATE_A(Q0)
   SAFE_DEALLOCATE_A(Q1)
   SAFE_DEALLOCATE_A(dQ1drs)
   SAFE_DEALLOCATE_A(epsc)
   SAFE_DEALLOCATE_A(depsdrs)
-  SAFE_DEALLOCATE_A(stitch_idx)
-  print*, 'zxc_complex_lda end'
 
   POP_SUB(zxc_complex_lda)
 end subroutine zxc_complex_lda
@@ -1325,7 +1299,7 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
 
   PUSH_SUB(zxc_get_vxc)
 
-  print *, "LDA calc energy exc"
+  !print *, "LDA calc energy exc"
   ASSERT(present(ex) .eqv. present(ec))
   calc_energy = present(ex)
 
