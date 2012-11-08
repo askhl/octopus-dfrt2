@@ -1322,6 +1322,7 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
     ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
     ! we keep it here for debug purposes
     if(.false.) then
+      print*, 'half hartree exchange'
       SAFE_ALLOCATE(zpot(1:size(vxc,1)))
       SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
 

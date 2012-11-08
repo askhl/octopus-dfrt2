@@ -500,7 +500,7 @@ contains
         if(.not. cmplxscl) then
           call dpoisson_solve_start(ks%hartree_solver, ks%calc%total_density)
         else
-          call zpoisson_solve_start(ks%hartree_solver, ks%calc%total_density + M_zI * ks%calc%total_density)          
+          call zpoisson_solve_start(ks%hartree_solver, ks%calc%total_density + M_zI * ks%calc%Imtotal_density)
         end if
       end if
 

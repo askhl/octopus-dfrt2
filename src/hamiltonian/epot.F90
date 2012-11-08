@@ -721,9 +721,7 @@ contains
           call dpoisson_solve(ep%poisson_solver, vl, rho, all_nodes = .false.)
           if (cmplxscl) then
              call dpoisson_solve(ep%poisson_solver, Imvl, Imrho, all_nodes = .false.)
-             print*, 'Imvl', Imvl(1:10)
           end if
-          print*, '       vl', vl(1:10)
         end if
 
         count_atoms=iatom
