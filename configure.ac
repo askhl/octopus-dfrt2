@@ -432,7 +432,8 @@ AC_CONFIG_FILES([Makefile
   testsuite/optimal_control/Makefile
   testsuite/open_systems/Makefile
   testsuite/periodic_systems/Makefile
-  testsuite/photo_electron/Makefile])
+  testsuite/photo_electron/Makefile
+  testsuite/complex_scaling/Makefile])
 AC_CONFIG_FILES([testsuite/oct-run_testsuite], [chmod +x testsuite/oct-run_testsuite])
 
 AC_OUTPUT

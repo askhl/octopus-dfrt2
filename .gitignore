@@ -10,7 +10,8 @@ aclocal.m4
 *.o
 *.svn
 *.mod
-Makefile*
+Makefile
+Makefile.in
 *.a
 *.f90
 config*
