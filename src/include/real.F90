@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: real.F90 8962 2012-04-02 01:35:36Z xavier $
+!! $Id: real.F90 9298 2012-09-01 15:49:41Z xavier $
 
 #define R_TREAL     1
 
@@ -24,6 +24,7 @@
 #define R_DOUBLE    real(8)
 #define R_MPITYPE   MPI_FLOAT
 #define R_TYPE_VAL  TYPE_FLOAT
+#define R_TYPE_CL   'RTYPE_DOUBLE'
 #define R_TOTYPE(x) real(x, REAL_PRECISION)
 #define R_TOPREC(x) real(x, REAL_PRECISION)
 

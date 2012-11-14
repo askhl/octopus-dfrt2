@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states.F90 9138 2012-06-20 21:09:40Z umberto $
+!! $Id: states.F90 9290 2012-08-31 13:56:41Z xavier $
 
 #include "global.h"
 
@@ -27,6 +27,7 @@ module states_m
 #endif
   use comm_m
   use batch_m
+  use batch_ops_m
   use blas_m
   use datasets_m
   use derivatives_m

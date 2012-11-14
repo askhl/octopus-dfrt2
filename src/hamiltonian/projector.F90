@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: projector.F90 8912 2012-03-12 17:20:03Z jrfsousa $
+!! $Id: projector.F90 9318 2012-09-04 22:37:48Z dstrubbe $
 
 #include "global.h"
 
@@ -270,7 +270,7 @@ contains
         if(ll == p%lloc) cycle
         do mm = -ll, ll
           call hgh_projector_null(p%hgh_p(ll, mm))
-          call hgh_projector_init(p%hgh_p(ll, mm), p%sphere, gr, a, ll, mm, so_strength)
+          call hgh_projector_init(p%hgh_p(ll, mm), p%sphere, a, ll, mm, so_strength)
         end do
       end do
 

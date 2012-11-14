@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: v_ks.F90 9204 2012-07-18 16:55:23Z helbig $
+!! $Id: v_ks.F90 9320 2012-09-05 00:55:33Z xavier $
 
 #include "global.h"
  
@@ -631,11 +631,11 @@ contains
             ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc, vtau = ks%calc%vtau)
         else
           if(.not. cmplxscl) then
-          call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-            st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-            ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
-          else
             call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+              ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
+          else
+            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, &
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
               ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, & 
               Imrho = ks%calc%Imdensity, Imex = energy%Imexchange, Imec = energy%Imcorrelation, &
@@ -654,7 +654,7 @@ contains
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
               vxc = ks%calc%vxc)
           else
-            call xc_get_vxc(ks%gr%fine%der, ks%xc, &
+            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, &
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
               vxc = ks%calc%vxc, Imrho = ks%calc%Imdensity, Imvxc = ks%calc%Imvxc,&
               cmplxscl_th = hm%cmplxscl_th )
@@ -684,7 +684,7 @@ contains
         else
            call xc_ks_inversion_calc(ks%ks_inversion, ks%gr, hm, st, &
              energy%exchange, energy%correlation, vxc = ks%calc%vxc)
-        end if
+         end if
 
         endif
       end if
@@ -1074,7 +1074,7 @@ contains
 
     if (ks%calc%calc_energy .and. poisson_get_solver(ks%hartree_solver) == POISSON_SETE) then !SEC
       hm%energy%hartree = hm%energy%hartree + poisson_energy(ks%hartree_solver)
-      ASSERT(.not. hm%cmplxscl) ! Don't know how to proceed here with cmplxscl
+      ASSERT(.not. hm%cmplxscl) ! Don`t know how to proceed here with cmplxscl
       ! can not find any reference to unit 89 anywhere else in the code forgotten debug write?
       !write(89,*) hm%energy%hartree*CNST(2.0)*CNST(13.60569193), &
       !  poisson_energy(ks%hartree_solver)*CNST(2.0)*CNST(13.60569193), &

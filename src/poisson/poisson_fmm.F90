@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson_fmm.F90 9212 2012-07-20 14:31:28Z joseba $
+!! $Id: poisson_fmm.F90 9268 2012-08-27 21:08:59Z dstrubbe $
 
 #include "global.h"
 #ifdef HAVE_LIBFM
@@ -54,12 +54,11 @@ module poisson_fmm_m
 
 #ifdef HAVE_LIBFM
   use fcs_module
+  use iso_fortran_env
 #else
 #define fcs_integer_kind_isoc 4
 #endif
-  use iso_fortran_env
-  use iso_c_binding
-    
+
   implicit none
 
   private

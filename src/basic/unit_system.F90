@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: unit_system.F90 8829 2012-01-31 17:28:45Z joseba $
+!! $Id: unit_system.F90 9241 2012-08-22 03:04:36Z dstrubbe $
 
 
 
@@ -93,7 +93,7 @@ contains
     !% Atomic units seem to be the preferred system in the atomic and
     !% molecular physics community. Internally, the code works in
     !% atomic units. However, for input or output, some people like
-    !% to use a system based in eV for energies and <math>\AA</math>
+    !% to use a system based on eV for energies and <math>\AA</math>
     !% for length. The default is atomic units.
     !%
     !% Normally time units are derived from energy and length units,

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: grid.F90 8766 2012-01-12 12:20:39Z micael $
+!! $Id: grid.F90 9313 2012-09-04 21:43:23Z dstrubbe $
 
 #include "global.h"
 
@@ -86,7 +86,7 @@ contains
 
     PUSH_SUB(grid_init_stage_0)
 
-    call ob_grid_init(gr%ob_grid, geo)
+    call ob_grid_init(gr%ob_grid)
     if(gr%ob_grid%open_boundaries) then
       call simul_box_init(gr%sb, geo, space, gr%ob_grid%transport_mode, &
         gr%ob_grid%lead(:)%sb, gr%ob_grid%lead(:)%info)

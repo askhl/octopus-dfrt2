@@ -15,13 +15,12 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: lasers_inc.F90 8806 2012-01-25 15:04:23Z joseba $
+!! $Id: lasers_inc.F90 9318 2012-09-04 22:37:48Z dstrubbe $
 
 ! ---------------------------------------------------------
-subroutine X(vlaser_operator_quadratic) (laser, der, std, psi, hpsi)
+subroutine X(vlaser_operator_quadratic) (laser, der, psi, hpsi)
   type(laser_t),       intent(in)    :: laser
   type(derivatives_t), intent(in)    :: der
-  type(states_dim_t),  intent(in)    :: std
   R_TYPE,              intent(inout) :: psi(:,:)  !< psi(der%mesh%np_part, h%d%dim)
   R_TYPE,              intent(inout) :: hpsi(:,:) !< hpsi(der%mesh%np_part, h%d%dim)
 

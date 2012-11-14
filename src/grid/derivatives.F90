@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: derivatives.F90 8977 2012-04-04 11:44:37Z umberto $
+!! $Id: derivatives.F90 9287 2012-08-30 18:33:53Z xavier $
 
 #include "global.h"
 
@@ -105,6 +105,7 @@ module derivatives_m
 
     FLOAT                 :: masses(MAX_DIM)     !< we can have different weights (masses) per space direction
 
+    integer               :: np_zero_bc
     logical               :: zero_bc
     logical               :: periodic_bc
 
@@ -427,10 +428,15 @@ contains
     ! need non-constant weights for curvilinear and scattering meshes
     if(mesh%use_curvilinear) const_w_ = .false.
 
+    der%np_zero_bc = 0
+
     ! build operators
     do i = 1, der%dim+1
       call nl_operator_build(mesh, der%op(i), der%mesh%np, const_w = const_w_, cmplx_op = cmplx_op_)
+      der%np_zero_bc = max(der%np_zero_bc, nl_operator_np_zero_bc(der%op(i)))
     end do
+
+    ASSERT(der%np_zero_bc > mesh%np .and. der%np_zero_bc <= mesh%np_part)
 
     select case(der%stencil_type)
 
@@ -579,7 +585,7 @@ contains
     integer,                intent(in)    :: n
     FLOAT,                  intent(inout) :: rhs(:,:)
     type(nl_operator_t),    intent(inout) :: op(:)
-    character*32,           intent(in)    :: name
+    character(len=32),      intent(in)    :: name
 
     integer :: p, p_max, i, j, k, pow_max
     FLOAT   :: x(MAX_DIM)

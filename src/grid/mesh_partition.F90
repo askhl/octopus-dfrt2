@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_partition.F90 9178 2012-07-04 14:32:16Z micael $
+!! $Id: mesh_partition.F90 9313 2012-09-04 21:43:23Z dstrubbe $
 
 #include "global.h"
 
@@ -94,8 +94,7 @@ contains
 #endif
 
     type(stencil_t) :: stencil
-    integer :: ip
-    integer :: im, ii, nn
+    integer :: ip, ii
     integer :: stencil_to_use, default_method, method
     integer :: library
     integer, parameter   :: METIS = 2, ZOLTAN = 3, GA = 4, PFFT_PART = 5

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: scf.F90 9160 2012-06-23 20:38:20Z xavier $
+!! $Id: scf.F90 9307 2012-09-04 17:07:44Z dstrubbe $
 
 #include "global.h"
 
@@ -923,7 +923,7 @@ contains
         write(iunit, '(1x)')
 
         if(cmplxscl .and. hm%energy%Imtotal < M_ZERO) then
-          write(message(1), '(3a,es18.6), ')'Lifetime [',trim(units_abbrev(units_out%time)), '] = ', & 
+          write(message(1), '(3a,es18.6)') 'Lifetime [', trim(units_abbrev(units_out%time)), '] = ', & 
             units_from_atomic(units_out%time, - M_ONE/(M_TWO * hm%energy%Imtotal))
           call messages_info(1, iunit)
         end if

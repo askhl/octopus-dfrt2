@@ -52,7 +52,7 @@ AC_DEFUN([ACX_AVX],
 [AC_MSG_CHECKING([whether AVX instructions can be used])
 acx_save_CFLAGS="$CFLAGS"
 CFLAGS="$CFLAGS"
-AC_RUN_IFELSE([AC_LANG_PROGRAM( [
+AC_RUN_IFELSE([AC_LANG_PROGRAM([
 #include <immintrin.h>
 ], [
 changequote(,)
@@ -66,7 +66,7 @@ _mm256_storeu_pd(d, a);
 printf("",  *d);
 changequote([, ])
  ])], 
- [acx_m256d=yes], [acx_m256d=no], [cross compiling; assumed OK... $ac_c])
+ [acx_m256d=yes], [acx_m256d=no], [acx_m256d=no;echo -n "cross-compiling; assuming... "])
 CFLAGS="$acx_save_CFLAGS"
 AC_MSG_RESULT($acx_m256d)])
 
@@ -84,9 +84,9 @@ __m128d a __attribute__((aligned(16)));
 __m128d b __attribute__((aligned(16)));
 __m128d c __attribute__((aligned(16)));
 __m128d d __attribute__((aligned(16)));
-d =  _mm_macc_pd(a, b, c);
+d = (__m128d) _mm_macc_pd(a, b, c);
  ])], 
- [acx_fma4=yes], [acx_fma4=no], [cross compiling; assumed OK... $ac_c])
+ [acx_fma4=yes], [acx_fma4=no], [acx_fma4=no;echo -n "cross-compiling; assuming... "])
 CFLAGS="$acx_save_CFLAGS"
 AC_MSG_RESULT($acx_fma4)])
 
@@ -118,11 +118,11 @@ blue_gene=no
 
 case "${host}" in
 ##########################################
-x86_64*)
+x86_64*|*apple-darwin*) #workaround for a bug in autoconf/OS X
 
 oct_arch=x86_64
 assembler=no
-AC_DEFINE(OCT_ARCH_X86_64, 1, [This an x86_64 system])
+AC_DEFINE(OCT_ARCH_X86_64, 1, [This is an x86_64 system])
 
 #SSE2
 ACX_M128D
@@ -130,29 +130,44 @@ vector=$acx_m128d
 vector_type="(sse2)"
 
 #FMA4
-ACX_FMA4 
-if test x$acx_fma4 = xyes ; then
- AC_DEFINE(HAVE_FMA4, 1, [compiler and hardware supports the FMA4 instructions])
+AC_ARG_ENABLE(fma4, AS_HELP_STRING([--enable-fma4], [Enable the use of FMA4 vectorial instructions (x86_64)]), 
+	[ac_enable_fma4=${enableval}])
+if test "x$vector" = "xno" ; then
+ ac_enable_fma4=no
+fi
+if test "x$ac_enable_fma4" = "x" ; then
+  ACX_FMA4
+elif test "x$ac_enable_fma4" = "xyes" ; then
+  AC_MSG_NOTICE([FMA4 instruction support enabled])
+  acx_fma4=yes
+else # no
+  AC_MSG_NOTICE([FMA4 instruction support disabled])
+  acx_fma4=no
+fi
+if test "x$acx_fma4" = "xyes" ; then
+  AC_DEFINE(HAVE_FMA4, 1, [compiler and hardware supports the FMA4 instructions])
 fi
 
 #AVX
-ac_enable_avx=yes
-AC_ARG_ENABLE(avx, AS_HELP_STRING([--disable-avx], [Disable the use of AVX vectorial instructions (x86_64)]), 
+AC_ARG_ENABLE(avx, AS_HELP_STRING([--enable-avx], [Enable the use of AVX vectorial instructions (x86_64)]), 
 	[ac_enable_avx=${enableval}])
-if test x$vector = xno ; then
+if test "x$vector" = "xno" ; then
  ac_enable_avx=no
 fi
-if test x$ac_enable_avx = xyes ; then
+if test "x$ac_enable_avx" = "x" ; then
   ACX_M256D
-  if test x$acx_m256d = xyes ; then
+  if test "x$acx_m256d" = "xyes" ; then
     ACX_AVX
   fi
-else
+elif test "x$ac_enable_avx" = "xyes" ; then
+  AC_MSG_NOTICE([AVX instruction support enabled])
+  acx_m256d=yes
+else # no
   AC_MSG_NOTICE([AVX instruction support disabled])
   acx_m256d=no
 fi
-if test x$acx_m256d = xyes ; then
-  AC_DEFINE(HAVE_M256D, 1, [compiler supports the m256d type])
+if test "x$acx_m256d" = "xyes" ; then
+  AC_DEFINE(HAVE_M256D, 1, [compiler and hardware support the m256d type and AVX instructions])
   vector=$acx_m256d
   vector_type="(avx)"
 fi
@@ -163,7 +178,7 @@ ACX_M128D
 vector=$acx_m128d
 oct_arch=x86
 vector_type="(sse2)"
-if test x$vector = xyes ; then
+if test "x$vector" = "xyes" ; then
 # We allow explicit disabling of SSE2
 ac_enable_vectors=no
 AC_ARG_ENABLE(vectors, AS_HELP_STRING([--enable-vectors], [Enable the use of vectorial instructions (x86)]), 
@@ -173,32 +188,32 @@ if test x"${ac_enable_vectors}" = x"no"; then
 vector=disabled
 fi
 fi
-AC_DEFINE(OCT_ARCH_X86_64, 1, [This an x86 system])
+AC_DEFINE(OCT_ARCH_X86, 1, [This is an x86 system])
 ;;	
 ##########################################
 ia64*)
 oct_arch=ia64
-AC_DEFINE(OCT_ARCH_IA64, 1, [This an Itanium system])
+AC_DEFINE(OCT_ARCH_IA64, 1, [This is an Itanium system])
 ;;
 ##########################################
 sparc*)
 oct_arch=sparc
-AC_DEFINE(OCT_ARCH_SPARC, 1, [This a Sparc system])
+AC_DEFINE(OCT_ARCH_SPARC, 1, [This is a Sparc system])
 ;;
 ##########################################
 alphaev*)
 oct_arch=alpha
-AC_DEFINE(OCT_ARCH_ALPHA, 1, [This an Alpha system])
+AC_DEFINE(OCT_ARCH_ALPHA, 1, [This is an Alpha system])
 ;;
 ##########################################
 mips*)
 oct_arch=mips
-AC_DEFINE(OCT_ARCH_MIPS, 1, [This a MIPS system])
+AC_DEFINE(OCT_ARCH_MIPS, 1, [This is a MIPS system])
 ;;
 ##########################################
 powerpc*)
 oct_arch=powerpc
-AC_DEFINE(OCT_ARCH_POWERPC, 1, [This a PowerPC system])
+AC_DEFINE(OCT_ARCH_POWERPC, 1, [This is a PowerPC system])
 ACX_BLUE_GENE
 blue_gene=$acx_blue_gene
 vector=$acx_blue_gene
@@ -220,13 +235,13 @@ fi
 
 AC_DEFINE_UNQUOTED(OCT_ARCH, $oct_arch, [The architecture of this system])
 
-AM_CONDITIONAL(COMPILE_VEC, test x$vector = xyes)
+AM_CONDITIONAL(COMPILE_VEC, test "x$vector" = "xyes")
 
-if test x$vector = xyes ; then
+if test "x$vector = xyes" ; then
 AC_DEFINE(HAVE_VEC, 1, [Define to 1 if vectorial routines are to be compiled])
 fi
 
-AC_MSG_NOTICE([ Architecture-specific code:
+AC_MSG_NOTICE([Architecture-specific code:
 ***************************
 This is a $oct_arch processor:
 vectorial code: $vector $vector_type

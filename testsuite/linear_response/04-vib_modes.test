@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 04-vib_modes.test 8333 2011-09-27 17:17:57Z dstrubbe $
+# $Id: 04-vib_modes.test 9313 2012-09-04 21:43:23Z dstrubbe $
 
 Test       : LiH vibrational frequency
 Programs   : octopus; octopus_mpi
@@ -11,6 +11,7 @@ Processors : 4
 Input: 04-vib_modes.01-ground_state.inp
 match ; Total Energy   ; GREP(static/info, 'Total       =', 20) ; -0.76459868
 match ; Eigenvalues    ; GREP(static/info, '1   --', 12)        ; -0.141240
+Precision : 0.00011
 match ; Dipole Moment  ; GREP(static/info, '<z>', 14)           ;  2.24560
 
 Precision : 0.002

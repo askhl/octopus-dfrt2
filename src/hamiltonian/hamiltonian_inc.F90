@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian_inc.F90 9142 2012-06-20 21:25:03Z umberto $
+!! $Id: hamiltonian_inc.F90 9258 2012-08-25 17:14:47Z xavier $
 
 ! ---------------------------------------------------------
 subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, terms)
@@ -296,11 +296,12 @@ subroutine X(hamiltonian_external)(this, mesh, psib, vpsib)
     call opencl_write_buffer(vext_buff, mesh%np, this%ep%vpsl)
 
     call opencl_set_kernel_arg(kernel_vpsi, 0, 0)
-    call opencl_set_kernel_arg(kernel_vpsi, 1, vext_buff)
-    call opencl_set_kernel_arg(kernel_vpsi, 2, psib%pack%buffer)
-    call opencl_set_kernel_arg(kernel_vpsi, 3, log2(psib%pack%size_real(1)))
-    call opencl_set_kernel_arg(kernel_vpsi, 4, vpsib%pack%buffer)
-    call opencl_set_kernel_arg(kernel_vpsi, 5, log2(vpsib%pack%size_real(1)))
+    call opencl_set_kernel_arg(kernel_vpsi, 1, mesh%np)
+    call opencl_set_kernel_arg(kernel_vpsi, 2, vext_buff)
+    call opencl_set_kernel_arg(kernel_vpsi, 3, psib%pack%buffer)
+    call opencl_set_kernel_arg(kernel_vpsi, 4, log2(psib%pack%size_real(1)))
+    call opencl_set_kernel_arg(kernel_vpsi, 5, vpsib%pack%buffer)
+    call opencl_set_kernel_arg(kernel_vpsi, 6, log2(vpsib%pack%size_real(1)))
     
     iprange = opencl_max_workgroup_size()/psib%pack%size_real(1)
     
@@ -532,71 +533,6 @@ subroutine X(oct_exchange_operator_all) (hm, der, st, hst)
   POP_SUB(X(oct_exchange_operator_all))
 end subroutine X(oct_exchange_operator_all)
 
-
-! ---------------------------------------------------------
-subroutine X(oct_exchange_operator) (hm, der, psi, hpsi, ik)
-  type(hamiltonian_t), intent(in)    :: hm
-  type(derivatives_t), intent(in)    :: der
-  R_TYPE,              intent(in)    :: psi(:, :)
-  R_TYPE,              intent(inout) :: hpsi(:, :)
-  integer,             intent(in)    :: ik
-
-  FLOAT,  allocatable :: rho(:), pot(:)
-  R_TYPE, allocatable :: psi2(:, :)
-  integer :: jst, ip
-
-  PUSH_SUB(X(oct_exchange_operator))
-
-  SAFE_ALLOCATE(rho(1:der%mesh%np))
-  SAFE_ALLOCATE(pot(1:der%mesh%np))
-  SAFE_ALLOCATE(psi2(1:der%mesh%np, 1:hm%d%dim))
-
-  select case(hm%d%ispin)
-  case(UNPOLARIZED)
-    do jst = 1, hm%oct_st%nst
-      pot = M_ZERO
-
-      call states_get_state(hm%oct_st, der%mesh, jst, ik, psi2)
-
-      forall (ip = 1:der%mesh%np)
-        rho(ip) = hm%oct_st%occ(jst, 1)*R_AIMAG(R_CONJ(psi2(ip, 1))*psi(ip, 1))
-      end forall
-
-      call dpoisson_solve(psolver, pot, rho)
-
-      forall(ip = 1:der%mesh%np)
-        hpsi(ip, 1) = hpsi(ip, 1) + M_TWO*M_zI*psi2(ip, 1)*(pot(ip) + hm%oct_fxc(ip, 1, 1)*rho(ip))
-      end forall
-    end do 
-
-  case(SPIN_POLARIZED)
-    do jst = 1, hm%oct_st%nst
-      if(hm%oct_st%occ(jst, ik) <= M_ZERO) cycle
-      pot = M_ZERO
-
-      call states_get_state(hm%oct_st, der%mesh, jst, ik, psi2)
-
-      do ip = 1, der%mesh%np
-        rho(ip) = R_AIMAG(R_CONJ(psi2(ip, 1))*psi(ip, 1))
-      end do
-
-      call dpoisson_solve(psolver, pot, rho)
-
-      do ip = 1, der%mesh%np
-        hpsi(ip, 1) = hpsi(ip, 1) + M_TWO*M_zI*hm%oct_st%occ(ip, ik)*psi2(ip, 1)*pot(ip)
-      end do
-    end do
-
-  case(SPINORS)
-    call messages_not_implemented("Function oct_exchange_operator for spinors")
-  end select
-
-  SAFE_DEALLOCATE_A(rho)
-  SAFE_DEALLOCATE_A(pot)
-  SAFE_DEALLOCATE_A(psi2)
-
-  POP_SUB(X(oct_exchange_operator))
-end subroutine X(oct_exchange_operator)
 
 
 ! ---------------------------------------------------------

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: ground_state.F90 9204 2012-07-18 16:55:23Z helbig $
+!! $Id: ground_state.F90 9261 2012-08-26 19:51:06Z xavier $
 
 #include "global.h"
 
@@ -82,6 +82,7 @@ contains
     call messages_info()
 
     call states_allocate_wfns(sys%st, sys%gr%mesh, alloc_zphi = sys%st%open_boundaries)
+
 #ifdef HAVE_MPI
     ! sometimes a deadlock can occur here (if some nodes can allocate and other cannot)
     call MPI_Barrier(sys%st%dom_st_kpt_mpi_grp%comm, mpi_err)
@@ -142,9 +143,13 @@ contains
       call scf_occ(sys%gr, sys%geo, hm, sys%st,sys)
     endif
 
+    if(sys%st%d%pack_states) call states_pack(sys%st)
+
     call scf_init(scfv, sys%gr, sys%geo, sys%st, hm)
     call scf_run(scfv, sys%gr, sys%geo, sys%st, sys%ks, hm, sys%outp)
     call scf_end(scfv)
+
+    if(sys%st%d%pack_states) call states_unpack(sys%st)
 
     ! clean up
     call states_deallocate_wfns(sys%st)

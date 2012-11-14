@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: undef.F90 8964 2012-04-02 02:08:26Z dstrubbe $
+!! $Id: undef.F90 9306 2012-09-04 16:24:40Z dstrubbe $
 
 #ifdef R_TREAL
 #undef R_TREAL
@@ -35,6 +35,7 @@
 #undef TS
 #undef R_TYPE
 #undef R_TYPE_VAL
+#undef R_TYPE_CL
 #undef R_DOUBLE
 #undef R_SINGLE  
 #undef R_MPITYPE

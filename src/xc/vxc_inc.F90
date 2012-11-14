@@ -15,9 +15,9 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: vxc_inc.F90 9223 2012-08-01 14:39:23Z xavier $
+!! $Id: vxc_inc.F90 9320 2012-09-05 00:55:33Z xavier $
 
-subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
+subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
   type(states_t),       intent(in)    :: st              !< State of the system (wavefunction,eigenvalues...)
@@ -69,8 +69,8 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
   type(xc_functl_t), pointer :: functl(:)
   type(symmetrizer_t) :: symmetrizer
 
-  PUSH_SUB(dxc_get_vxc)
-  call profiling_in(prof, "dXC_LOCAL")
+  PUSH_SUB(xc_get_vxc)
+  call profiling_in(prof, "XC_LOCAL")
 
   ASSERT(present(ex) .eqv. present(ec))
   calc_energy = present(ex)
@@ -103,9 +103,8 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
   mgga = iand(xcs%family, XC_FAMILY_MGGA).ne.0
 
   !Read the spin channels
-  !Index 1 refers to "exchange mode" of type "xc_functl_t". For this purpose using 1 or 2 makes no difference. 
-  spin_channels = functl(1)%spin_channels
-
+  spin_channels = functl(FUNC_X)%spin_channels
+  
   if(xcs%xc_density_correction == LR_X) then
     SAFE_ALLOCATE(vx(1:der%mesh%np))
   end if
@@ -156,7 +155,7 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
       SAFE_DEALLOCATE_A(symmtmp)
     end if
 
-    if(functl(1)%id == XC_MGGA_X_TB09 .and. der%mesh%sb%periodic_dim == 3) then
+    if(functl(FUNC_X)%id == XC_MGGA_X_TB09 .and. der%mesh%sb%periodic_dim == 3) then
       call calc_tb09_c()
     end if
 
@@ -198,7 +197,7 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
     end if
 
     ! Calculate the potential/gradient density in local reference frame.
-    functl_loop: do ixc = 1, 2
+    functl_loop: do ixc = FUNC_X, FUNC_C
 
       if(.not. present(vxc)) then ! get only the xc energy
 
@@ -298,7 +297,7 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
           ib2 = ib2 + 1
         end do
 
-        ! calculate the exchange potential
+        ! calculate the spin unpolarized exchange potential for the long range correction
         if(xcs%xc_density_correction == LR_X .and. &
           (functl(ixc)%type == XC_EXCHANGE .or. functl(ixc)%type == XC_EXCHANGE_CORRELATION)) then
 
@@ -401,7 +400,7 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
   if(gga .or. xcs%xc_density_correction == LR_X) call  gga_end()
   if(mgga) call mgga_end()
 
-  POP_SUB(dxc_get_vxc)
+  POP_SUB(xc_get_vxc)
   call profiling_out(prof)
 
 contains
@@ -709,7 +708,7 @@ contains
     POP_SUB(xc_get_vxc.mgga_process)
   end subroutine mgga_process
 
-end subroutine dxc_get_vxc
+end subroutine xc_get_vxc
 
 ! -----------------------------------------------------
 
@@ -1289,7 +1288,8 @@ end subroutine zxc_complex_lda
 ! This is the complex scaled interface for xc functionals.
 ! It will eventually be merged with the other one dxc_get_vxc after some test
 ! -----------------------------------------------------------------------------
-subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, vtau, Imrho, Imex, Imec, Imvxc, Imvtau, cmplxscl_th)
+subroutine xc_get_vxc_cmplx(der, xcs, st, rho, ispin, ioniz_pot, qtot, &
+  ex, ec, vxc, vtau, Imrho, Imex, Imec, Imvxc, Imvtau, cmplxscl_th)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
   type(states_t),       intent(in)    :: st              !< State of the system (wavefunction,eigenvalues...)
@@ -1315,7 +1315,7 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
   type(xc_functl_t), pointer :: functl(:)
   logical         :: calc_energy
 
-  PUSH_SUB(zxc_get_vxc)
+  PUSH_SUB(xc_get_vxc_cmplx)
 
   !print *, "LDA calc energy exc"
   ASSERT(present(ex) .eqv. present(ec))
@@ -1382,8 +1382,8 @@ subroutine zxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, vxc, v
     call messages_fatal(2)     
   end if
 
-  POP_SUB(zxc_get_vxc)
-end subroutine zxc_get_vxc
+  POP_SUB(xc_get_vxc_cmplx)
+end subroutine xc_get_vxc_cmplx
 
 
 !! Local Variables:

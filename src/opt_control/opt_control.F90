@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: opt_control.F90 9156 2012-06-22 14:01:46Z acastro $
+!! $Id: opt_control.F90 9228 2012-08-07 22:36:09Z acastro $
 
 #include "global.h"
 
@@ -379,6 +379,8 @@ contains
         POP_SUB(opt_control_run.scheme_cg)
         return
       end if
+
+      if(oct%random_initial_guess) call controlfunction_randomize(par)
 
       ! Set the module pointers, so that the direct_opt_calc and direct_opt_write_info routines
       ! can use them.

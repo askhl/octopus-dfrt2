@@ -19,11 +19,7 @@
  $Id: pack.cl 2146 2006-05-23 17:36:00Z xavier $
 */
 
-#ifdef EXT_KHR_FP64
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#elif EXT_AMD_FP64
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#endif
+#include <cl_global.h>
 
 __kernel void complex_to_double(const int np, __global const double2 * __restrict src, __global double * __restrict dest){
   int ip = get_global_id(0);

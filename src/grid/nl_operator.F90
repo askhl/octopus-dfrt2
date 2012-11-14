@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: nl_operator.F90 8805 2012-01-25 12:38:37Z joseba $
+!! $Id: nl_operator.F90 9285 2012-08-30 17:38:23Z xavier $
 
 #include "global.h"
 
@@ -36,6 +36,7 @@ module nl_operator_m
   use messages_m
   use multicomm_m
   use mpi_m
+  use octcl_kernel_m
   use opencl_m
   use par_vec_m
   use parser_m
@@ -69,7 +70,9 @@ module nl_operator_m
     nl_operator_get_index,      &
     nl_operator_write,          &
     nl_operator_update_weights, &
-    nl_operator_op_to_matrix_cmplx
+    nl_operator_op_to_matrix_cmplx, &
+    nl_operator_np_zero_bc,         &
+    nl_operator_compact_boundaries
 
   type nl_operator_index_t
     private
@@ -108,6 +111,7 @@ module nl_operator_m
     type(nl_operator_index_t) :: outer
 
 #ifdef HAVE_OPENCL
+    type(octcl_kernel_t) :: kernel
     type(opencl_mem_t) :: buff_imin
     type(opencl_mem_t) :: buff_imax
     type(opencl_mem_t) :: buff_ri
@@ -132,6 +136,7 @@ module nl_operator_m
   integer, public, parameter :: OP_ALL = 3, OP_INNER = 1, OP_OUTER = 2
 
   logical :: initialized = .false.
+  logical :: compact_boundaries
 
   interface
     integer function op_is_available(opid, type)
@@ -143,25 +148,17 @@ module nl_operator_m
   integer :: zfunction_global = -1
 #ifdef HAVE_OPENCL
   integer :: function_opencl
-  integer :: vecsize_opencl
 #endif
 
   type(profile_t), save :: nl_operate_profile
   type(profile_t), save :: operate_batch_prof
 
-#ifdef HAVE_OPENCL
-  type(cl_kernel), public :: kernel_operate
-#endif
 
 contains
   
   ! ---------------------------------------------------------
   subroutine nl_operator_global_init()
     integer :: default
-#ifdef HAVE_OPENCL
-    type(cl_program) :: prog
-    character(len=20) :: vecsize_flag
-#endif
 
     PUSH_SUB(nl_operator_global_init)
 
@@ -210,50 +207,45 @@ contains
 
       !%Variable OperateOpenCL
       !%Type integer
-      !%Default split
+      !%Default map
       !%Section Execution::Optimization
       !%Description
       !% This variable selects the subroutine used to apply non-local
-      !% operators over the grid when opencl is used. The default is
-      !% split.
+      !% operators over the grid when OpenCL is used.
       !%Option invmap 1
       !% The standard implementation ported to OpenCL.
       !%Option map 2
       !% A different version, more suitable for GPUs.
       !%Option split 3
-      !% This operator uses two different paths, one for points where
+      !% (Experimental) This operator uses two different paths, one for points where
       !% the operator can be applied in blocks and other for single
       !% points.
       !%End
-      call parse_integer(datasets_check('OperateOpenCL'),  OP_MAP_SPLIT, function_opencl)
+      call parse_integer(datasets_check('OperateOpenCL'),  OP_MAP, function_opencl)
 
-      !%Variable OperateOpenCLVecSize
-      !%Type integer
-      !%Default 1
-      !%Section Execution::Optimization
-      !%Description
-      !% Selects the size of vectors for the OpenCL application of
-      !% finite-difference operators. Valid values are 1, 2, 4, 8 and
-      !% 16. The default is 1.
-      !%End
-      call parse_integer(datasets_check('OperateOpenCLVecSize'),  1, vecsize_opencl)
-
-      write(vecsize_flag, '(a,i1)') "-DVECSIZE=", vecsize_opencl
-
-      call opencl_build_program(prog, trim(conf%share)//'/opencl/operate.cl', flags = vecsize_flag)
-      select case(function_opencl)
-      case(OP_MAP)
-        call opencl_create_kernel(kernel_operate, prog, "operate_map")
-      case(OP_MAP_SPLIT)
-        call opencl_create_kernel(kernel_operate, prog, "operate4")
-      case(OP_INVMAP)
-        call opencl_create_kernel(kernel_operate, prog, "operate")
-      end select
-      call opencl_release_program(prog)
-    
+      if(function_opencl == OP_MAP_SPLIT) then
+        call messages_experimental('split non-local operator')
+      end if
     end if
 #endif
 
+    !%Variable NLOperatorCompactBoundaries
+    !%Type logical
+    !%Default no
+    !%Section Execution::Optimization
+    !%Description
+    !% (Experimental) When set to yes, for finite systems Octopus will
+    !% map boundary points for finite-differences operators to a few
+    !% memory locations. This increases performance, however it is
+    !% experimental and has not been thoroughly tested.
+    !%End
+
+    call parse_logical(datasets_check('NLOperatorCompactBoundaries'), .false., compact_boundaries)
+
+    if(compact_boundaries) then
+      call messages_experimental('NLOperatorCompactBoundaries')
+    end if
+      
     POP_SUB(nl_operator_global_init)
   end subroutine nl_operator_global_init
 
@@ -261,12 +253,6 @@ contains
 
   subroutine nl_operator_global_end()
     PUSH_SUB(nl_operator_global_end)
-
-#ifdef HAVE_OPENCL
-    if(opencl_is_enabled()) then
-      call opencl_release_kernel(kernel_operate)
-    end if
-#endif
 
     POP_SUB(nl_operator_global_end)
   end subroutine nl_operator_global_end
@@ -364,6 +350,7 @@ contains
     integer :: ir, maxp, iinner, iouter
 #endif
     logical :: change, force_change, iter_done
+    character(len=20) :: flags
 
     PUSH_SUB(nl_operator_build)
 
@@ -389,15 +376,19 @@ contains
       if (op%cmplx_op) then
         SAFE_ALLOCATE(op%w_im(1:op%stencil%size, 1:1))
       end if
-      message(1) = 'Info: nl_operator_build: working with constant weights.'
-      if(in_debug_mode) call messages_info(1)
+      if(in_debug_mode) then
+        message(1) = 'Info: nl_operator_build: working with constant weights.'
+        call messages_info(1)
+      end if
     else
       SAFE_ALLOCATE(op%w_re(1:op%stencil%size, 1:op%np))
       if (op%cmplx_op) then
         SAFE_ALLOCATE(op%w_im(1:op%stencil%size, 1:op%np))
       end if
-      message(1) = 'Info: nl_operator_build: working with non-constant weights.'
-      if(in_debug_mode) call messages_info(1)
+      if(in_debug_mode) then
+        message(1) = 'Info: nl_operator_build: working with non-constant weights.'
+        call messages_info(1)
+      end if
     end if
 
     ! set initially to zero
@@ -442,7 +433,7 @@ contains
           ! points to reduce memory accesses. We cannot do this for the
           ! first point, since it is used to build the weights, so it
           ! has to have the positions right
-          if(ii > 1 .and. mesh_compact_boundaries(mesh)) then
+          if(ii > 1 .and. compact_boundaries .and. mesh_compact_boundaries(mesh)) then
             st1(jj) = min(st1(jj), mesh%np + 1)
           end if
           ASSERT(st1(jj) > 0)
@@ -456,7 +447,7 @@ contains
         !have boundary points as neighbours to one that has
         force_change = any(st1 + ii > mesh%np) .and. all(st2 + ii - 1 <= mesh%np) 
 
-        if(change .and. mesh_compact_boundaries(mesh)) then 
+        if(change .and. compact_boundaries .and. mesh_compact_boundaries(mesh)) then 
           !try to repair it by changing the boundary points
           do jj = 1, op%stencil%size
             if(st1(jj) + ii > mesh%np .and. st2(jj) + ii - 1 > mesh%np .and. st2(jj) + ii <= mesh%np_part) then
@@ -528,6 +519,7 @@ contains
       op%n4 = op%n4 + nn/4
       op%n1 = op%n1 + mod(nn, 4)
     end do
+
 
     SAFE_ALLOCATE(op%map_split(1:2, 1:op%n1 + op%n4))
 
@@ -624,6 +616,19 @@ contains
 
 #ifdef HAVE_OPENCL
     if(opencl_is_enabled() .and. op%const_w) then
+
+      write(flags, '(i5)') op%stencil%size
+      flags='-DSTENCIL_SIZE='//trim(adjustl(flags))
+
+      select case(function_opencl)
+      case(OP_MAP)
+        call octcl_kernel_build(op%kernel, 'operate.cl', 'operate_map', flags)
+      case(OP_MAP_SPLIT)
+        call octcl_kernel_build(op%kernel, 'operate.cl', 'operate4', flags)
+      case(OP_INVMAP)
+        call octcl_kernel_build(op%kernel, 'operate.cl', 'operate', flags)
+      end select
+
       call opencl_create_buffer(op%buff_ri, CL_MEM_READ_ONLY, TYPE_INTEGER, op%nri*op%stencil%size)
       call opencl_write_buffer(op%buff_ri, op%nri*op%stencil%size, op%ri)
 
@@ -1302,6 +1307,7 @@ contains
 
 #ifdef HAVE_OPENCL
     if(opencl_is_enabled() .and. op%const_w) then
+
       call opencl_release_buffer(op%buff_ri)
       select case(function_opencl)
       case(OP_INVMAP)
@@ -1349,6 +1355,30 @@ contains
     
     res = ip + op%ri(is, op%rimap(ip))
   end function nl_operator_get_index
+
+  ! ---------------------------------------------------------
+  
+  integer pure function nl_operator_np_zero_bc(op) result(np_bc)
+    type(nl_operator_t), intent(in)   :: op
+
+    integer :: jj, ii
+
+    np_bc = 0
+    do jj = 1, op%nri
+      ii = op%rimap_inv(jj + 1) + maxval(op%ri(1:op%stencil%size, jj))
+      np_bc = max(np_bc, ii)
+    end do
+
+  end function nl_operator_np_zero_bc
+
+  ! ------------------------------------------------------
+
+  logical pure function nl_operator_compact_boundaries(op)
+    type(nl_operator_t), intent(in)   :: op
+
+    nl_operator_compact_boundaries = compact_boundaries
+  end function nl_operator_compact_boundaries
+
 
 #include "undef.F90"
 #include "real.F90"

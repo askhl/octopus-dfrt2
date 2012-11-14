@@ -19,30 +19,16 @@
  $Id: pack.cl 2146 2006-05-23 17:36:00Z xavier $
 */
 
-#ifdef EXT_KHR_FP64
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#elif EXT_AMD_FP64
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#endif
+#include <cl_global.h>
+#include <cl_complex.h>
+#include <cl_rtype.h>
 
-inline double2 complex_mul(const double2 a, const double2 b){
-  return (double2) (a.x*b.x - a.y*b.y, a.y*b.x + a.x*b.y);
-}
-
-__kernel void dzmul(const int np,
-		    __global double const * restrict op,
-		    __global double2 * restrict ff){
+__kernel void X(zmul)(const int np,
+		      __global rtype const * restrict op,
+		      __global double2 * restrict ff){
   
   const int ip = get_global_id(0);
-  if(ip < np) ff[ip] = op[ip]*ff[ip];
-}
-
-__kernel void zzmul(const int np,
-		    __global double2 const * restrict op,
-		    __global double2 * restrict ff){
-  
-  const int ip = get_global_id(0);
-  if(ip < np) ff[ip] = complex_mul(op[ip], ff[ip]);
+  if(ip < np) ff[ip] = MUL(op[ip], ff[ip]);
 }
 
 /*

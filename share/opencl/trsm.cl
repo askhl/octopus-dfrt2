@@ -19,24 +19,8 @@
  $Id: pack.cl 2146 2006-05-23 17:36:00Z xavier $
 */
 
-#ifdef EXT_KHR_FP64
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#elif EXT_AMD_FP64
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#endif
-
-inline double2 complex_mul(const double2 a, const double2 b){
-  return (double2) (a.x*b.x - a.y*b.y, a.y*b.x + a.x*b.y);
-}
-
-inline double2 complex_conj_mul(const double2 a, const double2 b){
-  return (double2) (a.x*b.x + a.y*b.y, a.y*b.x - a.x*b.y);
-}
-
-inline double2 complex_div(const double2 a, const double2 b){
-  double2 c = b*b;
-  return complex_conj_mul(a, b)/(c.x + c.y);
-}
+#include <cl_global.h>
+#include <cl_complex.h>
 
 __kernel void dtrsm(const int nst,
 		    __global double const * restrict ss, const int ldss,

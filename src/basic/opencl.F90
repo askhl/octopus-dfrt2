@@ -103,7 +103,6 @@ module opencl_m
   type(cl_kernel), public :: kernel_copy
   type(cl_kernel), public :: kernel_projector_bra
   type(cl_kernel), public :: kernel_projector_ket
-  type(cl_kernel), public :: kernel_projector_ket_copy
   type(cl_kernel), public :: dpack
   type(cl_kernel), public :: zpack
   type(cl_kernel), public :: dunpack
@@ -195,6 +194,7 @@ module opencl_m
       type(cl_program) :: prog
       type(cl_platform_id), allocatable :: allplatforms(:)
       type(cl_device_id), allocatable :: alldevices(:)
+      type(profile_t), save :: prof_init
 #endif
 
       PUSH_SUB(opencl_init)
@@ -277,7 +277,8 @@ module opencl_m
       call messages_print_stress(stdout, "OpenCL")
 
 #ifdef HAVE_OPENCL
-
+      call profiling_in(prof_init, 'CL_INIT')
+      
       call clGetPlatformIDs(nplatforms, cl_status)
       if(cl_status /= CL_SUCCESS) call opencl_print_error(cl_status, "GetPlatformIDs")
  
@@ -412,15 +413,17 @@ module opencl_m
       call opencl_create_kernel(kernel_vpsi_spinors, prog, "vpsi_spinors")
       call opencl_release_program(prog)
       
-      call opencl_build_program(prog, trim(conf%share)//'/opencl/axpy.cl')
+      call opencl_build_program(prog, trim(conf%share)//'/opencl/axpy.cl', flags = '-DRTYPE_DOUBLE')
       call opencl_create_kernel(kernel_daxpy, prog, "daxpy")
+      call opencl_release_program(prog)
+
+      call opencl_build_program(prog, trim(conf%share)//'/opencl/axpy.cl', flags = '-DRTYPE_COMPLEX')
       call opencl_create_kernel(kernel_zaxpy, prog, "zaxpy")
       call opencl_release_program(prog)
 
       call opencl_build_program(prog, trim(conf%share)//'/opencl/projector.cl')
       call opencl_create_kernel(kernel_projector_bra, prog, "projector_bra")
       call opencl_create_kernel(kernel_projector_ket, prog, "projector_ket")
-      call opencl_create_kernel(kernel_projector_ket_copy, prog, "projector_ket_copy")
       call opencl_release_program(prog)
 
       call opencl_build_program(prog, trim(conf%share)//'/opencl/pack.cl')
@@ -456,12 +459,13 @@ module opencl_m
       call opencl_create_kernel(kernel_nrm2_vector, prog, "nrm2_vector")
       call opencl_release_program(prog)
 
-      call opencl_build_program(prog, trim(conf%share)//'/opencl/mul.cl')
+      call opencl_build_program(prog, trim(conf%share)//'/opencl/mul.cl', flags = '-DRTYPE_DOUBLE')
       call opencl_create_kernel(dzmul, prog, "dzmul")
+      call opencl_release_program(prog)
+
+      call opencl_build_program(prog, trim(conf%share)//'/opencl/mul.cl', flags = '-DRTYPE_COMPLEX')
       call opencl_create_kernel(zzmul, prog, "zzmul")
       call opencl_release_program(prog)
-#endif
-      call messages_print_stress(stdout)
 
 #ifdef HAVE_CLAMDBLAS
       call clAmdBlasSetup(cl_status)
@@ -472,6 +476,11 @@ module opencl_m
       call clAmdFftSetup(cl_status)
       if(cl_status /= CLFFT_SUCCESS) call clfft_print_error(cl_status, 'clAmdFftSetup')
 #endif
+
+      call profiling_out(prof_init)
+#endif
+
+      call messages_print_stress(stdout)
 
       POP_SUB(opencl_init)
 
@@ -631,7 +640,6 @@ module opencl_m
         call opencl_release_kernel(kernel_copy)
         call opencl_release_kernel(kernel_projector_bra)
         call opencl_release_kernel(kernel_projector_ket)
-        call opencl_release_kernel(kernel_projector_ket_copy)
         call opencl_release_kernel(dpack)
         call opencl_release_kernel(zpack)
         call opencl_release_kernel(dunpack)
@@ -884,22 +892,31 @@ module opencl_m
       close(unit = iunit)
       call io_free(iunit)
 
-      call messages_write('Building CL program '//trim(filename)//'.')
+      call messages_write("Building CL program '"//trim(filename)//"'.")
       call messages_info()
 
       prog = clCreateProgramWithSource(opencl%context, string, ierr)
       if(ierr /= CL_SUCCESS) call opencl_print_error(ierr, "clCreateProgramWithSource")
 
       ! build the compilation flags
-      string=''
+      string='-w'
+      ! full optimization
+      string=trim(string)//' -cl-denorms-are-zero'
+      string=trim(string)//' -cl-strict-aliasing'
+      string=trim(string)//' -cl-mad-enable'
+      string=trim(string)//' -cl-unsafe-math-optimizations'
+      string=trim(string)//' -cl-finite-math-only'
+      string=trim(string)//' -cl-fast-relaxed-math'
 
+      string=trim(string)//' -I'//trim(conf%share)//'/opencl/'
+      
       if (f90_cl_device_has_extension(opencl%device, "cl_amd_fp64")) then
-        string = trim(string)//'-DEXT_AMD_FP64'
+        string = trim(string)//' -DEXT_AMD_FP64'
       else if(f90_cl_device_has_extension(opencl%device, "cl_khr_fp64")) then
-        string = trim(string)//'-DEXT_KHR_FP64 -cl-mad-enable'
+        string = trim(string)//' -DEXT_KHR_FP64'
       else
-        message(1) = 'Octopus requires an OpenCL device with double-precision support.' 
-        call messages_fatal(1)
+        call messages_write('Octopus requires an OpenCL device with double-precision support.')
+        call messages_fatal()
       end if
 
       if(present(flags)) then

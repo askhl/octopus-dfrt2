@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh.F90 8533 2011-11-09 10:11:50Z joseba $
+!! $Id: mesh.F90 9312 2012-09-04 21:32:23Z dstrubbe $
 
 #include "global.h"
 
@@ -666,9 +666,6 @@ contains
     logical, intent(in), optional :: is_lead
 
     logical :: is_lead_
-#ifdef HAVE_MPI
-    integer :: ipart
-#endif
 
     PUSH_SUB(mesh_end)
 

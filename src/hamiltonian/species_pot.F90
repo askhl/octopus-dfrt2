@@ -515,11 +515,10 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine species_get_density(spec, pos, mesh, geo, rho, Imrho)
+  subroutine species_get_density(spec, pos, mesh, rho, Imrho)
     type(species_t),            intent(in)  :: spec
     FLOAT,                      intent(in)  :: pos(:)
     type(mesh_t),       target, intent(in)  :: mesh
-    type(geometry_t),           intent(in)  :: geo
     FLOAT,                      intent(out) :: rho(:)
     FLOAT, optional,            intent(out) :: Imrho(:)
 
@@ -755,11 +754,10 @@ contains
   end subroutine func
 
   ! ---------------------------------------------------------
-  subroutine species_get_nlcc(spec, pos, mesh, geo, rho_core)
+  subroutine species_get_nlcc(spec, pos, mesh, rho_core)
     type(species_t),  intent(in)  :: spec
     FLOAT,            intent(in)  :: pos(MAX_DIM)
     type(mesh_t),     intent(in)  :: mesh
-    type(geometry_t), intent(in)  :: geo
     FLOAT,            intent(out) :: rho_core(:)
 
     integer :: icell

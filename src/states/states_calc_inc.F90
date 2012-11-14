@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc_inc.F90 9062 2012-05-09 14:21:00Z umberto $
+!! $Id: states_calc_inc.F90 9260 2012-08-26 19:24:04Z xavier $
 
 
 ! ---------------------------------------------------------
@@ -350,6 +350,7 @@ subroutine X(states_trsm)(st, mesh, ik, ss)
 #ifdef HAVE_OPENCL
   type(octcl_kernel_t), save :: dkernel, zkernel
   type(cl_kernel) :: kernel_ref
+  type(profile_t), save :: prof_copy
 #endif
   type(profile_t), save :: prof
 
@@ -408,7 +409,12 @@ subroutine X(states_trsm)(st, mesh, ik, ss)
     call opencl_create_buffer(psicopy_buffer, CL_MEM_READ_WRITE, R_TYPE_VAL, st%nst*block_size)
 
     call opencl_create_buffer(ss_buffer, CL_MEM_READ_ONLY, R_TYPE_VAL, product(ubound(ss)))
+
+    call profiling_in(prof_copy, 'STATES_TRSM_COPY')
     call opencl_write_buffer(ss_buffer, product(ubound(ss)), ss)
+    call profiling_count_transfers(product(ubound(ss)), ss(1, 1))
+    call opencl_finish()
+    call profiling_out(prof_copy)
 
     do sp = 1, mesh%np, block_size
       size = min(block_size, mesh%np - sp + 1)
@@ -1146,9 +1152,12 @@ subroutine X(states_rotate_in_place)(mesh, st, uu, ik)
   type(opencl_mem_t) :: psinew_buffer, psicopy_buffer, uu_buffer
   integer :: ierr
 #endif
+  type(profile_t), save :: prof
 
   PUSH_SUB(X(states_rotate_in_place))
   
+  call profiling_in(prof, "STATES_ROTATE")
+
   if(associated(st%X(psi)) .and. .not. states_are_packed(st)) then
 
     call batch_init(psib, st%d%dim, 1, st%nst, st%X(psi)(:, :, :, ik))
@@ -1253,7 +1262,8 @@ subroutine X(states_rotate_in_place)(mesh, st, uu, ik)
     call opencl_release_buffer(psinew_buffer)
 #endif
   end if
-    
+
+  call profiling_out(prof)
   POP_SUB(X(states_rotate_in_place))
 end subroutine X(states_rotate_in_place)
 
@@ -1268,9 +1278,12 @@ subroutine X(states_calc_overlap)(st, mesh, ik, overlap, psi2)
   
   integer       :: ib, jb
   type(batch_t) :: psib, psi2b
-  
+  type(profile_t), save :: prof
+
   PUSH_SUB(X(states_calc_overlap))
-  
+
+  call profiling_in(prof, "STATES_OVERLAP")
+
   if(associated(st%X(psi)) .and. .not. states_are_packed(st)) then
 
     call batch_init(psib, st%d%dim, 1, st%nst, st%X(psi)(:, :, :, ik))
@@ -1304,6 +1317,8 @@ subroutine X(states_calc_overlap)(st, mesh, ik, overlap, psi2)
     end do
     
   end if
+
+  call profiling_out(prof)
 
   POP_SUB(X(states_calc_overlap))
 end subroutine X(states_calc_overlap)

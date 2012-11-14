@@ -15,12 +15,13 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian.F90 9204 2012-07-18 16:55:23Z helbig $
+!! $Id: hamiltonian.F90 9290 2012-08-31 13:56:41Z xavier $
 
 #include "global.h"
 
 module hamiltonian_m
   use batch_m
+  use batch_ops_m
   use blas_m
 #ifdef HAVE_OPENCL
   use cl

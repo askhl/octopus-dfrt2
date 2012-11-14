@@ -17,7 +17,7 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 # 02111-1307, USA.
 #
-# $Id: oct-run_regression_test.pl 8933 2012-03-27 20:37:56Z dstrubbe $
+# $Id: oct-run_regression_test.pl 9240 2012-08-22 02:49:50Z dstrubbe $
 
 use Getopt::Std;
 use File::Basename;
@@ -479,7 +479,7 @@ sub run_match_new(){
   }elsif($func eq "GREP") { # function GREP(filename, 're', column <, offset>)
     my $off = 1*$par[3];
     # -a means even if the file is considered binary due to a stray funny character, it will work
-    $pre_command = "grep -a -A$off -m 1 $par[1] $par[0] | awk '(NR==$off+1)'";
+    $pre_command = "grep -a -A$off $par[1] $par[0] | awk '(NR==$off+1)'";
     $pre_command .= " | cut -b $par[2]- | perl -ne '/\\s*([0-9\\-+.eEdD]*)/; print \$1'";
 
   }else{ # error

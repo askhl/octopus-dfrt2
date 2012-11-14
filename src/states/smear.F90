@@ -258,7 +258,7 @@ contains
 
         if(sumq - xx * this%el_per_state <= CNST(1e-10)) then
 
-          ! count how many occuppied states are at the fermi level,
+          ! count how many occupied states are at the fermi level,
           ! this is required later to fill the states
           this%fermi_count = 1
           do
@@ -371,8 +371,6 @@ contains
               occupations(ist, ik) = M_ZERO
             end if
                         
-            print*, ik, ist, xx, occupations(ist, ik)
-
           end do
         end do
       !end if

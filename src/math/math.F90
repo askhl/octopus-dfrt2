@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: math.F90 9136 2012-06-20 20:57:25Z umberto $
+!! $Id: math.F90 9311 2012-09-04 21:10:07Z dstrubbe $
 
 #include "global.h"
 
@@ -1070,7 +1070,7 @@ subroutine generate_rotation_matrix(M, u, v)
   FLOAT,   intent(in)   :: u(:)
   FLOAT,   intent(in)   :: v(:)
 
-  integer            :: dim, ii, jj
+  integer            :: dim, ii
   FLOAT              :: phi
   FLOAT, allocatable :: axis(:), uu(:), vv(:)
 

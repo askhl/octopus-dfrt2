@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: derivatives_inc.F90 8977 2012-04-04 11:44:37Z umberto $
+!! $Id: derivatives_inc.F90 9286 2012-08-30 17:42:05Z xavier $
 
 ! This module calculates the derivatives (gradients, Laplacians, etc.) 
 ! of a function. Note that the function whose derivative is to be calculated
@@ -46,7 +46,7 @@ subroutine X(derivatives_batch_set_bc)(der, ffb)
     bndry_end   = der%mesh%vp%np_local(pp) + der%mesh%vp%np_ghost(pp) + der%mesh%vp%np_bndry(pp)
   else
     bndry_start = der%mesh%np + 1
-    bndry_end   = der%mesh%np_part
+    bndry_end   = der%np_zero_bc
   end if
 
   if(der%zero_bc)         call zero_boundaries()
@@ -72,12 +72,13 @@ contains
     select case(batch_status(ffb))
 #ifdef HAVE_OPENCL
     case(BATCH_CL_PACKED)
+
       call opencl_set_kernel_arg(set_zero_part, 0, bndry_start - 1)
-      call opencl_set_kernel_arg(set_zero_part, 1, bndry_end - 1)
+      call opencl_set_kernel_arg(set_zero_part, 1, bndry_end)
       call opencl_set_kernel_arg(set_zero_part, 2, ffb%pack%buffer)
       call opencl_set_kernel_arg(set_zero_part, 3, log2(ffb%pack%size_real(1)))
 
-      localsize = opencl_max_workgroup_size()/ffb%pack%size_real(1)
+      localsize = opencl_kernel_workgroup_size(set_zero_part)/ffb%pack%size_real(1)
       globalsize = pad(bndry_end - bndry_start + 1, localsize)
       
       call opencl_kernel_run(set_zero_part, (/ffb%pack%size_real(1), globalsize/), (/ffb%pack%size_real(1), localsize/))
@@ -348,19 +349,20 @@ end subroutine X(derivatives_batch_finish)
 
 
 ! ---------------------------------------------------------
-subroutine X(derivatives_batch_perform)(op, der, ff, opff, ghost_update, set_bc)
+subroutine X(derivatives_batch_perform)(op, der, ff, opff, ghost_update, set_bc, factor)
   type(nl_operator_t), intent(in)    :: op
   type(derivatives_t), intent(in)    :: der
   type(batch_t),       intent(inout) :: ff
   type(batch_t),       intent(inout) :: opff
   logical,   optional, intent(in)    :: ghost_update
   logical,   optional, intent(in)    :: set_bc
+  FLOAT,     optional, intent(in)    :: factor
 
   type(derivatives_handle_batch_t) :: handle
 
   PUSH_SUB(X(derivatives_batch_perform))
 
-  call X(derivatives_batch_start)(op, der, ff, opff, handle, ghost_update, set_bc)
+  call X(derivatives_batch_start)(op, der, ff, opff, handle, ghost_update, set_bc, factor)
   call X(derivatives_batch_finish)(handle)
 
   POP_SUB(X(derivatives_batch_perform))
@@ -370,13 +372,14 @@ end subroutine X(derivatives_batch_perform)
 
 ! ---------------------------------------------------------
 ! Now the simplified interfaces
-subroutine X(derivatives_perform)(op, der, ff, op_ff, ghost_update, set_bc)
+subroutine X(derivatives_perform)(op, der, ff, op_ff, ghost_update, set_bc, factor)
   type(nl_operator_t), target, intent(in)    :: op
   type(derivatives_t),         intent(in)    :: der
   R_TYPE,                      intent(inout) :: ff(:)     ! ff(der%mesh%np_part)
   R_TYPE,                      intent(out)   :: op_ff(:)  ! op_ff(der%mesh%np)
   logical, optional,           intent(in)    :: ghost_update
   logical, optional,           intent(in)    :: set_bc
+  FLOAT,   optional,           intent(in)    :: factor
 
   type(batch_t) :: batch_ff, batch_op_ff
 
@@ -391,7 +394,7 @@ subroutine X(derivatives_perform)(op, der, ff, op_ff, ghost_update, set_bc)
   ASSERT(batch_is_ok(batch_ff))
   ASSERT(batch_is_ok(batch_op_ff))
 
-  call X(derivatives_batch_perform) (op, der, batch_ff, batch_op_ff, ghost_update, set_bc)
+  call X(derivatives_batch_perform) (op, der, batch_ff, batch_op_ff, ghost_update, set_bc, factor)
 
   call batch_end(batch_ff)
   call batch_end(batch_op_ff)
@@ -602,7 +605,7 @@ subroutine X(derivatives_test)(this)
 
     stime = loct_clock()
     do itime = 1, times
-      call X(derivatives_batch_perform)(this%lapl, this, ffb, opffb, set_bc = .false.)
+      call X(derivatives_batch_perform)(this%lapl, this, ffb, opffb, set_bc = .false., factor = CNST(0.5))
     end do
     etime = (loct_clock() - stime)/dble(times)
 
@@ -612,7 +615,7 @@ subroutine X(derivatives_test)(this)
     end if
 
     forall(ip = 1:this%mesh%np) 
-      opffb%states_linear(blocksize)%X(psi)(ip) = opffb%states_linear(blocksize)%X(psi)(ip) - &
+      opffb%states_linear(blocksize)%X(psi)(ip) = CNST(2.0)*opffb%states_linear(blocksize)%X(psi)(ip) - &
         (M_FOUR*aa**2*bb*sum(this%mesh%x(ip, :)**2)*exp(-aa*sum(this%mesh%x(ip, :)**2)) &
         - this%mesh%sb%dim*M_TWO*aa*bb*exp(-aa*sum(this%mesh%x(ip, :)**2)))
     end forall

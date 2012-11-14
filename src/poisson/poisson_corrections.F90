@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson_corrections.F90 8165 2011-08-09 16:03:23Z dstrubbe $
+!! $Id: poisson_corrections.F90 9285 2012-08-30 17:38:23Z xavier $
 
 #include "global.h"
 
@@ -29,6 +29,7 @@ module poisson_corrections_m
   use mesh_function_m
   use mesh_m
   use messages_m
+  use nl_operator_m
   use parser_m
   use profiling_m
   use simul_box_m
@@ -248,7 +249,7 @@ contains
         vh_correction(ip) = der%mesh%volume_element*vv
       end do
 
-      ASSERT(.not. simul_box_has_zero_bc(der%mesh%sb))
+      ASSERT(.not. nl_operator_compact_boundaries(der%lapl))
 
       call dderivatives_lapl(der, vh_correction, rho_corrected, set_bc = .false.)
  

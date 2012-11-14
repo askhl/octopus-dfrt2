@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: geom_opt.F90 9160 2012-06-23 20:38:20Z xavier $
+!! $Id: geom_opt.F90 9250 2012-08-23 14:45:24Z xavier $
 
 #include "global.h"
 
@@ -72,7 +72,7 @@ module geom_opt_m
     integer                      :: fixed_atom
   end type geom_opt_t
 
-  type(geom_opt_t) :: g_opt
+  type(geom_opt_t), save :: g_opt
 
   integer, parameter :: &
     MINWHAT_ENERGY = 1, &

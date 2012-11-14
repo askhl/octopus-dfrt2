@@ -19,11 +19,7 @@
  $Id: set_zero.cl 2146 2006-05-23 17:36:00Z xavier $
 */
 
-#ifdef EXT_KHR_FP64
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#elif EXT_AMD_FP64
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#endif
+#include <cl_global.h>
 
 __kernel void set_zero(const int np, __global double * aa){
   int ip = get_global_id(0);
@@ -33,10 +29,10 @@ __kernel void set_zero(const int np, __global double * aa){
 
 __kernel void set_zero_part(const int start, const int end, __global double * restrict aa, const int ldaa){
   int ist = get_global_id(0);
-  int ip  = get_global_id(1);
+  int ip  = get_global_id(1) + start;
 
-  if(ip < end - start + 1){
-    aa[ist + ((start + ip)<<ldaa)] = 0.0;
+  if(ip < end){
+    aa[ist + (ip<<ldaa)] = 0.0;
   }
 }
 

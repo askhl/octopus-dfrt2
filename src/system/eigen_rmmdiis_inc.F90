@@ -19,7 +19,7 @@
 
 ! ---------------------------------------------------------
 !> See http://prola.aps.org/abstract/PRB/v54/i16/p11169_1
-subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, diff, blocksize)
+subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, diff)
   type(grid_t),           intent(in)    :: gr
   type(states_t),         intent(inout) :: st
   type(hamiltonian_t),    intent(in)    :: hm
@@ -29,36 +29,32 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
   integer,                intent(inout) :: converged
   integer,                intent(in)    :: ik
   FLOAT,                  intent(out)   :: diff(1:st%nst)
-  integer,                intent(in)    :: blocksize
 
-  R_TYPE, allocatable :: res(:, :, :, :), tmp(:, :)
-  R_TYPE, allocatable :: psi(:, :, :, :)
-  R_TYPE, allocatable :: mm(:, :, :, :), evec(:, :, :)
+  R_TYPE, allocatable :: mm(:, :, :, :), evec(:, :, :), finalpsi(:, :)
   R_TYPE, allocatable :: eigen(:)
   FLOAT,  allocatable :: eval(:, :)
-  FLOAT, allocatable :: lambda(:), nrm(:)
-  integer :: ist, minst, idim, ip, ii, iter, nops, maxst, jj, bsize, ib
+  FLOAT,  allocatable :: lambda(:), nrm(:)
+  integer :: ist, minst, idim, ii, iter, nops, maxst, jj, bsize, ib, jter, kter
   R_TYPE :: ca, cb, cc
   R_TYPE, allocatable :: fr(:, :)
   type(profile_t), save :: prof
   type(batch_t), allocatable :: psib(:), resb(:)
-  type(batch_t) :: psibit, resbit, stpsib
   integer, allocatable :: done(:), last(:)
   logical, allocatable :: failed(:)
+  logical :: pack
 
   PUSH_SUB(X(eigensolver_rmmdiis))
 
-  SAFE_ALLOCATE(psi(1:gr%mesh%np_part, 1:st%d%dim, 1:niter, 1:blocksize))
-  SAFE_ALLOCATE(res(1:gr%mesh%np_part, 1:st%d%dim, 1:niter, 1:blocksize))
-  SAFE_ALLOCATE(tmp(1:gr%mesh%np_part, 1:st%d%dim))
+  pack = hamiltonian_apply_packed(hm, gr%mesh)
+
   SAFE_ALLOCATE(lambda(1:st%nst))
   SAFE_ALLOCATE(psib(1:niter))
   SAFE_ALLOCATE(resb(1:niter))
-  SAFE_ALLOCATE(done(1:blocksize))
-  SAFE_ALLOCATE(last(1:blocksize))
-  SAFE_ALLOCATE(failed(1:blocksize))
-  SAFE_ALLOCATE(fr(1:4, 1:blocksize))
-  SAFE_ALLOCATE(nrm(1:blocksize))
+  SAFE_ALLOCATE(done(1:st%d%block_size))
+  SAFE_ALLOCATE(last(1:st%d%block_size))
+  SAFE_ALLOCATE(failed(1:st%d%block_size))
+  SAFE_ALLOCATE(fr(1:4, 1:st%d%block_size))
+  SAFE_ALLOCATE(nrm(1:st%d%block_size))
 
   nops = 0
 
@@ -71,15 +67,14 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
     maxst = states_block_max(st, ib)
     bsize = maxst - minst + 1
 
-    call batch_init(psib(1), st%d%dim, minst, maxst, psi(:, :, 1, :))
-    call batch_init(resb(1), st%d%dim, minst, maxst, res(:, :, 1, :))
+    if(pack) call batch_pack(st%psib(ib, ik))
 
-    if(batch_is_packed(st%psib(ib, ik))) then 
-      call batch_pack(psib(1), copy = .false.)
-      call batch_pack(resb(1), copy = .false.)
-    end if
+    call batch_copy(st%psib(ib, ik), psib(1), reference = .false.)
+    call batch_copy(st%psib(ib, ik), resb(1), reference = .false.)
 
     call batch_copy_data(gr%mesh%np, st%psib(ib, ik), psib(1))
+
+    if(pack) call batch_unpack(st%psib(ib, ik))
 
     call X(hamiltonian_apply_batch)(hm, gr%der, psib(1), resb(1), ik)
     nops = nops + bsize
@@ -98,11 +93,6 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
 
     call mesh_batch_nrm2(gr%mesh, resb(1), nrm)
 
-    if(batch_is_packed(st%psib(ib, ik))) then 
-      call batch_unpack(psib(1))
-      call batch_unpack(resb(1))
-    end if
-
     do ii = 1, bsize
       if(nrm(ii) < tol) done(ii) = 1
     end do
@@ -111,14 +101,8 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
 
     ! initialize the remaining batch objects
     do iter = 2, niter
-      call batch_init(psib(iter), st%d%dim, maxst - minst + 1)
-      call batch_init(resb(iter), st%d%dim, maxst - minst + 1)
-      
-      do ist = minst, maxst
-        ii = ist - minst + 1
-        call batch_add_state(psib(iter), ist, psi(:, :, iter, ii))
-        call batch_add_state(resb(iter), ist, res(:, :, iter, ii))
-      end do
+      call batch_copy(psib(1), psib(iter), reference = .false.)
+      call batch_copy(resb(1), resb(iter), reference = .false.)
     end do
     
     ! get lambda 
@@ -147,49 +131,49 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
       if(abs(lambda(ist)) < CNST(0.1)) lambda(ist) = CNST(0.1)*lambda(ist)/abs(lambda(ist))
     end do
 
+    SAFE_ALLOCATE(mm(1:niter, 1:niter, 1:2, 1:bsize))
+    
     do iter = 2, niter
 
       ! for iter == 2 the preconditioning was done already
       if(iter > 2) call X(preconditioner_apply_batch)(pre, gr, hm, ik, resb(iter - 1), psib(iter))
 
-      do ist = minst, maxst
-        ii = ist - minst + 1
-
-        ! predict by jacobi
-        forall(idim = 1:st%d%dim, ip = 1:gr%mesh%np)
-          psi(ip, idim, iter, ii) = lambda(ist)*psi(ip, idim, iter, ii) + psi(ip, idim, iter - 1, ii)
-        end forall
-      end do
+      ! predict by jacobi
+      call batch_xpay(gr%mesh%np, psib(iter - 1), lambda, psib(iter))
 
       ! calculate the residual
       call X(hamiltonian_apply_batch)(hm, gr%der, psib(iter), resb(iter), ik)
       nops = nops + bsize
 
-      SAFE_ALLOCATE(mm(1:iter, 1:iter, 1:2, 1:bsize))
-      SAFE_ALLOCATE(evec(1:iter, 1:1, 1:blocksize))
-      SAFE_ALLOCATE(eval(1:iter, 1:blocksize))
-
       call batch_axpy(gr%mesh%np, -st%eigenval(:, ik), psib(iter), resb(iter))
 
-      do ist = minst, maxst
-        ii = ist - minst + 1
-        
-        ! perform the diis correction
+      ! calculate the matrix elements between iterations
+      do jter = 1, iter
+        do kter = 1, jter
+          if(jter < iter - 1 .and. kter < iter - 1) then
+            ! it was calculated on the previous iteration
+            ! in parallel this was already reduced, so we set it to zero in non-root ranks
+            if(gr%mesh%parallel_in_domains .and. gr%mesh%mpi_grp%rank /= 0) mm(jter, kter, 1:2, 1:bsize) = CNST(0.0)
+            cycle
+          endif
 
-        !  mm_1(i, j) = <res_i|res_j>
-        call batch_init(resbit, st%d%dim, 1, iter, res(:, :, :, ii))
-        call X(mesh_batch_dotp_matrix)(gr%mesh, resbit, resbit, mm(:, :, 1, ii), symm = .true., reduce = .false.)
-        call batch_end(resbit)
+          call X(mesh_batch_dotp_vector)(gr%mesh, resb(jter), resb(kter), mm(jter, kter, 1, :), reduce = .false.)
+          call X(mesh_batch_dotp_vector)(gr%mesh, psib(jter), psib(kter), mm(jter, kter, 2, :), reduce = .false.)
+        end do
+      end do
 
-        !  mm_2(i, j) = <psi_i|psi_j>
-        call batch_init(psibit, st%d%dim, 1, iter, psi(:, :, :, ii))
-        call X(mesh_batch_dotp_self)(gr%mesh, psibit, mm(:, :, 2, ii), reduce = .false.)
-        call batch_end(psibit)
-
+      ! symmetrize
+      do jter = 1, iter
+        do kter = jter + 1, iter
+          mm(jter, kter, 1:2, 1:bsize) = mm(kter, jter, 1:2, 1:bsize)
+        end do
       end do
 
       if(gr%mesh%parallel_in_domains) call comm_allreduce(gr%mesh%mpi_grp%comm, mm)
 
+      SAFE_ALLOCATE(evec(1:iter, 1:1, 1:bsize))
+      SAFE_ALLOCATE(eval(1:iter, 1:bsize))
+      
       do ist = minst, maxst
         ii = ist - minst + 1
 
@@ -197,48 +181,49 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
         call lalg_lowest_geneigensolve(1, iter, mm(:, :, 1, ii), mm(:, :, 2, ii), eval(:, ii), evec(:, :, ii), bof = failed(ii))
         if(failed(ii)) then
           last(ii) = iter - 1
+          ! we shouldn`t do anything
+          evec(1:iter - 1, 1, ii) = CNST(0.0)
+          evec(iter, 1, ii) = CNST(1.0)
           cycle
         end if
-
-        ! generate the new vector and the new residual (the residual
-        ! might be recalculated instead but that seems to be a bit
-        ! slower).
-        do idim = 1, st%d%dim
-          call lalg_scal(gr%mesh%np, evec(iter, 1, ii), psi(:, idim, iter, ii))
-          call lalg_scal(gr%mesh%np, evec(iter, 1, ii), res(:, idim, iter, ii))
-        end do
-
-        do jj = 1, iter - 1
-          do idim = 1, st%d%dim
-            call lalg_axpy(gr%mesh%np, evec(jj, 1, ii), psi(:, idim, jj, ii), psi(:, idim, iter, ii))
-            call lalg_axpy(gr%mesh%np, evec(jj, 1, ii), res(:, idim, jj, ii), res(:, idim, iter, ii))
-          end do
-        end do
-
       end do
 
-      SAFE_DEALLOCATE_A(mm)
+      call batch_scal(gr%mesh%np, evec(iter, 1, :), psib(iter), a_start = minst)
+      call batch_scal(gr%mesh%np, evec(iter, 1, :), resb(iter), a_start = minst)
+
+      do jj = 1, iter - 1
+        call batch_axpy(gr%mesh%np, evec(jj, 1, :), psib(jj), psib(iter), a_start = minst)
+        call batch_axpy(gr%mesh%np, evec(jj, 1, :), resb(jj), resb(iter), a_start = minst)
+      end do
+
       SAFE_DEALLOCATE_A(eval)      
       SAFE_DEALLOCATE_A(evec)
 
     end do
 
+    SAFE_DEALLOCATE_A(mm)
+
     ! end with a trial move
     call X(preconditioner_apply_batch)(pre, gr, hm, ik, resb(niter), resb(niter - 1))
+
+    call batch_xpay(gr%mesh%np, psib(niter), lambda, resb(niter - 1))
+
+    SAFE_ALLOCATE(finalpsi(1:gr%mesh%np, 1:st%d%dim))
 
     do ist = minst, maxst
       ii = ist - minst + 1
 
-      if(.not. failed(ii)) then
-
-        forall (idim = 1:st%d%dim, ip = 1:gr%mesh%np)
-          res(ip, idim, niter - 1, ii) = psi(ip, idim, niter, ii) + lambda(ist)*res(ip, idim, niter - 1, ii)
-        end forall
-        
-        call states_set_state(st, gr%mesh, ist, ik, res(:, :, niter - 1, ii))
+      if(.not. failed(ii)) then        
+        do idim = 1, st%d%dim
+          call batch_get_state(resb(niter - 1), (/ist, idim/), gr%mesh%np, finalpsi(:, idim))
+        end do
       else
-        call states_set_state(st, gr%mesh, ist, ik, psi(:, :, last(ii), ii))
+        do idim = 1, st%d%dim
+          call batch_get_state(psib(last(ii)), (/ist, idim/), gr%mesh%np, finalpsi(:, idim))
+        end do
       end if
+
+      call states_set_state(st, gr%mesh, ist, ik, finalpsi)
 
       if(mpi_grp_is_root(mpi_world)) then
         call loct_progress_bar(st%nst * (ik - 1) +  ist, st%nst*st%d%nik)
@@ -246,9 +231,11 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
 
     end do
 
+    SAFE_DEALLOCATE_A(finalpsi)
+
     do iter = 1, niter
-      call batch_end(psib(iter))
-      call batch_end(resb(iter))
+      call batch_end(psib(iter), copy = .false.)
+      call batch_end(resb(iter), copy = .false.)
     end do
 
   end do
@@ -283,13 +270,12 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
     nops = nops + maxst - minst + 1
   end do
 
+  converged = converged + count(diff(:) <= tol)
+
   SAFE_DEALLOCATE_A(eigen)
 
   niter = nops
 
-  SAFE_DEALLOCATE_A(psi)
-  SAFE_DEALLOCATE_A(res)
-  SAFE_DEALLOCATE_A(tmp)
   SAFE_DEALLOCATE_A(lambda)
   SAFE_DEALLOCATE_A(psib)
   SAFE_DEALLOCATE_A(resb)
@@ -304,7 +290,7 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
 end subroutine X(eigensolver_rmmdiis)
 
 ! ---------------------------------------------------------
-subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, ik, blocksize)
+subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, ik)
   type(grid_t),           intent(in)    :: gr
   type(states_t),         intent(inout) :: st
   type(hamiltonian_t),    intent(in)    :: hm
@@ -313,20 +299,21 @@ subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, i
   integer,                intent(inout) :: niter
   integer,                intent(inout) :: converged
   integer,                intent(in)    :: ik
-  integer,                intent(in)    :: blocksize
 
   integer, parameter :: sweeps = 5
   integer, parameter :: sd_steps = 2
 
-  integer :: isd, ist, sst, est, ib, ii
+  integer :: isd, ist, minst, maxst, ib, ii
   R_TYPE  :: ca, cb, cc
   R_TYPE, allocatable :: res(:, :, :), lambda(:)
   R_TYPE, allocatable :: kres(:, :, :)
   R_TYPE, allocatable :: me1(:, :), me2(:, :)
-
+  logical :: pack
   type(batch_t) :: resb, kresb
 
   PUSH_SUB(X(eigensolver_rmmdiis_min))
+
+  pack = hamiltonian_apply_packed(hm, gr%mesh)
 
   SAFE_ALLOCATE(me1(1:2, 1:st%d%block_size))
   SAFE_ALLOCATE(me2(1:4, 1:st%d%block_size))
@@ -337,11 +324,13 @@ subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, i
   niter = 0
 
   do ib = st%block_start, st%block_end
-    sst = states_block_min(st, ib)
-    est = states_block_max(st, ib)
+    minst = states_block_min(st, ib)
+    maxst = states_block_max(st, ib)
 
-    call batch_copy(st%psib(ib, ik), resb, reference= .false.)
-    call batch_copy(st%psib(ib, ik), kresb, reference= .false.)
+    if(pack) call batch_pack(st%psib(ib, ik))
+
+    call batch_copy(st%psib(ib, ik), resb, reference = .false.)
+    call batch_copy(st%psib(ib, ik), kresb, reference = .false.)
 
     do isd = 1, sd_steps
 
@@ -352,7 +341,7 @@ subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, i
 
       if(gr%mesh%parallel_in_domains) call comm_allreduce(gr%mesh%mpi_grp%comm, me1, (/2, st%d%block_size/))
 
-      forall(ist = sst:est) st%eigenval(ist, ik) = me1(1, ist - sst + 1)/me1(2, ist - sst + 1)
+      forall(ist = minst:maxst) st%eigenval(ist, ik) = me1(1, ist - minst + 1)/me1(2, ist - minst + 1)
  
       call batch_axpy(gr%mesh%np, -st%eigenval(:, ik), st%psib(ib, ik), resb)
 
@@ -360,7 +349,7 @@ subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, i
 
       call X(hamiltonian_apply_batch)(hm, gr%der, kresb, resb, ik)
 
-      niter = niter + 2*(est - sst + 1)
+      niter = niter + 2*(maxst - minst + 1)
 
       call X(mesh_batch_dotp_vector)(gr%mesh, kresb, kresb, me2(1, :), reduce = .false.)
       call X(mesh_batch_dotp_vector)(gr%mesh, st%psib(ib, ik),  kresb, me2(2, :), reduce = .false.)
@@ -369,31 +358,35 @@ subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, i
 
       if(gr%mesh%parallel_in_domains) call comm_allreduce(gr%mesh%mpi_grp%comm, me2, (/4, st%d%block_size/))
 
-      do ist = sst, est
-        ii = ist - sst + 1
+      do ist = minst, maxst
+        ii = ist - minst + 1
 
-        ca = me2(1, ii) * me2(4, ii) - me2(3, ii) * me2(2, ii)
-        cb = me1(2, ii) * me2(3, ii) - me1(1, ii) * me2(1, ii)
-        cc = me1(1, ii) * me2(2, ii) - me1(2, ii) * me2(4, ii)
+        ca = me2(1, ii)*me2(4, ii) - me2(3, ii)*me2(2, ii)
+        cb = me1(2, ii)*me2(3, ii) - me1(1, ii)*me2(1, ii)
+        cc = me1(1, ii)*me2(2, ii) - me1(2, ii)*me2(4, ii)
 
         lambda(ist) = CNST(2.0)*cc/(cb + sqrt(cb**2 - CNST(4.0)*ca*cc))
 
       end do
 
       call batch_axpy(gr%mesh%np, lambda, kresb, st%psib(ib, ik))
-
+      
     end do
+
+    if(pack) call batch_unpack(st%psib(ib, ik))
 
     call batch_end(resb, copy = .false.)
     call batch_end(kresb, copy = .false.)
 
     if(mpi_grp_is_root(mpi_world)) then
-      call loct_progress_bar(st%nst*(ik - 1) +  est, st%nst*st%d%nik)
+      call loct_progress_bar(st%nst*(ik - 1) +  maxst, st%nst*st%d%nik)
     end if
 
   end do
 
   call X(states_orthogonalization_full)(st, gr%mesh, ik)
+
+  converged = 0
 
   SAFE_DEALLOCATE_A(lambda)
   SAFE_DEALLOCATE_A(me1)

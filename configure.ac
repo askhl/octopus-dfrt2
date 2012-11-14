@@ -15,7 +15,7 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: configure.ac 9062 2012-05-09 14:21:00Z umberto $
+## $Id: configure.ac 9271 2012-08-27 22:04:31Z dstrubbe $
 
 AC_PREREQ(2.59)
 AC_INIT([Octopus],[nocturnus],[octopus-devel@tddft.org],[octopus])
@@ -309,7 +309,7 @@ dnl check for GSL
 AC_LANG_PUSH(C)
 LIBS="${acx_save_libs}"
 
-AX_PATH_GSL([1.9], 
+AX_PATH_GSL([1],[9], 
   [CFLAGS="$CFLAGS $GSL_CFLAGS"], 
   AC_MSG_ERROR([could not find required GSL library]))
 

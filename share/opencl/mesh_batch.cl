@@ -19,43 +19,70 @@
  $Id: vpsi.cl 2146 2006-05-23 17:36:00Z xavier $
 */
 
-#ifdef EXT_KHR_FP64
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#elif EXT_AMD_FP64
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#endif
+#include <cl_global.h>
 
 __kernel void ddot_vector(const int np,
-			 const __global double * xx, const int ldxx,
-			 const __global double * yy, const int ldyy,
-			 __global double * dot){
+			  const int npblock,
+			  const __global double * xx, const int ldxx,
+			  const __global double * yy, const int ldyy,
+			  __global double * dot,
+			  __local double * lsum){
   
-  int ist = get_global_id(0);
+  const int ist = get_global_id(0);
+  const int lip = get_local_id(1);
+  const int nlp = get_local_size(1);
+  const int startp = npblock*get_global_id(2);
+  const int endp = (startp + npblock < np)?startp + npblock:np;
+
   double tmp;
 
   tmp = 0.0;
-  for(int ip = 0; ip < np; ip++){
+  for(int ip = lip + startp; ip < endp; ip += nlp){
     tmp += xx[(ip<<ldxx) + ist]*yy[(ip<<ldyy) + ist];
   }
-  dot[ist] = tmp;
+
+  lsum[(lip<<ldyy) + ist] = tmp;
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  if(lip == 0){
+    tmp = 0.0;
+    for(int ip = 0; ip < nlp; ip++) tmp += lsum[(ip<<ldyy) + ist];
+    dot[ist + (get_global_id(2)<<ldyy)] = tmp;
+  }
 }
 
 __kernel void zdot_vector(const int np,
-			 const __global double2 * xx, const int ldxx,
-			 const __global double2 * yy, const int ldyy,
-			 __global double2 * dot){
+			  const int npblock,
+			  const __global double2 * xx, const int ldxx,
+			  const __global double2 * yy, const int ldyy,
+			  __global double2 * dot,
+			  __local double2 * lsum){
   
-  int ist = get_global_id(0);
-  double2 tmp, a1, a2;
+  const int ist = get_global_id(0);
+  const int lip = get_local_id(1);
+  const int nlp = get_local_size(1);
+  const int startp = npblock*get_global_id(2);
+  const int endp = (startp + npblock < np)?startp + npblock:np;
 
-  tmp = (double2) (0.0);
-  for(int ip = 0; ip < np; ip++){
-    a1 = xx[(ip<<ldxx) + ist];
-    a2 = yy[(ip<<ldyy) + ist];
-    tmp += (double2)(a1.s0*a2.s0 + a1.s1*a2.s1, a1.s0*a2.s1 - a1.s1*a2.s0);
+  double2 tmp;
+
+  tmp = 0.0;
+  for(int ip = lip + startp; ip < endp; ip += nlp){
+    tmp += xx[(ip<<ldxx) + ist]*yy[(ip<<ldyy) + ist];
   }
-  dot[ist] = tmp;
+
+  lsum[(lip<<ldyy) + ist] = tmp;
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  if(lip == 0){
+    tmp = 0.0;
+    for(int ip = 0; ip < nlp; ip++) tmp += lsum[(ip<<ldyy) + ist];
+    dot[ist + (get_global_id(2)<<ldyy)] = tmp;
+  }
 }
+
 
 __kernel void ddot_matrix(const int np,
 			  __global double const * restrict xx, const int ldxx,

@@ -15,12 +15,13 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc.F90 9151 2012-06-20 23:09:43Z umberto $
+!! $Id: states_calc.F90 9290 2012-08-31 13:56:41Z xavier $
 
 #include "global.h"
 
 module states_calc_m
   use batch_m
+  use batch_ops_m
   use blas_m
   use blacs_m
   use blacs_proc_grid_m

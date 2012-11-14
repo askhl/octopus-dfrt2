@@ -1,5 +1,5 @@
-n# -*- coding: utf-8 mode: shell-script -*-
-# $Id: 01-asym_doublewell.test 9187 2012-07-08 11:22:44Z acastro $
+# -*- coding: utf-8 mode: shell-script -*-
+# $Id: 01-asym_doublewell.test 9241 2012-08-22 03:04:36Z dstrubbe $
 
 Test       : Asymmetric Double Well
 Programs   : octopus; octopus_single; octopus_mpi

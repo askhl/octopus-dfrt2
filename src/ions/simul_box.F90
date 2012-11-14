@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: simul_box.F90 9049 2012-05-02 07:59:06Z joseba $
+!! $Id: simul_box.F90 9285 2012-08-30 17:38:23Z xavier $
 
 #include "global.h"
 
@@ -1116,10 +1116,7 @@ contains
   logical pure function simul_box_has_zero_bc(sb)
     type(simul_box_t), intent(in) :: sb
 
-    ! this is necessary for the exact boundary conditions for the
-    ! poisson solver ( otherwise it should be
-    ! .not. simul_box_is_periodic(sb))
-    simul_box_has_zero_bc = .false.
+    simul_box_has_zero_bc = .not. simul_box_is_periodic(sb)
 
   end function simul_box_has_zero_bc
 

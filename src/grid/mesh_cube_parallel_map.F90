@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_cube_parallel_map.F90 9178 2012-07-04 14:32:16Z micael $
+!! $Id: mesh_cube_parallel_map.F90 9312 2012-09-04 21:32:23Z dstrubbe $
 
 #include "global.h"
 
@@ -73,7 +73,7 @@ contains
     type(mesh_t),                   intent(in)  :: mesh
     type(cube_t),                   intent(in)  :: cube
 
-    integer :: im, ip, nn, ixyz(3), lxyz(3), ii, cube_np
+    integer :: im, ip, nn, ixyz(3), lxyz(3), ii
     integer, allocatable :: cube_part(:), part(:,:,:)
     integer, pointer :: mf_order(:), cf_order(:)
 

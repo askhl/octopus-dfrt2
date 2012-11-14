@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: complex.F90 8962 2012-04-02 01:35:36Z xavier $
+!! $Id: complex.F90 9298 2012-09-01 15:49:41Z xavier $
 
 #define R_TCOMPLEX 1
 
@@ -24,6 +24,7 @@
 #define R_DOUBLE    complex(8)
 #define R_MPITYPE   MPI_CMPLX
 #define R_TYPE_VAL  TYPE_CMPLX
+#define R_TYPE_CL   'RTYPE_COMPLEX'
 #define R_TOTYPE(x) cmplx(x, M_ZERO, REAL_PRECISION)
 #define R_TOPREC(x) cmplx(real(x), aimag(x), REAL_PRECISION)
 
