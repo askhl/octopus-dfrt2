@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td_init_inc.F90 8529 2011-11-08 18:00:31Z umberto $
+!! $Id: td_init_inc.F90 9329 2012-09-05 16:15:01Z dstrubbe $
 
 ! ---------------------------------------------------------
 subroutine td_init(td, sys, hm)
@@ -23,7 +23,6 @@ subroutine td_init(td, sys, hm)
   type(system_t),        intent(inout) :: sys
   type(hamiltonian_t),   intent(inout) :: hm
 
-  integer :: dummy
   FLOAT   :: spacing, default_dt
 
   PUSH_SUB(td_init)

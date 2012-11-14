@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: projector_inc.F90 9318 2012-09-04 22:37:48Z dstrubbe $
+!! $Id: projector_inc.F90 9329 2012-09-05 16:15:01Z dstrubbe $
 
 !------------------------------------------------------------------------------
 !> X(project_psi) calculates the action of a projector on the psi wavefunction.
@@ -236,10 +236,10 @@ R_TYPE function X(projector_matrix_element)(pj, dim, ik, psia, psib) result(apb)
   type(projector_t), intent(in)    :: pj
   integer,           intent(in)    :: dim
   integer,           intent(in)    :: ik
-  R_TYPE,            intent(in)    :: psia(:, :)  ! psia(1:mesh%np, dim)
-  R_TYPE,            intent(in)    :: psib(:, :)  ! psib(1:mesh%np, dim)
+  R_TYPE,            intent(in)    :: psia(:, :)  !< psia(1:mesh%np, dim)
+  R_TYPE,            intent(in)    :: psib(:, :)  !< psib(1:mesh%np, dim)
 
-  integer ::  ns, idim, ll, mm, nc, is
+  integer ::  ns, idim, is
   R_TYPE, allocatable :: lpsi(:, :), plpsi(:,:)
   type(mesh_t), pointer :: mesh
 

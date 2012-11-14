@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: pes.F90 9210 2012-07-19 17:10:36Z umberto $
+!! $Id: pes.F90 9328 2012-09-05 16:00:17Z xavier $
 
 #include "global.h"
 
@@ -65,8 +65,27 @@ module PES_m
   use unit_system_m
   use varinfo_m
   use varinfo_m
-
+    
   implicit none
+
+  private
+
+  public ::                             &
+    pes_t,                              &
+    pes_end,                            &
+    pes_init,                           &
+    pes_init_write,                     &
+    pes_calc,                           &
+    pes_restart_read,                   &
+    pes_restart_write,                  &
+    pes_output,                         &
+    pes_mask_read_info,                 &
+    pes_mask_dump_full_mapm,            &
+    pes_mask_dump_ar_spherical_cut_m,   &
+    pes_mask_dump_ar_plane_m,           &
+    pes_mask_dump_ar_polar_m,           &
+    pes_mask_dump_full_mapm_cut,        &
+    pes_mask_dump_power_totalm
 
   integer, parameter ::   &
     FREE           =  1,  &    !< The scattering waves evolve in time as free plane waves
@@ -107,8 +126,6 @@ module PES_m
   end type PES_rc_t
 
   type PES_mask_t
-
-
     CMPLX, pointer :: k(:,:,:,:,:,:) => NULL() !< The states in momentum space
 
     ! mesh- and cube-related stuff      

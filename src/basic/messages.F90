@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: messages.F90 9043 2012-04-28 05:14:39Z xavier $
+!! $Id: messages.F90 9326 2012-09-05 15:48:37Z dstrubbe $
 
 #include "global.h"
 
@@ -1166,10 +1166,17 @@ end subroutine messages_end
   character(len=256) function messages_clean_path(filename) result(clean_path)
     character(len=*), intent(in) :: filename
 
-    integer :: pos
+    integer :: pos, start
 
     pos = index(filename, 'src/', back = .true.)
-    clean_path = filename(pos + 1:)
+    if(pos == 0) then
+       ! 'src/' does not occur
+       start = pos + 1
+    else
+       ! remove 'src/'
+       start = pos + 4
+    endif
+    clean_path = filename(start:)
   end function messages_clean_path
 
 end module messages_m

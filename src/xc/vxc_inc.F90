@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: vxc_inc.F90 9320 2012-09-05 00:55:33Z xavier $
+!! $Id: vxc_inc.F90 9327 2012-09-05 15:54:32Z dstrubbe $
 
 subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
@@ -91,7 +91,7 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc
   ! is there anything to do ?
   families = XC_FAMILY_LDA + XC_FAMILY_GGA + XC_FAMILY_HYB_GGA + XC_FAMILY_MGGA
   if(iand(xcs%family, families) == 0) then
-    POP_SUB(dxc_get_vxc)
+    POP_SUB(xc_get_vxc)
     call profiling_out(prof)
     return
   endif
@@ -732,7 +732,7 @@ subroutine xc_density_correction_calc(xcs, der, nspin, density, refvx, vxc, delt
   type(profile_t), save :: prof
   FLOAT, parameter :: thres = CNST(1e-6)
 
-  PUSH_SUB('vxc_inc.xc_density_correction_calc')
+  PUSH_SUB(xc_density_correction_calc)
 
   call profiling_in(prof, "XC_DENSITY_CORRECTION")
 
@@ -893,7 +893,7 @@ subroutine xc_density_correction_calc(xcs, der, nspin, density, refvx, vxc, delt
   SAFE_DEALLOCATE_A(lrvxc)
   SAFE_DEALLOCATE_A(nxc)
 
-  POP_SUB('vxc_inc.xc_density_correction_calc')
+  POP_SUB(xc_density_correction_calc)
 end subroutine xc_density_correction_calc
 
 ! -----------------------------------------------------
@@ -907,7 +907,7 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
   integer :: ip
   FLOAT, allocatable :: nxc2(:)
 
-  PUSH_SUB('vxc_inc.get_qxc')
+  PUSH_SUB(get_qxc)
 
   SAFE_ALLOCATE(nxc2(1:mesh%np))
 
@@ -923,7 +923,7 @@ FLOAT function get_qxc(mesh, nxc, density, ncutoff)  result(qxc)
 
   SAFE_DEALLOCATE_A(nxc2)
 
-  POP_SUB('vxc_inc.get_qxc')
+  POP_SUB(get_qxc)
 end function get_qxc
 
 !------------------------------------------------------------
@@ -1185,9 +1185,8 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
 
   CMPLX, allocatable   :: zvc_arr(:, :, :), Q0(:, :, :), Q1(:, :, :), dQ1drs(:, :, :), epsc(:, :, :), depsdrs(:, :, :), zrho_local(:), zvxc_local(:)
   CMPLX                :: dimphase, tmp, zex, zec, zex2
-  FLOAT                :: scaling_origin(MAX_DIM)
   FLOAT                :: dmin_unused
-  integer              :: N, izero, rankmin_unused, i, j
+  integer              :: N, izero, i, j
 
   CMPLX, allocatable   :: vxbuf(:, :, :), rootrs(:, :, :)
 
@@ -1220,7 +1219,6 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
 
 
   dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
-  scaling_origin = M_z0
   
   vxbuf(:, :, :) = Wx * (cf%zRS(:, :, :) * dimphase)**(M_ONE / M_THREE)
   
@@ -1281,6 +1279,7 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   SAFE_DEALLOCATE_A(depsdrs)
 
   POP_SUB(zxc_complex_lda)
+  
 end subroutine zxc_complex_lda
 
 

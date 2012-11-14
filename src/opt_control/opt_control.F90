@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: opt_control.F90 9228 2012-08-07 22:36:09Z acastro $
+!! $Id: opt_control.F90 9330 2012-09-05 16:37:27Z dstrubbe $
 
 #include "global.h"
 
@@ -757,7 +757,7 @@ contains
   end subroutine f_iter
   ! ---------------------------------------------------------
 
-#include "opt_control_c.F90"
+#include "opt_control_c_inc.F90"
 #include "check_input_inc.F90"
 #include "finalcheck_inc.F90"
 
