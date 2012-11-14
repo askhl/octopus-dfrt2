@@ -17,7 +17,7 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: Makefile.am 8329 2011-09-26 23:03:34Z xavier $
+## $Id: Makefile.am 9172 2012-07-02 14:35:00Z dstrubbe $
 
 sharedir = $(pkgdatadir)/testsuite/linear_response
 
@@ -37,6 +37,7 @@ dist_share_DATA = \
 	03-vdw_sternheimer.test                  \
 	04-vib_modes.01-ground_state.inp         \
 	04-vib_modes.02-vib_modes.inp            \
+	04-vib_modes.03-vib_modes_fd.inp         \
 	04-vib_modes.test                        \
 	05-polarizability.01-gs.inp              \
 	05-polarizability.02-sternheimer.inp     \

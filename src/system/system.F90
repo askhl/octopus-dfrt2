@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: system.F90 9142 2012-06-20 21:25:03Z umberto $
+!! $Id: system.F90 9160 2012-06-23 20:38:20Z xavier $
 
 #include "global.h"
 
@@ -24,7 +24,7 @@ module system_m
   use octcl_kernel_m
   use density_m
   use elf_m
-  use energy_m
+  use energy_calc_m
   use geometry_m
   use global_m
   use grid_m
@@ -238,7 +238,7 @@ contains
     endif
 
     call states_fermi(sys%st, sys%gr%mesh)                              ! occupations
-    call total_energy(hm, sys%gr, sys%st, -1)
+    call energy_calc_total(hm, sys%gr, sys%st)
 
     POP_SUB(system_h_setup)
   end subroutine system_h_setup

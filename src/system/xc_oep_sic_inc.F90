@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: xc_oep_sic_inc.F90 8808 2012-01-25 16:30:52Z joseba $
+!! $Id: xc_oep_sic_inc.F90 9179 2012-07-04 15:51:43Z micael $
 
 ! ---------------------------------------------------------
 !> This routine calculates the SIC exchange functional.
@@ -60,7 +60,7 @@ subroutine X(oep_sic) (xcs, gr, st, is, oep, ex, ec)
 
       ! calculate LDA/GGA contribution to the SIC (does not work for LB94)
       edummy = M_ZERO
-      call xc_get_vxc(gr%fine%der, xcs, st, rho, SPIN_POLARIZED, ex2, ec2, edummy, edummy, vxc=vxc)
+      call xc_get_vxc(gr%fine%der, xcs, st, rho, SPIN_POLARIZED, edummy, edummy, ex=ex2, ec=ec2, vxc=vxc)
 
       ex_ = ex_ - oep%sfact*ex2
       ec_ = ec_ - oep%sfact*ec2

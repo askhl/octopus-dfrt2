@@ -23,7 +23,7 @@ module opt_control_propagation_m
   use controlfunction_m
   use datasets_m
   use density_m
-  use energy_m
+  use energy_calc_m
   use epot_m
   use excited_states_m
   use forces_m
@@ -194,7 +194,7 @@ module opt_control_propagation_m
       ! update
       call density_calc(psi, gr, psi%rho)
       call v_ks_calc(sys%ks, hm, psi, time = i*td%dt)
-      call total_energy(hm, sys%gr, psi, -1)
+      call energy_calc_total(hm, sys%gr, psi)
 
       if(hm%ab == MASK_ABSORBING) call zvmask(gr, hm, psi)
 
@@ -529,19 +529,17 @@ module opt_control_propagation_m
         call propagator_dt(sys%ks, hm, gr, psi, td%tr, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
         call oct_prop_output(prop_chi, i-1, chi, gr, sys%geo)
         call states_end(psi_aux)
-
       else
-
+        call update_hamiltonian_psi(i-1, gr, sys%ks, hm, td, target, par, psi)
+        call propagator_dt(sys%ks, hm, gr, psi, td%tr, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
         call update_hamiltonian_chi(i-1, gr, sys%ks, hm, td, target, par, psi)
         call propagator_dt(sys%ks, hm, gr, chi, tr_chi, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
         call oct_prop_output(prop_chi, i-1, chi, gr, sys%geo)
-        call update_hamiltonian_psi(i-1, gr, sys%ks, hm, td, target, par, psi)
-        call propagator_dt(sys%ks, hm, gr, psi, td%tr, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
-
       end if
 
     end do
     td%dt = -td%dt
+    call update_hamiltonian_psi(0, gr, sys%ks, hm, td, target, par, psi)
     call update_field(0, par_chi, gr, hm, psi, chi, par, dir = 'b')
 
     call density_calc(psi, gr, psi%rho)
@@ -600,11 +598,6 @@ module opt_control_propagation_m
         call controlfunction_to_h_val(par_chi, hm%ep, j+1)
       end if
     end do
-    if(hm%theory_level.ne.INDEPENDENT_PARTICLES .and. (.not.ks%frozen_hxc) ) then
-      call density_calc(st, gr, st%rho)
-      call v_ks_calc(ks, hm, st)
-      call hamiltonian_update(hm, gr%mesh)
-    end if
 
     POP_SUB(update_hamiltonian_chi)
   end subroutine update_hamiltonian_chi

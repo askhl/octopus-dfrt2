@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fft.F90 9119 2012-06-12 21:16:08Z xavier $
+!! $Id: fft.F90 9217 2012-07-29 15:22:59Z xavier $
 
 #include "global.h"
 
@@ -43,7 +43,11 @@ module fft_m
   use mpi_m
 #if defined(HAVE_NFFT)
   use nfft_m
-#endif   
+#endif
+#if defined(HAVE_OPENMP) && defined(HAVE_FFTW3_THREADS)
+  use omp_lib
+#endif
+  use octcl_kernel_m
   use opencl_m
   use parser_m
   use pfft_m
@@ -117,6 +121,7 @@ module fft_m
     FLOAT, pointer :: drs_data(:,:,:) !< array used to store the function in real space that is passed to PFFT.
     CMPLX, pointer :: zrs_data(:,:,:) !< array used to store the function in real space that is passed to PFFT.
     CMPLX, pointer ::  fs_data(:,:,:) !< array used to store the function in fourier space that is passed to PFFT
+    logical        :: cl_use_real
 #ifdef HAVE_CLAMDFFT
     ! data for clAmdFft
     type(clAmdFftPlanHandle) :: cl_plan
@@ -136,7 +141,7 @@ contains
   ! ---------------------------------------------------------
   !> initialize the table
   subroutine fft_all_init()
-    integer :: ii
+    integer :: ii, iret
 
     PUSH_SUB(fft_all_init)
 
@@ -188,6 +193,22 @@ contains
     call parse_integer(datasets_check('FFTPreparePlan'), FFTW_MEASURE, fft_prepare_plan)
     if(.not. varinfo_valid_option('FFTPreparePlan', fft_prepare_plan)) call input_error('FFTPreparePlan')
 
+#if defined(HAVE_OPENMP) && defined(HAVE_FFTW3_THREADS)
+    if(omp_get_max_threads() > 1) then
+
+      call messages_write('Info: Initializing Multi-threaded FFTW')
+      call messages_info()
+      
+      call fftw_init_threads(iret)
+      if (iret == 0) then 
+        call messages_write('Initialization of FFTW3 threads failed.')
+        call messages_fatal()
+      end if
+      call fftw_plan_with_nthreads(omp_get_max_threads())
+
+    end if
+#endif
+
     POP_SUB(fft_all_init)
   end subroutine fft_all_init
 
@@ -208,13 +229,18 @@ contains
 #ifdef HAVE_PFFT
     call pfft_cleanup
 #endif
-    call fftw_cleanup
+
+#if defined(HAVE_OPENMP) && defined(HAVE_FFTW3_THREADS)
+    call fftw_cleanup_threads()
+#else
+    call fftw_cleanup()
+#endif
 
     POP_SUB(fft_all_end)
   end subroutine fft_all_end
 
   ! ---------------------------------------------------------
-  subroutine fft_init(this, nn, dim, type, library, optimize, optimize_parity, mpi_comm)
+  subroutine fft_init(this, nn, dim, type, library, optimize, optimize_parity, mpi_comm, mpi_grp)
     type(fft_t),       intent(inout) :: this     !< FFT data type
     integer,           intent(inout) :: nn(3)    !< Size of the box
     integer,           intent(in)    :: dim      !< Dimensions of the box
@@ -224,19 +250,25 @@ contains
     integer,           intent(in)    :: optimize_parity(3) !< choose optimized grid in each direction as
                                                  !! even (0), odd (1), or whatever (negative).
     integer, optional, intent(out)   :: mpi_comm !< MPI communicator
+    type(mpi_grp_t), optional, intent(in) :: mpi_grp !< the mpi_group we whant to use for the parallelization
 
     integer :: ii, jj, fft_dim, idir, column_size, row_size, alloc_size, ierror, n3
     integer :: n_1, n_2, n_3, nn_temp(3), parity, status
     integer :: library_
     character(len=100) :: str_tmp
+    type(mpi_grp_t) :: mpi_grp_
+
 #ifdef HAVE_CLAMDFFT
-    integer(8), allocatable :: stride(:), stride_inv(:)
+    integer(8), allocatable :: stride_rs(:), stride_fs(:)
     real(8) :: scale
 #endif
 
     PUSH_SUB(fft_init)
 
     ASSERT(type == FFT_REAL .or. type == FFT_COMPLEX)
+
+    mpi_grp_ = mpi_world
+    if(present(mpi_grp)) mpi_grp_ = mpi_grp
 
     ! First, figure out the dimensionality of the FFT.
     fft_dim = 0
@@ -343,10 +375,11 @@ contains
     if (library_ == FFTLIB_PFFT) then
 #ifdef HAVE_PFFT
       call dpfft_init()
-
-      call pfft_decompose(mpi_world%size, column_size, row_size)
  
-      call pfft_create_procmesh_2d(ierror, MPI_COMM_WORLD, column_size, row_size, fft_array(jj)%comm)
+      call pfft_decompose(mpi_grp_%size, column_size, row_size)
+ 
+      call pfft_create_procmesh_2d(ierror, mpi_grp_%comm, column_size, row_size, fft_array(jj)%comm)        
+   
       if (ierror .ne. 0) then
         message(1) = "The number of rows and columns in PFFT processor grid is not equal to "
         message(2) = "the number of processor in the MPI communicator."
@@ -401,7 +434,8 @@ contains
       SAFE_ALLOCATE(fft_array(jj)%fs_data(n_3, n_1, n3))
 
     case(FFTLIB_CLAMD)
-      fft_array(jj)%fs_n_global = fft_array(jj)%rs_n_global
+      fft_array(jj)%cl_use_real = .false.
+      call fftw_get_dims(fft_array(jj)%rs_n_global, (fft_array(jj)%cl_use_real .and. type == FFT_REAL), fft_array(jj)%fs_n_global)
       fft_array(jj)%rs_n = fft_array(jj)%rs_n_global
       fft_array(jj)%fs_n = fft_array(jj)%fs_n_global
       fft_array(jj)%rs_istart = 1
@@ -456,30 +490,49 @@ contains
       call clAmdFftSetPlanBatchSize(fft_array(jj)%cl_plan, 1_8, status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanBatchSize')
 
-      call clAmdFftSetLayout(fft_array(jj)%cl_plan, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED, status)
-      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetLayout')
+      if(fft_array(jj)%cl_use_real .and. type == FFT_REAL) then
+        call clAmdFftSetLayout(fft_array(jj)%cl_plan, CLFFT_REAL, CLFFT_HERMITIAN_INTERLEAVED, status)
+        if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetLayout')
+      else
+        call clAmdFftSetLayout(fft_array(jj)%cl_plan, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED, status)
+        if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetLayout')
+      end if
 
       call clAmdFftSetResultLocation(fft_array(jj)%cl_plan, CLFFT_OUTOFPLACE, status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetResultLocation')
       
       ! invert the stride for Fortran arrays
+      SAFE_ALLOCATE(stride_rs(1:fft_dim))
+      SAFE_ALLOCATE(stride_fs(1:fft_dim))
 
-      SAFE_ALLOCATE(stride(1:fft_dim))
-      SAFE_ALLOCATE(stride_inv(1:fft_dim))
+!      call clAmdFftGetPlanInStride(fft_array(jj)%cl_plan, fft_dim, stride_rs, status)
+!      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftGetPlanInStride')
 
-      call clAmdFftGetPlanInStride(fft_array(jj)%cl_plan, fft_dim, stride, status)
-      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftGetPlanInStride')
 
-      forall(ii = 1:fft_dim) stride_inv(ii) = stride(fft_dim - ii + 1)
+!      call clAmdFftGetPlanInStride(fft_array(jj)%cl_plan, fft_dim, stride_fs, status)
+!      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftGetPlanInStride')
 
-      call clAmdFftSetPlanInStride(fft_array(jj)%cl_plan, fft_dim, stride_inv, status)
+!      print*, "STRIDE IN     ", stride_rs
+!      print*, "STRIDE OUT    ", stride_fs
+
+      stride_rs(1) = 1
+      stride_fs(1) = 1
+      do ii = 2, fft_dim
+        stride_rs(ii) = stride_rs(ii - 1)*fft_array(jj)%rs_n(ii - 1)
+        stride_fs(ii) = stride_fs(ii - 1)*fft_array(jj)%fs_n(ii - 1)
+      end do
+
+!      print*, "STRIDE NEW IN ", stride_rs
+!      print*, "STRIDE NEW OUT", stride_fs
+      
+      call clAmdFftSetPlanInStride(fft_array(jj)%cl_plan, fft_dim, stride_rs, status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanInStride')
 
-      call clAmdFftSetPlanOutStride(fft_array(jj)%cl_plan, fft_dim, stride_inv, status)
+      call clAmdFftSetPlanOutStride(fft_array(jj)%cl_plan, fft_dim, stride_fs, status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanOutStride')
        
-      SAFE_DEALLOCATE_A(stride)
-      SAFE_DEALLOCATE_A(stride_inv)
+      SAFE_DEALLOCATE_A(stride_rs)
+      SAFE_DEALLOCATE_A(stride_fs)
 
       ! set the scaling factors
 
@@ -525,7 +578,7 @@ contains
     case (FFTLIB_PFFT)
       write(message(2),'(a)') "Info: FFT library = PFFT"
       write(message(3),'(a)') "Info: PFFT processor grid"
-      write(message(4),'(a, i9)') " No. of processors                = ", mpi_world%size
+      write(message(4),'(a, i9)') " No. of processors                = ", mpi_grp_%size
       write(message(5),'(a, i9)') " No. of columns in the proc. grid = ", column_size
       write(message(6),'(a, i9)') " No. of rows    in the proc. grid = ", row_size
       write(message(7),'(a, i9)') " The size of integer is = ", ptrdiff_t_kind

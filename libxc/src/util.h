@@ -122,12 +122,29 @@ void XC(lda_c_pz_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
 
 /* GGAs */
 
-/* enhancement factors: if you add one, please add it also to the gga_x_ityh.c */
+/* exchange enhancement factors: if you add one, please add it also to the gga_x_ityh.c */
 void XC(gga_x_wc_enhance)  (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 void XC(gga_x_pbe_enhance) (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 void XC(gga_x_rpbe_enhance)(const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 void XC(gga_x_htbs_enhance)(const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 void XC(gga_x_b88_enhance) (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
+
+/* correlation functions */
+
+typedef struct XC(gga_work_c_t) {
+  int   order; /* to which order should I return the derivatives */
+
+  FLOAT dens, ds[2], sigmat, sigmas[3];
+  FLOAT rs, zeta, xt, xs[2];
+
+  FLOAT f;
+  FLOAT dfdrs, dfdz, dfdxt, dfdxs[2];
+  FLOAT d2fdrs2, d2fdrsz, d2fdrsxt, d2fdrsxs[2], d2fdz2, 
+    d2fdzxt, d2fdzxs[2], d2fdxt2, d2fdxtxs[2], d2fdxs2[3];
+} XC(gga_work_c_t);
+
+void 
+XC(gga_c_pw91_func) (const XC(func_type) *p, XC(gga_work_c_t) *r);
 
 void XC(gga_init_mix)(XC(func_type) *p, int n_funcs, const int *funcs_id, const FLOAT *mix_coef);
 

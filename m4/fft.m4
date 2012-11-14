@@ -15,7 +15,7 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: fft.m4 6722 2010-06-13 12:44:43Z acastro $
+## $Id: fft.m4 9196 2012-07-13 02:51:33Z xavier $
 ##
 
 AC_DEFUN([ACX_FFT],
@@ -78,6 +78,8 @@ esac
       fi
     done
 
+AC_CHECK_FUNC(dfftw_init_threads, AC_DEFINE(HAVE_FFTW3_THREADS, 1,[Define if the threaded version of FFTW3 is available.]))
+
 AC_SUBST(LIBS_FFT)
 LIBS="$acx_fft_save_LIBS"
 
@@ -88,4 +90,5 @@ if test x"$acx_fft_ok" != xyes; then
   fi
   $2
 fi
+
 ])

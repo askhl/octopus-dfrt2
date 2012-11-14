@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: epot.F90 9121 2012-06-12 21:42:09Z dstrubbe $
+!! $Id: epot.F90 9159 2012-06-23 20:00:53Z xavier $
 
 #include "global.h"
 
@@ -545,7 +545,6 @@ contains
     type(states_t),        intent(inout) :: st
     logical,               intent(in)    :: cmplxscl  
 
-    FLOAT   :: time_
     integer :: ia, ip
     type(atom_t),      pointer :: atm
     type(mesh_t),      pointer :: mesh

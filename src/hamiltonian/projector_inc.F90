@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: projector_inc.F90 8806 2012-01-25 15:04:23Z joseba $
+!! $Id: projector_inc.F90 9159 2012-06-23 20:00:53Z xavier $
 
 !------------------------------------------------------------------------------
 !> X(project_psi) calculates the action of a projector on the psi wavefunction.
@@ -243,11 +243,6 @@ R_TYPE function X(projector_matrix_element)(pj, dim, ik, psia, psib) result(apb)
 
   integer ::  ns, idim, ll, mm, nc, is
   R_TYPE, allocatable :: lpsi(:, :), plpsi(:,:)
-  R_TYPE, allocatable :: uvpsi(:, :, :, :)
-#if defined(HAVE_MPI)
-  integer :: size
-  R_TYPE, allocatable :: uvpsi_tmp(:, :, :, :)
-#endif
   type(mesh_t), pointer :: mesh
 
   PUSH_SUB(X(projector_matrix_element))

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fourier_space_inc.F90 9101 2012-06-03 23:57:46Z xavier $
+!! $Id: fourier_space_inc.F90 9197 2012-07-13 03:00:00Z xavier $
 
 ! ---------------------------------------------------------
 !> The following routines convert the function between real space and Fourier space
@@ -128,17 +128,18 @@ subroutine X(fourier_space_op_apply)(this, cube, cf)
 
   if(cube%fft%library == FFTLIB_PFFT) then
     !Note that the function in fourier space returned by PFFT is transposed
-    !$omp parallel do
-    do kk = 1, cube%fs_n(3)
+    ! Probably in this case this%X(op) should be also transposed
+    !$omp parallel do private(ii, jj, kk)
+    do ii = 1, cube%fs_n(1)
       do jj = 1, cube%fs_n(2)
-        do ii = 1, cube%fs_n(1)
+        do kk = 1, cube%fs_n(3)
           cf%fs(kk, ii, jj) = cf%fs(kk, ii, jj)*this%X(op) (ii, jj, kk)
         end do
       end do
     end do
     !$omp end parallel do
   else if(cube%fft%library == FFTLIB_FFTW .or. .not. this%in_device_memory) then
-    !$omp parallel do
+    !$omp parallel do private(ii, jj, kk)
     do kk = 1, cube%fs_n(3)
       do jj = 1, cube%fs_n(2)
         do ii = 1, cube%fs_n(1)

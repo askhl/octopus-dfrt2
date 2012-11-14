@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: unocc.F90 9095 2012-06-02 02:39:35Z xavier $
+!! $Id: unocc.F90 9160 2012-06-23 20:38:20Z xavier $
 
 #include "global.h"
 
@@ -24,7 +24,7 @@ module unocc_m
   use density_m
   use derivatives_m
   use eigensolver_m
-  use energy_m
+  use energy_calc_m
   use epot_m
   use global_m
   use grid_m

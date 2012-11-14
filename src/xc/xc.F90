@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: xc.F90 9145 2012-06-20 21:40:35Z umberto $
+!! $Id: xc.F90 9218 2012-08-01 02:14:33Z xavier $
 
 #include "global.h"
 
@@ -82,8 +82,7 @@ module xc_m
 
   integer, parameter :: &
     LR_NONE = 0,        &
-    LR_X    = 1,        &
-    LR_XC   = 2
+    LR_X    = 1
 
   interface xc_get_vxc
     module procedure dxc_get_vxc, zxc_get_vxc
@@ -273,9 +272,6 @@ contains
       !% No correction is applied.
       !%Option long_range_x 1
       !% The correction is applied to the exchange potential.
-      !%Option long_range_xc 2
-      !% The correction is applied to the combined exchange and
-      !% correlation potential.
       !%End
       call parse_integer('XCDensityCorrection', LR_NONE, xcs%xc_density_correction)
 

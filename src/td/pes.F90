@@ -15,18 +15,20 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: pes.F90 9110 2012-06-11 17:06:23Z umberto $
+!! $Id: pes.F90 9210 2012-07-19 17:10:36Z umberto $
 
 #include "global.h"
 
 module PES_m
   use batch_m
+  use comm_m
   use cube_function_m
   use cube_m
   use datasets_m
   use density_m
   use derivatives_m
   use fft_m
+  use fourier_space_m
   use geometry_m
   use global_m
   use grid_m
@@ -38,6 +40,7 @@ module PES_m
   use lasers_m
   use math_m
   use mesh_m
+  use mesh_cube_parallel_map_m
   use messages_m
   use mpi_m
 #if defined(HAVE_NFFT) 
@@ -48,6 +51,7 @@ module PES_m
 #endif
   use output_m
   use parser_m
+  use poisson_m
   use profiling_m
   use qshepmod_m
   use restart_m
@@ -76,7 +80,8 @@ module PES_m
     PW_MAP_FFT         =  2,  &    !< FFT on outgoing waves (1D only)
     PW_MAP_BARE_FFT    =  3,  &    !< FFT - normally from fftw3
     PW_MAP_TDPSF       =  4,  &    !< time-dependent phase-space filter
-    PW_MAP_NFFT        =  5        !< non-equispaced fft (NFFT)
+    PW_MAP_NFFT        =  5,  &    !< non-equispaced fft (NFFT)
+    PW_MAP_PFFT        =  6        !< use PFFT
 
   integer, parameter ::      &
     M_SIN2            =  1,  &  
@@ -106,22 +111,24 @@ module PES_m
 
     CMPLX, pointer :: k(:,:,:,:,:,:) => NULL() !< The states in momentum space
 
-    ! Some mesh-related stuff
-    integer          :: ll(MAX_DIM)            !< the size of the square mesh
+    ! mesh- and cube-related stuff      
     integer          :: np                     !< number of mesh points associated with the mesh
                                                !< (either mesh%np or mesh%np_global)
-    FLOAT            :: spacing(MAX_DIM)       !< the spacing
-    integer, pointer :: Lxyz_inv(:,:,:) => NULL()
-    !Lxyz_inv < return a point on the main mesh from xyz on the mask square mesh
+    integer          :: ll(3)                  !< the size of the square mesh
+    integer          :: fs_n_global(1:3)       !< the dimensions of the cube in fourier space
+    integer          :: fs_n(1:3)              !< the dimensions of the local portion of the cube in fourier space
+    integer          :: fs_istart(1:3)         !< where does the local portion of the cube start in fourier space
+    
+    FLOAT            :: spacing(3)       !< the spacing
+    
     type(mesh_t), pointer  :: mesh             !< a pointer to the mesh
     type(cube_t)     :: cube                   !< the cubic mesh
 
     FLOAT, pointer :: ext_pot(:,:) => NULL()   !< external time-dependent potential i.e. the lasers
 
-    FLOAT, pointer :: M(:,:,:) => NULL()      !< the mask on a cubic mesh containing the simulation box
-    FLOAT, pointer :: Mk(:,:,:) => NULL()     !< the momentum space filter
+    FLOAT, pointer :: Mk(:,:,:) => NULL()      !< the momentum space filter
     type(cube_function_t) :: cM                !< the mask cube function
-    FLOAT, pointer :: mask_R(:) => NULL()     !< the mask inner (component 1) and outer (component 2) radius
+    FLOAT, pointer :: mask_R(:) => NULL()      !< the mask inner (component 1) and outer (component 2) radius
     integer        :: shape                    !< which mask function?
 
     FLOAT, pointer :: Lk(:) => NULL()          !< associate a k value to an cube index
@@ -130,7 +137,7 @@ module PES_m
     integer          :: resample_lev           !< resampling level
     integer          :: enlarge                !< Fourier space enlargement
     integer          :: enlarge_nfft           !< NFFT space enlargement
-    integer          :: llr(MAX_DIM)           !< the size of the rescaled cubic mesh
+!     integer          :: llr(MAX_DIM)           !< the size of the rescaled cubic mesh
        
     FLOAT :: start_time              !< the time we switch on the photoelectron detector   
     FLOAT :: energyMax 
@@ -148,6 +155,8 @@ module PES_m
     type(fft_t)    :: fft            !< FFT plan
 
     type(tdpsf_t) :: psf             !< Phase-space filter struct reference
+
+    type(mesh_cube_parallel_map_t) :: mesh_cube_map  !< The parallel map
 
 
   end type PES_mask_t
@@ -196,11 +205,9 @@ contains
     !this%ll=0
     !this%np=0
     !this%spacing=M_ZERO
-    this%Lxyz_inv=>null()
     this%mesh=>null()
     !call cube_nullify(this%cube)
     this%ext_pot=>null()
-    this%M=>null()
     this%Mk=>null()
     !call cube_function_nullify(this%cM)
     this%mask_R=>null()
@@ -281,7 +288,8 @@ contains
     !% A. Pohl, P.-G. Reinhard, and E. Suraud, <i>Phys. Rev. Lett.</i> <b>84</b>, 5090 (2000).
     !%Option pes_mask 4
     !% Calculate the photo-electron spectrum using the mask method.
-    !% (D. Varsano, PhD thesis, page 159 (2006) http://nano-bio.ehu.es/files/varsano_phd.pdf).
+    !% U. De Giovannini, D. Varsano, M. A. L. Marques, H. Appel, E. K. U. Gross, and A. Rubio,
+    !% <i>Phys. Rev. A</i> <b>85</b>, 062515 (2012).
     !%End
 
     call parse_integer(datasets_check('PhotoElectronSpectrum'), PHOTOELECTRON_NONE, photoelectron_flags)
@@ -340,7 +348,7 @@ contains
     PUSH_SUB(PES_calc)
 
     if(pes%calc_rc)   call PES_rc_calc  (pes%rc, st, mesh, ii)
-    if(pes%calc_mask) call PES_mask_calc(pes%mask, mesh, st, dt, mask, hm, geo, iter)
+    if(pes%calc_mask) call PES_mask_calc(pes%mask, mesh, st, dt, hm, geo, iter)
 
     POP_SUB(PES_calc)
   end subroutine PES_calc
@@ -379,7 +387,7 @@ contains
 
     PUSH_SUB(PES_restart_write)
 
-      if(pes%calc_mask) call PES_mask_restart_write (pes%mask, mesh, st)
+      if(pes%calc_mask) call PES_mask_restart_write (pes%mask, st)
 
     POP_SUB(PES_restart_write)
   end subroutine PES_restart_write

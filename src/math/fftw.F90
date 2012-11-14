@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fftw.F90 8599 2011-11-19 22:14:33Z micael $
+!! $Id: fftw.F90 9196 2012-07-13 02:51:33Z xavier $
 
 #include "global.h"
 
@@ -193,6 +193,26 @@ module fftw_m
     subroutine DFFTW(cleanup)
     end subroutine DFFTW(cleanup)
   end interface fftw_cleanup
+
+
+  ! ----------------- thread related functions---------------
+
+  interface fftw_init_threads
+    subroutine DFFTW(init_threads)(iret)
+      integer, intent(out) :: iret
+    end subroutine DFFTW(init_threads)
+  end interface fftw_init_threads
+
+  interface fftw_plan_with_nthreads
+    subroutine DFFTW(plan_with_nthreads)(nthreads)
+      integer, intent(in) :: nthreads
+    end subroutine DFFTW(plan_with_nthreads)
+  end interface fftw_plan_with_nthreads
+
+  interface fftw_cleanup_threads
+    subroutine DFFTW(cleanup_threads)
+    end subroutine DFFTW(cleanup_threads)
+  end interface fftw_cleanup_threads
 
 contains
 

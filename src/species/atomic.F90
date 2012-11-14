@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: atomic.F90 7610 2011-03-25 03:41:01Z xavier $
+!! $Id: atomic.F90 9173 2012-07-02 15:10:00Z dstrubbe $
 
 #include "global.h"
 #define R_TOPREC(x) real(x, REAL_PRECISION)
@@ -746,7 +746,7 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                             !
 !  at this point, we have just set the bottom of the bisection range;         !
-!  if the top is also set, we procede.  if the top of the range has not       !
+!  if the top is also set, we proceed.  if the top of the range has not       !
 !  been set, it means that we have yet to find an e greater than the          !
 !  desired energy.  the upper end of the range is extended.                   !
 !                                                                             !
@@ -766,7 +766,7 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                             !
 !  at this point, we have just set the top of the bisection range;            !
-!  if the top is also set, we procede.  if the top of the range has           !
+!  if the top is also set, we proceed.  if the top of the range has           !
 !  not been set, it means that we have yet to find an e less than the         !
 !  desired energy.  the lower end of the range is extended.                   !
 !                                                                             !

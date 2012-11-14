@@ -17,7 +17,7 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: Makefile.am 7890 2011-05-13 00:34:44Z xavier $
+## $Id: Makefile.am 9172 2012-07-02 14:35:00Z dstrubbe $
 
 sharedir = $(pkgdatadir)/testsuite/periodic_systems
 
@@ -38,6 +38,7 @@ dist_share_DATA =                                \
 	05-lithium.01-gs.inp                     \
 	05-lithium.02-td.inp                     \
 	05-lithium.03-td-restart.inp             \
+        05-lithium.04-dielectric_function.inp    \
 	06-h2o_pol_lr.01_gs.inp                  \
 	06-h2o_pol_lr.02_kdotp.inp               \
 	06-h2o_pol_lr.03_emresp.inp              \

@@ -16,13 +16,12 @@
  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  02111-1307, USA.
 
- $Id: varia.h 8792 2012-01-24 03:19:40Z dstrubbe $
+ $Id: varia.h 9195 2012-07-13 02:11:33Z xavier $
 */
 
 #ifndef _VARIA_H
 #define _VARIA_H
 
-void fft_optimize(int *n, int par);
 void progress_bar(int actual, int max);
 void sysname(char **c);
 

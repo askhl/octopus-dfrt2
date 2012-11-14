@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td.F90 9118 2012-06-12 20:54:57Z xavier $
+!! $Id: td.F90 9204 2012-07-18 16:55:23Z helbig $
 
 #include "global.h"
 
@@ -25,7 +25,7 @@ module td_m
   use cpmd_m
   use datasets_m
   use density_m
-  use energy_m
+  use energy_calc_m
   use epot_m
   use forces_m
   use gauge_field_m
@@ -226,7 +226,7 @@ contains
         end if
       end if
 
-      !Apply mask absorbing boudaires
+      !Apply mask absorbing boundaries
       if(hm%ab == MASK_ABSORBING) call zvmask(gr, hm, st) 
 
       ! time iterate wavefunctions
@@ -293,7 +293,7 @@ contains
         call v_ks_calc(sys%ks, hm, st, sys%geo, calc_eigenval = update_energy, time = iter*td%dt, calc_energy = update_energy)
 
         ! Get the energies.
-        if(update_energy) call total_energy(hm, sys%gr, st, iunit = -1)
+        if(update_energy) call energy_calc_total(hm, sys%gr, st, iunit = -1)
 
         if (td%dynamics == CP) then
           if(states_are_real(st)) then
@@ -438,10 +438,8 @@ contains
       CMPLX, allocatable :: rotation_matrix(:, :)
 
       PUSH_SUB(td_run.init_wfs)
-
       if(.not.fromscratch) then
         call restart_read(trim(tmpdir)//'td', st, gr, ierr, iter=td%iter)
-
         if(ierr.ne.0) then
           message(1) = "Could not load "//trim(tmpdir)//"td: Starting from scratch"
           call messages_warning(1)
@@ -604,7 +602,7 @@ contains
       end if
 #endif
       call hamiltonian_span(hm, minval(gr%mesh%spacing(1:gr%mesh%sb%dim)), x)
-      call total_energy(hm, gr, st, -1)
+      call energy_calc_total(hm, gr, st)
 
       POP_SUB(td_run.init_wfs)
     end subroutine init_wfs

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: pes_mask_inc.F90 9110 2012-06-11 17:06:23Z umberto $
+!! $Id: pes_mask_inc.F90 9210 2012-07-19 17:10:36Z umberto $
 
 ! ---------------------------------------------------------
 subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
@@ -29,13 +29,14 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
 
   type(block_t) :: blk
 
-  integer :: il,it,ii
-  FLOAT :: field(MAX_DIM)
+  integer :: il, it, ii, ll(3)
+  FLOAT :: field(3)
   FLOAT :: DeltaE,MaxE,MaxDR, pCutOff
   FLOAT :: width 
   integer :: dir, defaultMask,k1,k2,st1,st2, optimize_parity(3)
   logical :: optimize(3)
   FLOAT, allocatable  ::  XX(:,:)  
+  type(mpi_grp_t) :: mpi_grp
 
   PUSH_SUB(PES_mask_init)
 
@@ -47,13 +48,6 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
   write(message(1),'(a,i1,a)') 'Info: Calculating PES using mask technique.'
   call messages_info(1)
 
-
-
-  if(mesh%parallel_in_domains .and. st%parallel_in_states) then
-    write(message(1),'(a)') "PES_mask: simultaneous parallelization on mesh and states not supported"
-    write(message(2),'(a)') "Modify ParallelizationStrategy and rerun." 
-    call messages_fatal(2) 
-  end if    
 
 
   if(sb%box_shape /= SPHERE) then
@@ -160,6 +154,8 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
   !% Time-dependent phase-space filter map.
   !%Option nfft_map 5
   !% Non-equispaced FFT map. 
+  !%Option pfft_map 6
+  !% Use PFFT libraries. 
   !%End
   call parse_integer(datasets_check('PESMaskPlaneWaveProjection'),PW_MAP_BARE_FFT,mask%pw_map_how)
 
@@ -173,6 +169,19 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
   endif 
 #endif
 
+#if !defined(HAVE_PFFT) 
+  if (mask%pw_map_how ==  PW_MAP_PFFT) then
+    message(1) = "PESMaskPlaneWaveProjection = pfft_map requires PFFT. Recompile and try again." 
+    call messages_fatal(1) 
+  endif 
+#endif
+    
+  if (mask%pw_map_how ==  PW_MAP_PFFT .and. (.not. mask%mesh%parallel_in_domains)) then
+    message(1)= "Trying to use PESMaskPlaneWaveProjection = pfft_map with no domain parallelization."
+    message(2)= "Projection method changed to more efficient fft_map."
+    call messages_warning(2)
+    mask%pw_map_how = PW_MAP_BARE_FFT
+  end if
   
   !%Variable PESMaskEnlargeLev
   !%Type integer
@@ -211,90 +220,129 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
   mask%ll = 1
   mask%spacing = -M_ONE
 
-  if(sb%mr_flag) then
+  if(sb%mr_flag) then ! multiresolution 
     mask%spacing(1:sb%dim) = mesh%spacing(1:sb%dim)*2**(sb%hr_area%num_radii)       
     mask%ll(1:sb%dim) = int(M_TWO*sb%rsize/mask%spacing(1:sb%dim)) + 1
   else 
-    mask%spacing = mesh%spacing
-    mask%ll = mesh%idx%ll    
+    mask%spacing(1:3) = mesh%spacing(1:3)
+    mask%ll(1:3) = mesh%idx%ll(1:3)    
   end if 
 
   !Enlarge the bounding box region
   mask%ll(1:sb%dim)= mask%ll(1:sb%dim)*M_TWO**mask%enlarge 
-   
-  if (mask%pw_map_how .ne.  PW_MAP_NFFT) then
-
-    ! allocate FFTs in case they are not allocated yet
-    optimize(1:3) = .false.
-    optimize(sb%periodic_dim+1:sb%dim) = .true.
-    optimize_parity(1:sb%periodic_dim) = 0
-    optimize_parity(sb%periodic_dim+1:sb%dim) = 1
-
-    call fft_init(mask%fft, mask%ll, sb%dim, FFT_COMPLEX, FFTLIB_FFTW, optimize, optimize_parity)
-
-  else    !NFFT initialization
+  
+  
+  select case(mask%pw_map_how)
+    case(PW_MAP_FFT)
+      call cube_init(mask%cube, mask%ll, mesh%sb, fft_type = FFT_COMPLEX, fft_library = FFTLIB_FFTW, nn_out = ll)
+      mask%ll = ll !FFT optimization may change this values
+      mask%fft = mask%cube%fft
+      mask%np = mesh%np_part_global 
+      
+    case(PW_MAP_PFFT)
+      ASSERT(mask%mesh%parallel_in_domains)
+      call cube_init(mask%cube, mask%ll, mesh%sb, fft_type = FFT_COMPLEX, fft_library = FFTLIB_PFFT, nn_out = ll, &
+      mpi_grp = mask%mesh%mpi_grp)
+!        print *,mpi_world%rank, "mask%mesh%mpi_grp%comm", mask%mesh%mpi_grp%comm, mask%mesh%mpi_grp%size
+!         print *,mpi_world%rank, "mask%cube%mpi_grp%comm", mask%cube%mpi_grp%comm, mask%cube%mpi_grp%size
+      mask%ll(1) = mask%cube%fs_n(3)
+      mask%ll(2) = mask%cube%fs_n(1)
+      mask%ll(3) = mask%cube%fs_n(2)
+      mask%fft = mask%cube%fft
+      mask%np = mesh%np_part ! the mask is local
+      if ( mask%mesh%parallel_in_domains .and. mask%cube%parallel_in_domains) then
+        call mesh_cube_parallel_map_init(mask%mesh_cube_map, mask%mesh, mask%cube)
+      end if      
+            
+    case(PW_MAP_BARE_FFT)
+      call cube_init(mask%cube, mask%ll, mesh%sb, fft_type = FFT_COMPLEX, fft_library = FFTLIB_FFTW, nn_out = ll)
+      mask%ll = ll 
+      mask%fft = mask%cube%fft
+      mask%np = mesh%np_part_global 
+  
+    case(PW_MAP_TDPSF)
+      call cube_init(mask%cube, mask%ll, mesh%sb, fft_type = FFT_COMPLEX, fft_library = FFTLIB_FFTW, nn_out = ll)
+      mask%ll = ll 
+      mask%fft = mask%cube%fft
+      mask%np = mesh%np_part_global 
+  
+    case(PW_MAP_NFFT)
+      !FIXME: this part is a bit messy and should be integrated into cube_init
     
-    ! we just add 2 points for the enlarged region
-    if (mask%enlarge_nfft .ne. 1) mask%ll(1:sb%dim) = mask%ll(1:sb%dim) + 2 
+      !NFFT initialization
+    
+      ! we just add 2 points for the enlarged region
+      if (mask%enlarge_nfft .ne. 1) mask%ll(1:sb%dim) = mask%ll(1:sb%dim) + 2 
 
 #ifdef HAVE_NFFT    
-    !Set NFFT defaults to values that are optimal for PES (at least for the cases I have tested)
-    !These values are overridden by the NFFT options in the input file 
-    mask%fft%nfft%set_defaults = .true.
-    mask%fft%nfft%guru = .true.
-    mask%fft%nfft%mm = 2 
-    mask%fft%nfft%sigma = CNST(1.1)
-    mask%fft%nfft%precompute = NFFT_PRE_PSI
+      !Set NFFT defaults to values that are optimal for PES (at least for the cases I have tested)
+      !These values are overridden by the NFFT options in the input file 
+      mask%fft%nfft%set_defaults = .true.
+      mask%fft%nfft%guru = .true.
+      mask%fft%nfft%mm = 2 
+      mask%fft%nfft%sigma = CNST(1.1)
+      mask%fft%nfft%precompute = NFFT_PRE_PSI
 #endif
       
-    ! These options should not affect NFFT scheme  
-    optimize(1:3) = .false.
-    optimize(sb%periodic_dim+1:sb%dim) = .true.
-    optimize_parity(1:sb%periodic_dim) = 0
-    optimize_parity(sb%periodic_dim+1:sb%dim) = 1
+      ! These options should not affect NFFT scheme  
+      optimize(1:3) = .false.
+      optimize(sb%periodic_dim+1:sb%dim) = .true.
+      optimize_parity(1:sb%periodic_dim) = 0
+      optimize_parity(sb%periodic_dim+1:sb%dim) = 1
 
-    call fft_init(mask%fft, mask%ll, sb%dim, FFT_COMPLEX, FFTLIB_NFFT, optimize, optimize_parity )
+      call fft_init(mask%fft, mask%ll, sb%dim, FFT_COMPLEX, FFTLIB_NFFT, optimize, optimize_parity )
+          
+      SAFE_ALLOCATE(XX(1:mask%ll(1),3))
     
-    
-    SAFE_ALLOCATE(XX(1:mask%ll(1),3))
-    
-    !Generate the NFFT-enlarged node grid
-    if (mask%enlarge_nfft .gt. 0) then
-      do ii=2, mask%ll(1)-1 
-        XX(ii,1)= (ii - int(mask%ll(1)/2) -1)*mask%spacing(1)
-      end do
-      XX(1,1)= (-int(mask%ll(1)/2))*mask%spacing(1)*M_TWO**mask%enlarge_nfft 
-      XX(mask%ll(1),1)= (int(mask%ll(1)/2))*mask%spacing(1)*M_TWO**mask%enlarge_nfft 
+      !Generate the NFFT-enlarged node grid
+      if (mask%enlarge_nfft .gt. 0) then
+        do ii=2, mask%ll(1)-1 
+          XX(ii,1)= (ii - int(mask%ll(1)/2) -1)*mask%spacing(1)
+        end do
+        XX(1,1)= (-int(mask%ll(1)/2))*mask%spacing(1)*M_TWO**mask%enlarge_nfft 
+        XX(mask%ll(1),1)= (int(mask%ll(1)/2))*mask%spacing(1)*M_TWO**mask%enlarge_nfft 
       
-    else
-      do ii=1, mask%ll(1) 
-        XX(ii,1)= (ii - int(mask%ll(1)/2) -1)*mask%spacing(1)
-      end do
-    end if
+      else
+        do ii=1, mask%ll(1) 
+          XX(ii,1)= (ii - int(mask%ll(1)/2) -1)*mask%spacing(1)
+        end do
+      end if
     
-    XX(:,2) = XX(:,1)
-    XX(:,3) = XX(:,1)
+      XX(:,2) = XX(:,1)
+      XX(:,3) = XX(:,1)
     
-    !Set the node points and precompute the NFFT plan
-    call fft_init_stage1(mask%fft, XX)
+      !Set the node points and precompute the NFFT plan
+      call fft_init_stage1(mask%fft, XX)
 
-    SAFE_DEALLOCATE_A(XX)
-  end if
+      SAFE_DEALLOCATE_A(XX)
 
-  !!ALLOCATIONS
+      call cube_init(mask%cube, mask%ll, mesh%sb)  
+      SAFE_ALLOCATE(mask%cube%fft)
+      mask%cube%fft = mask%fft
+      call fft_get_dims(mask%cube%fft, mask%cube%rs_n_global, mask%cube%fs_n_global, mask%cube%rs_n, mask%cube%fs_n, &
+           mask%cube%rs_istart, mask%cube%fs_istart)
 
-  mask%np = mesh%np_part_global !we do not divide the cube objects in this implementation 
+      mask%np = mesh%np_part_global 
 
+    case default 
+      !Program should die before coming here
+       write(message(1),'(a)') "PESMaskPlaneWaveProjection unrecognized option." 
+       call messages_fatal(1)
+
+  end select
+  
+  !Indices  
  
+  mask%fs_istart = mask%cube%fs_istart 
+  mask%fs_n = mask%cube%fs_n 
+  mask%fs_n_global = mask%cube%fs_n_global 
 
-  SAFE_ALLOCATE(mask%Lxyz_inv(1:mask%ll(1),1:mask%ll(2),1:mask%ll(3)))
-  call cube_init(mask%cube, mask%ll, mesh%sb)  
-
-  SAFE_ALLOCATE(mask%M(1:mask%ll(1),1:mask%ll(2),1:mask%ll(3)))
+!   print *, mpi_world%rank, " mask%ll", mask%ll(1:3), "states -",st%st_start,st%st_end
+  !Allocations
 	call cube_function_null(mask%cM)    
-	call dcube_function_alloc_RS(mask%cube, mask%cM)
+	call zcube_function_alloc_RS(mask%cube, mask%cM, force_alloc = .true.)
 
-  SAFE_ALLOCATE(mask%Lk(1:mask%ll(1)))
+  SAFE_ALLOCATE(mask%Lk(1:mask%fs_n_global(1)))
 
   st1 = st%st_start
   st2 = st%st_end
@@ -305,8 +353,7 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
 
 
   ! generate the map between mesh and cube
-  call  PES_mask_generate_Lxyz_inv(mask)
-  call  PES_mask_generate_Lk(mask)
+  call  PES_mask_generate_Lk(mask) ! generate the physical momentum vector
 
 
 
@@ -375,6 +422,9 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
   else
     call PES_mask_generate_mask(mask,mesh)
   end if
+
+
+
 
   !%Variable PESMaskFilterCutOff 
   !%Type float
@@ -470,7 +520,7 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
   !!  Set external fields 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-  SAFE_ALLOCATE(mask%ext_pot(0:max_iter,1:MAX_DIM))
+  SAFE_ALLOCATE(mask%ext_pot(0:max_iter,1:3))
   mask%ext_pot=M_ZERO
 
   if(mask%sw_evolve .eq. VOLKOV) then
@@ -484,7 +534,7 @@ subroutine PES_mask_init(mask, mesh, sb, st, hm, max_iter,dt)
         do it = 1, max_iter
           field=M_ZERO
           call laser_field(hm%ep%lasers(il), field, it*dt)
-          mask%ext_pot(it,:)= mask%ext_pot(it,:)-field(:) !Sum up all the fields
+          mask%ext_pot(it,:)= mask%ext_pot(it,:)-field(:) !Sum up all the fields (for some reason needs negative sign)
         end do
      end select
     end do
@@ -503,77 +553,30 @@ subroutine PES_mask_end(mask)
 
   PUSH_SUB(PES_mask_end)
 
-    SAFE_DEALLOCATE_P(mask%k)
+  SAFE_DEALLOCATE_P(mask%k)
 
-    SAFE_DEALLOCATE_P(mask%ext_pot)
-    SAFE_DEALLOCATE_P(mask%M)
-    SAFE_DEALLOCATE_P(mask%mask_R)
-    SAFE_DEALLOCATE_P(mask%Lxyz_inv)
-    SAFE_DEALLOCATE_P(mask%Lk)
+  SAFE_DEALLOCATE_P(mask%ext_pot)
+  SAFE_DEALLOCATE_P(mask%mask_R)
+  SAFE_DEALLOCATE_P(mask%Lk)
     
-!      if(mask%pw_map_how .ne. PW_MAP_NFFT)then
-      call fft_end(mask%fft)
-!      else
-! #if defined(HAVE_NFFT) 
-!       call nfft_end(mask%nfft)
-! #endif
-!     end if 
-
-    if(mask%mode == MODE_PSF) then 
-      call tdpsf_end(mask%psf)
-    end if
+  if(mask%mode == MODE_PSF) then 
+    call tdpsf_end(mask%psf)
+  end if
    
-    if ( mask%filter_k ) then
-      SAFE_DEALLOCATE_P(mask%Mk)
-    end if
+  if ( mask%filter_k ) then
+    SAFE_DEALLOCATE_P(mask%Mk)
+  end if
 
-   call cube_end(mask%cube)   
-   call dcube_function_free_RS(mask%cube, mask%cM)
+  if (mask%mesh%parallel_in_domains .and. mask%cube%parallel_in_domains) then
+      call mesh_cube_parallel_map_end(mask%mesh_cube_map)
+  end if
+
+  call zcube_function_free_RS(mask%cube, mask%cM)
+  call cube_end(mask%cube)   
 
   POP_SUB(PES_mask_end)
 end subroutine PES_mask_end
 
-! ---------------------------------------------------------
-subroutine PES_mask_generate_Lxyz_inv(mask)
-  type(PES_mask_t), intent(inout) :: mask
-  
-  integer :: ix,iy,iz,ip,rankmin,dir
-  FLOAT :: dmin! , ixx(MAX_DIM)
-  integer :: ixx(MAX_DIM)
-
-  PUSH_SUB(PES_mask_generate_Lxyz_inv)
-
-
-  mask%Lxyz_inv = -1
-
-
-  do ix = 1, mask%ll(1)
-    ixx(1)= ix - int(mask%ll(1)/2) -1  
-    do iy= 1, mask%ll(2) 
-      ixx(2)= iy - int(mask%ll(2)/2) -1  
-      do iz = 1, mask%ll(3)
-        ixx(3)= iz - int(mask%ll(3)/2) -1 
-        
-         
-        !!Support multiresolution
-        if( all(ixx(1:mask%mesh%sb%dim) >  mask%mesh%idx%nr(1,1:mask%mesh%sb%dim) &
-                              + mask%mesh%idx%enlarge(1:mask%mesh%sb%dim) ) .and. &
-            all(ixx(1:mask%mesh%sb%dim) <  mask%mesh%idx%nr(2,1:mask%mesh%sb%dim) &
-                               - mask%mesh%idx%enlarge(1:mask%mesh%sb%dim) ) ) then
-
-          ip = mask%mesh%idx%Lxyz_inv(ixx(1),ixx(2),ixx(3)) 
-          if (ip > 0 .and. ip < mask%mesh%np_global) then
-            mask%Lxyz_inv(ix,iy,iz) = mask%mesh%idx%Lxyz_inv(ixx(1),ixx(2),ixx(3))
-          end if 
-        end if
-      
-      end do
-    end do
-  end do
-
-
-  POP_SUB(PES_mask_generate_Lxyz_inv)
-end subroutine PES_mask_generate_Lxyz_inv
 
 ! --------------------------------------------------------
 subroutine PES_mask_generate_Lk(mask)
@@ -584,10 +587,10 @@ subroutine PES_mask_generate_Lk(mask)
 
   PUSH_SUB(PES_mask_generate_Lk)
 
-  temp = M_TWO * M_PI / (mask%ll(1) * mask%spacing(1))
-  nn = mask%ll(1)
+  temp = M_TWO * M_PI / (mask%fs_n_global(1) * mask%spacing(1))
+  nn = mask%fs_n_global(1)
 
-  do ii = 1, mask%ll(1)
+  do ii = 1, mask%fs_n_global(1)
 
     if (mask%pw_map_how .eq.  PW_MAP_NFFT) then
       !The Fourier space is shrunk by the factor M_TWO**mask%enlarge_nfft
@@ -656,7 +659,7 @@ subroutine PES_mask_generate_mask(mask,mesh)
 
   PUSH_SUB(PES_mask_generate_mask)
 
-  call PES_mask_generate_mask_function(mask,mesh, mask%shape, mask%mask_R, mask%M)
+  call PES_mask_generate_mask_function(mask,mesh, mask%shape, mask%mask_R)
 
   POP_SUB(PES_mask_generate_mask)
 
@@ -666,20 +669,19 @@ end subroutine PES_mask_generate_mask
 !>  Generate the mask function on the cubic mesh containing 
 !!  the simulation box
 ! ---------------------------------------------------------
-subroutine PES_mask_generate_mask_function(mask,mesh, shape, R, mask_sq, mask_m)
-  type(PES_mask_t),     intent(inout)    :: mask
+subroutine PES_mask_generate_mask_function(mask,mesh, shape, R, mask_sq)
+  type(PES_mask_t), intent(inout) :: mask
   type(mesh_t),     intent(in)    :: mesh
   integer,          intent(in)    :: shape
   FLOAT,            intent(in)    :: R(2)
-  FLOAT,            intent(out)   :: mask_sq(:,:,:)
-  FLOAT, optional,  intent(out)   :: mask_m(:)
+  FLOAT, optional,  intent(out)   :: mask_sq(:,:,:)
 
-  integer :: ip, ix3(MAX_DIM)
+  integer :: ip, ix3(3)
   integer :: ip_local
   FLOAT   :: dd1,dd2,width
   FLOAT   :: xx(1:MAX_DIM), rr, dd, radius
   integer :: ix,iy,iz, ii
-  FLOAT,allocatable :: mask_fn(:)
+  CMPLX,allocatable :: mask_fn(:)
   logical :: local_
 
   PUSH_SUB(PES_mask_generate_mask_function)
@@ -693,7 +695,7 @@ subroutine PES_mask_generate_mask_function(mask,mesh, shape, R, mask_sq, mask_m)
   xx = M_ZERO
  
   !We want the mask cube function to be divided on the nodes?
-  local_=(mask%np .eq. mask%mesh%np) .or. (mask%np .eq. mask%mesh%np_part)
+  local_= mask%cube%parallel_in_domains
 
   select case(shape)
     case(M_SIN2)
@@ -743,14 +745,11 @@ subroutine PES_mask_generate_mask_function(mask,mesh, shape, R, mask_sq, mask_m)
  
   mask_fn(:) = M_ONE - mask_fn(:)
  
-  call dmesh_to_cube(mask%mesh, mask_fn, mask%cube, mask%cM)
+  call PES_mask_mesh_to_cube(mask, mask_fn, mask%cM, local = local_)
 
-  mask_sq = mask%cM%dRS
+  if(present(mask_sq)) mask_sq = real(mask%cM%zRS)
 
 
-  if(present(mask_m)) then 
-    mask_m = mask_fn
-  end if 
 
   SAFE_DEALLOCATE_A(mask_fn)
 
@@ -765,18 +764,18 @@ subroutine PES_mask_apply_mask(mask,st,mesh)
   type(PES_mask_t), intent(in)    :: mask
   type(mesh_t),     intent(in)    :: mesh
 
-  integer :: ik, ist, idim
-  FLOAT, allocatable :: mmask(:)
+  integer :: ik, ist, idim, ip
+  CMPLX, allocatable :: mmask(:)
 
   PUSH_SUB(PES_mask_apply_mask)
   SAFE_ALLOCATE(mmask(1:mask%mesh%np_part))
 
-  call dcube_to_mesh(mask%cube, mask%cM, mask%mesh, mmask, local = .true.)
-
+  call PES_mask_cube_to_mesh(mask, mask%cM, mmask)
+  
   do ik = st%d%kpt%start, st%d%kpt%end
     do ist = st%st_start, st%st_end
       do idim = 1, st%d%dim
- 					st%zpsi(1:mask%mesh%np_part, idim, ist, ik) = st%zpsi(1:mask%mesh%np_part, idim, ist, ik)*mmask(1:mask%mesh%np_part)
+         st%zpsi(1:mask%mesh%np_part, idim, ist, ik) = st%zpsi(1:mask%mesh%np_part, idim, ist, ik)*mmask(1:mask%mesh%np_part)
       end do
     end do
   end do
@@ -810,128 +809,50 @@ subroutine PES_mask_Volkov_time_evolution_wf(mask, mesh, dt, iter, wf)
   integer,          intent(in)    :: iter
   CMPLX,            intent(inout) :: wf(:,:,:)
 
-  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(MAX_DIM), ixx(MAX_DIM)
-  FLOAT :: temp(MAX_DIM), vec
-  FLOAT :: dd,KK(MAX_DIM)
-  integer :: il,ll(MAX_DIM)
+  integer ::  ix, iy, iz
+  FLOAT :: temp(3), vec
+  FLOAT :: dd, KK(1:3)
 
   PUSH_SUB(PES_mask_Volkov_time_evolution_wf)
 
 
   ! propagate wavefunction in momentum space in presence of a td field (in the velocity gauge)
-  do ix = 1, mask%ll(1)
-    KK(1) = mask%Lk(ix)
-    do iy = 1, mask%ll(2)
-      KK(2) = mask%Lk(iy)
-      do iz = 1, mask%ll(3)
-        KK(3) = mask%Lk(iz)
+  if(mask%cube%fft%library == FFTLIB_PFFT) then !PFFT FS indices are transposed
 
-        vec = sum(( KK(1:mesh%sb%dim) - mask%ext_pot(iter,1:mesh%sb%dim)/P_C)**2) / M_TWO
-        wf(ix, iy, iz) = wf(ix, iy, iz) * exp(-M_zI * dt * vec)
+    do ix = 1, mask%fs_n(1)
+      KK(3) = mask%Lk(ix + mask%fs_istart(1) - 1)
+      do iy = 1, mask%fs_n(2)
+        KK(1) = mask%Lk(iy + mask%fs_istart(2) - 1)
+        do iz = 1, mask%fs_n(3)
+          KK(2) = mask%Lk(iz + mask%fs_istart(3) - 1)
+
+            vec = sum(( KK(1:mesh%sb%dim) - mask%ext_pot(iter,1:mesh%sb%dim)/P_C)**2) / M_TWO
+            wf(iz, ix, iy) = wf(iz, ix, iy) * exp(-M_zI * dt * vec)
+
         
+        end do
       end do
     end do
-  end do
+  else
+
+    do ix = 1, mask%ll(1)
+      KK(1) = mask%Lk(ix + mask%fs_istart(1) - 1)
+      do iy = 1, mask%ll(2)
+        KK(2) = mask%Lk(iy + mask%fs_istart(2) - 1)
+        do iz = 1, mask%ll(3)
+          KK(3) = mask%Lk(iz + mask%fs_istart(3) - 1)
+          vec = sum(( KK(1:mesh%sb%dim) - mask%ext_pot(iter,1:mesh%sb%dim)/P_C)**2) / M_TWO
+          wf(ix, iy, iz) = wf(ix, iy, iz) * exp(-M_zI * dt * vec)
+        end do
+      end do
+    end do
+
+  end if
 
 
   POP_SUB(PES_mask_Volkov_time_evolution_wf)
 end subroutine PES_mask_Volkov_time_evolution_wf
 
-
-! ---------------------------------------------------------
-subroutine PES_mask_backaction_wf_apply(mask, mesh, wfB,state)
-  type(PES_mask_t), intent(in)    :: mask
-  type(mesh_t),     intent(in)    :: mesh
-  CMPLX,            intent(inout) :: state(:)
-  CMPLX,            intent(in)    :: wfB(:,:,:)
-
-  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(MAX_DIM), ixx(MAX_DIM)
-  type(cube_function_t) :: cf
-  CMPLX, allocatable :: mf(:)
-  FLOAT :: temp(MAX_DIM), vec
-  FLOAT :: dd
-  integer :: il,ll(MAX_DIM)
-
-  integer:: ip_local
-
-  type(profile_t), save :: prof
-  call profiling_in(prof, "PESMASK_back_action")
-
-
-  PUSH_SUB(PES_mask_backaction_wf_apply)
-
-
-  ll(1:MAX_DIM) = mask%ll(1:MAX_DIM)
-  call cube_function_null(cf)    
-  call zcube_function_alloc_RS(mask%cube, cf) 
-  SAFE_ALLOCATE(mf(1:mask%mesh%np_part))
-
-  
-  cf%zRS = M_z0
-  call PES_mask_K_to_X(mask,mesh, wfB , cf%zRs)
-  
-  call zcube_to_mesh(mask%cube, cf, mask%mesh, mf, local = .true.)  
-  state = state + mf    
-
-
-
- 
-  SAFE_DEALLOCATE_A(mf)
-  call zcube_function_free_RS(mask%cube,cf)
- 
-  POP_SUB(PES_mask_backaction_wf_apply)
- 
-  call profiling_out(prof)
-  
-end subroutine PES_mask_backaction_wf_apply
-
-
-
-
-
-
-
-!---------------------------------------------------------
-!> Local frontend to similar functions defined in cube_function_inc.F90
-!---------------------------------------------------------
-
-subroutine PES_mask_mesh_to_cube(mask, mf, cf, local)
-  type(pes_mask_t),      intent(in)    :: mask
-  CMPLX,  target,        intent(in)    :: mf(:) 
-  type(cube_function_t), intent(out) :: cf
-  logical, optional,     intent(in)    :: local 
-
-  logical :: local_
-
-  PUSH_SUB(PES_mask_mesh_to_cube)
-
-  local_ = optional_default(local, .true.) .and. mask%mesh%parallel_in_domains
-  
-  call zmesh_to_cube(mask%mesh, mf, mask%cube, cf, local_)
-
-  POP_SUB(PES_mask_mesh_to_cube)
-
-end subroutine PES_mask_mesh_to_cube
-
-
-subroutine PES_mask_cube_to_mesh(mask, cf, mf, local)
-  type(pes_mask_t),      intent(in)    :: mask
-  CMPLX,  target,        intent(out)   :: mf(:) 
-  type(cube_function_t), intent(in)    :: cf
-  logical, optional,     intent(in)    :: local 
-
-  logical :: local_
-
-  PUSH_SUB(PES_mask_cube_to_mesh)
-
-  local_ = optional_default(local, .true.) .and. mask%mesh%parallel_in_domains
-
-  call zcube_to_mesh(mask%cube, cf, mask%mesh, mf, local_)
-
-
-  POP_SUB(PES_mask_cube_to_mesh)
-
-end subroutine PES_mask_cube_to_mesh
 
 
 !---------------------------------------------------------
@@ -941,10 +862,10 @@ subroutine fft_X_to_K(mask, mesh, wfin, wfout)
   CMPLX,            intent(in)  :: wfin(:,:,:)
   CMPLX,            intent(out) :: wfout(:,:,:)
 
-  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(MAX_DIM), ixx(MAX_DIM)
-  FLOAT   :: temp(MAX_DIM), vec
+  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(3), ixx(3)
+  FLOAT   :: temp(3), vec
   FLOAT   :: dd
-  integer :: il,ll(MAX_DIM)
+  integer :: il,ll(3)
   CMPLX, allocatable :: wftmp(:,:,:),wfPlus(:,:,:),wfMinus(:,:,:) 
   integer :: ip_local
 
@@ -952,7 +873,7 @@ subroutine fft_X_to_K(mask, mesh, wfin, wfout)
   PUSH_SUB(fft_X_to_K)
 
 
-  ll(1:MAX_DIM) = mask%ll(1:MAX_DIM)
+  ll(1:3) = mask%ll(1:3)
   SAFE_ALLOCATE(wftmp(1:mask%ll(1), 1:mask%ll(2), 1:mask%ll(3)))
   SAFE_ALLOCATE(wfPlus(1:mask%ll(1), 1:mask%ll(2), 1:mask%ll(3)))
   SAFE_ALLOCATE(wfMinus(1:mask%ll(1), 1:mask%ll(2), 1:mask%ll(3)))
@@ -1026,10 +947,10 @@ subroutine fft_K_to_X(mask,mesh,wfin,wfout,inout)
   integer,          intent(in)  :: inout
 
 
-  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(MAX_DIM), ixx(MAX_DIM)
-  FLOAT   :: temp(MAX_DIM), vec
+  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(3), ixx(3)
+  FLOAT   :: temp(3), vec
   FLOAT   :: dd
-  integer :: il,ll(MAX_DIM)
+  integer :: il,ll(3)
   CMPLX, allocatable :: wftmp(:,:,:),wfPlus(:,:,:),wfMinus(:,:,:) 
   integer :: ip_local
 
@@ -1037,7 +958,7 @@ subroutine fft_K_to_X(mask,mesh,wfin,wfout,inout)
   PUSH_SUB(fft_K_to_X)
 
 
-  ll(1:MAX_DIM) = mask%ll(1:MAX_DIM)
+  ll(1:3) = mask%ll(1:3)
   SAFE_ALLOCATE(wftmp(1:mask%ll(1), 1:mask%ll(2), 1:mask%ll(3)))
   SAFE_ALLOCATE(wfPlus(1:mask%ll(1), 1:mask%ll(2), 1:mask%ll(3)))
   SAFE_ALLOCATE(wfMinus(1:mask%ll(1), 1:mask%ll(2), 1:mask%ll(3)))
@@ -1132,11 +1053,11 @@ subroutine integral_X_to_K(mask,mesh,wfin,wfout)
   CMPLX,            intent(in)  :: wfin(:,:,:)
   CMPLX,            intent(out) :: wfout(:,:,:)
 
-  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(MAX_DIM), ixx(MAX_DIM)
-  FLOAT   :: temp(MAX_DIM), vec
+  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(3), ixx(3)
+  FLOAT   :: temp(3), vec
   FLOAT   :: k_dot_r
-  integer :: il,ll(MAX_DIM)
-  integer :: ip_local,kx,ky,kz,ikk(MAX_DIM)
+  integer :: il,ll(3)
+  integer :: ip_local,kx,ky,kz,ikk(3)
 
 
   PUSH_SUB(integral_X_to_K)
@@ -1190,11 +1111,11 @@ subroutine integral_K_to_X(mask,mesh,wfin,wfout)
   CMPLX,            intent(in)  :: wfin(:,:,:)
   CMPLX,            intent(out) :: wfout(:,:,:)
 
-  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(MAX_DIM), ixx(MAX_DIM)
-  FLOAT   :: temp(MAX_DIM), vec
+  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(3), ixx(3)
+  FLOAT   :: temp(3), vec
   FLOAT   :: dd,k_dot_r
-  integer :: il,ll(MAX_DIM)
-  integer :: ip_local,kx,ky,kz,ikk(MAX_DIM)
+  integer :: il,ll(3)
+  integer :: ip_local,kx,ky,kz,ikk(3)
 
 
   PUSH_SUB(integral_K_to_X)
@@ -1245,11 +1166,12 @@ end subroutine integral_K_to_X
 subroutine PES_mask_X_to_K(mask,mesh,wfin,wfout)
   type(PES_mask_t), intent(in)  :: mask
   type(mesh_t),     intent(in)  :: mesh
-  type(cube_function_t), intent(in):: wfin
-  type(cube_function_t), intent(out):: wfout
+  CMPLX,              intent(in):: wfin(:,:,:)
+  CMPLX,             intent(out):: wfout(:,:,:)
 
   FLOAT :: Norm1,Norm2
   type(profile_t), save :: prof
+  type(cube_function_t) :: cf_tmp
  
   integer ::i
 
@@ -1259,29 +1181,34 @@ subroutine PES_mask_X_to_K(mask,mesh,wfin,wfout)
 
   PUSH_SUB(PES_mask_X_to_K)
 
-  wfout%zRs=M_z0
+  wfout=M_z0
 
 
   select case(mask%pw_map_how)
     case(PW_MAP_INTEGRAL)
-      call integral_X_to_K(mask,mesh,wfin%zRs,wfout%zRs)
+      call integral_X_to_K(mask,mesh,wfin, wfout)
       
     case(PW_MAP_FFT)
-      call fft_X_to_K(mask,mesh,wfin%zRs,wfout%zRs)
+      call fft_X_to_K(mask,mesh,wfin, wfout)
       
     case(PW_MAP_BARE_FFT)
-      call zfft_forward(mask%fft, wfin%zRs,wfout%zRs)
+      call zfft_forward(mask%cube%fft, wfin, wfout)
       
     case(PW_MAP_TDPSF)
-      call tdpsf_X_to_K(mask%psf, wfin%zRs,wfout%zRs)
+      call tdpsf_X_to_K(mask%psf, wfin, wfout)
       
-#if defined(HAVE_NFFT) 
     case(PW_MAP_NFFT)
-!       call znfft_forward(mask%fft%nfft,wfin%zRs,wfout%zRs)
-      call zfft_forward(mask%fft, wfin%zRs,wfout%zRs)
+      call zfft_forward(mask%cube%fft, wfin, wfout)
 
-#endif
-
+    case(PW_MAP_PFFT)
+      call cube_function_null(cf_tmp)    
+      call zcube_function_alloc_RS(mask%cube, cf_tmp)
+      call cube_function_alloc_fs(mask%cube, cf_tmp)
+      cf_tmp%zRs = wfin
+      call zfft_forward(mask%cube%fft, cf_tmp%zRs, cf_tmp%fs)
+      wfout = cf_tmp%fs
+      call zcube_function_free_RS(mask%cube, cf_tmp)
+      call cube_function_free_fs(mask%cube, cf_tmp)
 
     case default
 
@@ -1300,10 +1227,9 @@ subroutine PES_mask_K_to_X(mask,mesh,wfin,wfout)
   CMPLX,            intent(in)  :: wfin(:,:,:)
   CMPLX,            intent(out) :: wfout(:,:,:)
 
-  CMPLX :: DK(MAX_DIM)
-
   type(profile_t), save :: prof
-
+  type(cube_function_t) :: cf_tmp
+  
   call profiling_in(prof, "PESMASK_K_toX")
 
   PUSH_SUB(PES_mask_K_to_X)
@@ -1318,23 +1244,25 @@ subroutine PES_mask_K_to_X(mask,mesh,wfin,wfout)
       call fft_K_to_X(mask,mesh,wfin,wfout,OUT)
       
     case(PW_MAP_BARE_FFT)
-      call zfft_backward(mask%fft, wfin,wfout)
-!!      DK(:) = M_TWO * M_PI / (mask%ll(:) * mask%spacing(:))
-
-!      wfout = wfout *sqrt(mask%ll(1)*mask%ll(2)*mask%ll(3)/M_PI**(mesh%sb%dim))
-
-!!      wfout = wfout *DK(1)*DK(2)*DK(3)*sqrt(mask%ll(1)*mask%ll(2)*mask%ll(3)/M_PI**(mesh%sb%dim))
-
-!      wfout = wfout *DK(1)*DK(2)*DK(3)/sqrt(M_PI**(mesh%sb%dim))
+      call zfft_backward(mask%cube%fft, wfin,wfout)
 
     case(PW_MAP_TDPSF)
       call tdpsf_K_to_X(mask%psf, wfin,wfout)
 
-#if defined(HAVE_NFFT) 
     case(PW_MAP_NFFT)
-!       call znfft_backward(mask%fft%nfft,wfin,wfout)
-      call zfft_backward(mask%fft, wfin,wfout)
-#endif
+      call zfft_backward(mask%cube%fft, wfin,wfout)
+
+    case(PW_MAP_PFFT)
+
+      call cube_function_null(cf_tmp)    
+      call zcube_function_alloc_RS(mask%cube, cf_tmp)
+      call cube_function_alloc_fs(mask%cube, cf_tmp)
+      cf_tmp%fs  = wfin
+      call zfft_backward(mask%cube%fft, cf_tmp%fs, cf_tmp%zRs)
+      wfout = cf_tmp%zRs
+      call zcube_function_free_RS(mask%cube, cf_tmp)
+      call cube_function_free_fs(mask%cube, cf_tmp)
+
       
     case default
 
@@ -1347,36 +1275,78 @@ subroutine PES_mask_K_to_X(mask,mesh,wfin,wfout)
 
 end subroutine PES_mask_K_to_X
 
+!---------------------------------------------------------
+subroutine PES_mask_mesh_to_cube(mask, mf, cf, local)
+  type(PES_mask_t),      intent(in) :: mask
+  CMPLX,                 intent(in) :: mf(:)
+  type(cube_function_t), intent(out):: cf
+  logical, optional,     intent(in) :: local
+
+  logical :: local_
+  
+  PUSH_SUB(PES_mask_mesh_to_cube)
+  
+  local_ = optional_default(local, .true.)
+  
+  if (mask%cube%parallel_in_domains) then
+    call zmesh_to_cube_parallel(mask%mesh, mf, mask%cube, cf, mask%mesh_cube_map)
+  else
+    if(mask%mesh%parallel_in_domains) then
+      call zmesh_to_cube(mask%mesh, mf, mask%cube, cf, local = local_)
+    else 
+      call zmesh_to_cube(mask%mesh, mf, mask%cube, cf)
+    end if
+  end if
+  
+  POP_SUB(PES_mask_mesh_to_cube)
+end subroutine PES_mask_mesh_to_cube
+
+
+!---------------------------------------------------------
+subroutine PES_mask_cube_to_mesh(mask, cf, mf)
+  type(PES_mask_t),      intent(in) :: mask
+  CMPLX,                 intent(out):: mf(:)
+  type(cube_function_t), intent(in) :: cf
+
+  PUSH_SUB(PES_mask_cube_to_mesh)
+
+  if (mask%cube%parallel_in_domains) then
+    call zcube_to_mesh_parallel(mask%cube, cf, mask%mesh, mf, mask%mesh_cube_map)
+  else
+    if(mask%mesh%parallel_in_domains) then
+      call zcube_to_mesh(mask%cube, cf, mask%mesh, mf, local = .true.)
+    else 
+      call zcube_to_mesh(mask%cube, cf, mask%mesh, mf)
+    end if
+  end if
+  
+  POP_SUB(PES_mask_cube_to_mesh)
+end subroutine PES_mask_cube_to_mesh
+
 
 !---------------------------------------------------------
 !
-!>            Performs all the dirty work 
+!            Performs all the dirty work 
 !
 !---------------------------------------------------------
-subroutine PES_mask_calc(mask, mesh, st, dt, mask_fn,hm,geo,iter)
+subroutine PES_mask_calc(mask, mesh, st, dt, hm, geo, iter)
   type(PES_mask_t),    intent(inout) :: mask
   type(mesh_t),        intent(in)    :: mesh
   type(states_t),      intent(inout) :: st
   FLOAT,               intent(in)    :: dt
-  FLOAT,               intent(in)    :: mask_fn(:) !< namely hm%ab_pot
   integer,             intent(in)    :: iter
   type(hamiltonian_t), intent(in)    :: hm
   type(geometry_t),    intent(in)    :: geo
 
-  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(MAX_DIM), ixx(MAX_DIM)
+  integer :: ip, idim, ist, ik, ix, iy, iz, ix3(3), ixx(3)
   type(cube_function_t):: cf1,cf2,cf3,cf4
   CMPLX, allocatable :: mf(:)
-  FLOAT :: temp(MAX_DIM), vec
+  FLOAT :: temp(3), vec
   FLOAT :: dd
   integer :: il,i
 
   FLOAT :: dmin,time
-  integer :: rankmin,ip_local,size
-
-#if defined(HAVE_MPI)
-  integer :: status(MPI_STATUS_SIZE)
-  integer :: iproc, dataSize
-#endif
+  integer :: rankmin,ip_local
 
   type(profile_t), save :: prof
 
@@ -1385,15 +1355,16 @@ subroutine PES_mask_calc(mask, mesh, st, dt, mask_fn,hm,geo,iter)
 
   PUSH_SUB(PES_mask_calc)
 
-
   time = iter *dt
   
   if (time > mask%start_time) then ! record photoelectrons only after mask%start_time
     
     call cube_function_null(cf1)    
-    call zcube_function_alloc_RS(mask%cube, cf1) 
+    call zcube_function_alloc_RS(mask%cube, cf1, force_alloc = .true.) 
+    call  cube_function_alloc_FS(mask%cube, cf1, force_alloc = .true.) 
     call cube_function_null(cf2)    
-    call zcube_function_alloc_RS(mask%cube, cf2)
+    call zcube_function_alloc_RS(mask%cube, cf2, force_alloc = .true.)
+    call  cube_function_alloc_FS(mask%cube, cf2, force_alloc = .true.)
 
     select case(mask%mode) 
     case(MODE_MASK)
@@ -1402,62 +1373,61 @@ subroutine PES_mask_calc(mask, mesh, st, dt, mask_fn,hm,geo,iter)
       end if
     case(MODE_PSF)
       call cube_function_null(cf3)    
-      call zcube_function_alloc_RS(mask%cube, cf3) 
+      call zcube_function_alloc_RS(mask%cube, cf3, force_alloc = .true.) 
+      call  cube_function_alloc_FS(mask%cube, cf3, force_alloc = .true.) 
       call cube_function_null(cf4)    
-      call zcube_function_alloc_RS(mask%cube, cf4) 
+      call zcube_function_alloc_RS(mask%cube, cf4, force_alloc = .true.) 
+      call  cube_function_alloc_FS(mask%cube, cf4, force_alloc = .true.) 
     end select
-  
-
-    size = (mask%ll(1))*(mask%ll(2))*(mask%ll(3)) 
 
 
     do ik = st%d%kpt%start, st%d%kpt%end
       do ist = st%st_start, st%st_end
         do idim = 1, st%d%dim
 
-          cf1%zRs = M_z0
-          cf2%zRS = M_z0
+          cf1%zRs(:,:,:) = M_z0
+          cf2%zRS(:,:,:) = M_z0
+          cf1%Fs(:,:,:)  = M_z0
+          cf2%Fs(:,:,:)  = M_z0
        
-          call zmesh_to_cube(mask%mesh, st%zpsi(:, idim, ist, ik), mask%cube, cf1, local=.true.)
-
+          call PES_mask_mesh_to_cube(mask, st%zpsi(:, idim, ist, ik), cf1)
+          
           select case(mask%mode)
        !----------------------------------------- 
        ! Mask Method
        !----------------------------------------
             case(MODE_MASK)
            
-            
-              cf1%zRs = (M_ONE-mask%M)*cf1%zRs                                        ! cf1 =(1-M)*U(t2,t1)*\Psi_A(x,t1)
-              call PES_mask_X_to_K(mask,mesh,cf1,cf2)                                 ! cf2 = \tilde{\Psi}_A(k,t2)
+              cf1%zRs = (M_ONE - mask%cM%zRs) * cf1%zRs                               ! cf1 =(1-M)*U(t2,t1)*\Psi_A(x,t1)
+              call PES_mask_X_to_K(mask,mesh,cf1%zRs,cf2%Fs)                          ! cf2 = \tilde{\Psi}_A(k,t2)
+
 
               if ( mask%filter_k ) then ! apply a filter to the Fourier transform to remove unwanted energies
-              
                 ASSERT(associated(mask%Mk))
-                cf2%zRs= cf2%zRs * mask%Mk(:,:,:) 
+                cf2%Fs = cf2%Fs * mask%Mk 
               end if
             
 
-              cf1%zRs = mask%k(:,:,:, idim, ist, ik)                                  ! cf1 = \Psi_B(k,t1)
-              mask%k(:,:,:, idim, ist, ik) =  cf2%zRs                                 ! mask%k = \tilde{\Psi}_A(k,t2)          
-              call PES_mask_Volkov_time_evolution_wf(mask, mesh,dt,iter-1,cf1%zRs)    ! cf1 = \tilde{\Psi}_B(k,t2)
+              cf1%Fs(:,:,:) = mask%k(:,:,:, idim, ist, ik)                            ! cf1 = \Psi_B(k,t1)
+              mask%k(:,:,:, idim, ist, ik) =  cf2%Fs(:,:,:)                           ! mask%k = \tilde{\Psi}_A(k,t2)
+              call PES_mask_Volkov_time_evolution_wf(mask, mesh,dt,iter-1,cf1%Fs)     ! cf1 = \tilde{\Psi}_B(k,t2)
 
               mask%k(:,:,:, idim, ist, ik) =  mask%k(:,:,:, idim, ist, ik)&
-                                              + cf1%zRs      ! mask%k = \tilde{\Psi}_A(k,t2) + \tilde{\Psi}_B(k,t2)            
-            
+                                              + cf1%Fs(:,:,:)      ! mask%k = \tilde{\Psi}_A(k,t2) + \tilde{\Psi}_B(k,t2)
 
               if(mask%back_action .eqv. .true.) then
 
   ! Apply Back-action to wavewunction in A
-                call PES_mask_K_to_X(mask,mesh,cf1%zRs,cf2%zRs)                       ! cf2 = \Psi_B(x,t2)
-                call zcube_to_mesh(mask%cube, cf2, mask%mesh, mf, local = .true.)  
+                call PES_mask_K_to_X(mask,mesh,cf1%Fs,cf2%zRs)                       ! cf2 = \Psi_B(x,t2)
+                call PES_mask_cube_to_mesh(mask, cf2, mf)  
                 st%zpsi(:, idim, ist, ik) = st%zpsi(:, idim, ist, ik) + mf
 
                
   ! Apply correction to wavefunciton in B
-                cf2%zRs= (mask%M)*cf2%zRs                                             ! cf2 = M*\Psi_B(x,t1)    
-                call PES_mask_X_to_K(mask,mesh,cf2,cf1)
+                cf2%zRs= (mask%cM%zRs) * cf2%zRs                                     ! cf2 = M*\Psi_B(x,t1)
+                call PES_mask_X_to_K(mask,mesh,cf2%zRs,cf1%Fs)
                                          
-                mask%k(:,:,:, idim, ist, ik) = mask%k(:,:,:, idim, ist, ik) - cf1%zRs
+                mask%k(:,:,:, idim, ist, ik) = mask%k(:,:,:, idim, ist, ik) - cf1%Fs
 
               end if
 
@@ -1468,10 +1438,10 @@ subroutine PES_mask_calc(mask, mesh, st, dt, mask_fn,hm,geo,iter)
             case(MODE_PASSIVE)
             
 
-              cf1%zRs = (M_ONE-mask%M)*cf1%zRs
-              call PES_mask_X_to_K(mask,mesh,cf1,cf2) 
+              cf1%zRs = (M_ONE-mask%cM%zRs) * cf1%zRs
+              call PES_mask_X_to_K(mask,mesh,cf1%zRs,cf2%Fs) 
             
-              mask%k(:,:,:, idim, ist, ik) = cf2%zRs(:,:,:)
+              mask%k(:,:,:, idim, ist, ik) = cf2%Fs(:,:,:)
 
 
        !----------------------------------------- 
@@ -1479,67 +1449,28 @@ subroutine PES_mask_calc(mask, mesh, st, dt, mask_fn,hm,geo,iter)
        !----------------------------------------
      
             case(MODE_PSF)
-  ! !          if (MOD(iter*dt,mask%psf%Tstep) .eq. M_ZERO) then 
-  ! !            write (*,*) "APPLY TDPSF!!"
-  ! !!            call tdpsf_filter_out(mask%psf,wf1,wf2)
-  ! !            call PES_mask_X_to_K(mask,mesh,wf1,wf3)
-  ! !            call PES_mask_K_to_X(mask,mesh,wf3,wf2)
-  ! 
-  !             call tdpsf_X_to_K(mask%psf,wf1,wf3)
-  !             call tdpsf_K_to_X(mask%psf,wf3,wf2)
-  ! 
-  !             wf2 = wf1 - wf2
-  !             
-  !             
-  !             if(mask%back_action) then
-  !               wf1 = mask%k(:,:,:, idim, ist, ik) - wf4
-  !               call PES_mask_K_to_X(mask,mesh,wf1,mask%k(:,:,:, idim, ist, ik))
-  !               wf2 = wf2 + mask%k(:,:,:, idim, ist, ik)
-  !             end if
-  ! 
-  !             !substitute the KS wf with the filtered one
-  !             call PES_mask_square_to_mesh(mask,mesh,st%zpsi(:, idim, ist, ik),wf2,MaskHow = 3,Const = M_ONE)
-  ! 
-  !             !the out-going part of the wf
-  !             wf4 = wf1 - wf2
-  !             call PES_mask_X_to_K(mask,mesh,wf4,wf3) 
-  ! 
-  ! !            do ix=1,mask%ll(1)
-  ! !              write (*,*) ix, wf1(ix,1,1),wf2(ix,1,1),wf3(ix,1,1)
-  ! !            end do             
-  ! !!            call PES_mask_X_to_K(mask,mesh,wf3,wf1)
-  ! !            call PES_mask_K_to_X(mask,mesh,mask%k(:,:,:, idim, ist, ik),wf3)
-  ! !            call PES_mask_X_to_K(mask,mesh,wf3,mask%k(:,:,:, idim, ist, ik))
-  ! 
-  !             call PES_mask_Volkov_time_evolution_wf(mask, mesh,dt,iter,mask%k(:,:,:, idim, ist, ik) )
-  !             wf4 = mask%k(:,:,:, idim, ist, ik)            
-  ! 
-  ! !            mask%k(:,:,:, idim, ist, ik) = mask%k(:,:,:, idim, ist, ik) + wf1(:,:,:)
-  !             mask%k(:,:,:, idim, ist, ik) =  wf4 + wf3
-  !             
-  ! !          end if 
 
-              call tdpsf_X_to_K(mask%psf,cf1%zRs,cf3%zRs)
-              call tdpsf_K_to_X(mask%psf,cf3%zRs,cf2%zRs)
+              call tdpsf_X_to_K(mask%psf,cf1%zRs,cf3%Fs)
+              call tdpsf_K_to_X(mask%psf,cf3%Fs,cf2%zRs)
 
               cf2%zRs = cf1%zRs - cf2%zRs
 
               if(mask%back_action) then
-                cf1%zRs = mask%k(:,:,:, idim, ist, ik) - cf4%zRs
-                call PES_mask_K_to_X(mask,mesh,cf1%zRs,mask%k(:,:,:, idim, ist, ik))
-                cf2%zRs = cf2%zRs + mask%k(:,:,:, idim, ist, ik)
+                cf1%Fs = mask%k(:,:,:, idim, ist, ik) - cf4%Fs
+                call PES_mask_K_to_X(mask,mesh,cf1%Fs, mask%k(:,:,:, idim, ist, ik))
+                cf2%Fs = cf2%Fs + mask%k(:,:,:, idim, ist, ik)
               end if
 
               !substitute the KS wf with the filtered one
-              call zcube_to_mesh(mask%cube, cf2, mask%mesh, st%zpsi(:, idim, ist, ik), local = .true.)
+              call PES_mask_cube_to_mesh(mask, cf2, st%zpsi(:, idim, ist, ik))
               !the out-going part of the wf
               cf4%zRs = cf1%zRs - cf2%zRs
-              call PES_mask_X_to_K(mask,mesh,cf4,cf3) 
+              call PES_mask_X_to_K(mask,mesh,cf4%zRs,cf3%Fs) 
 
               call PES_mask_Volkov_time_evolution_wf(mask, mesh,dt,iter,mask%k(:,:,:, idim, ist, ik) )
-              cf4%zRs = mask%k(:,:,:, idim, ist, ik)            
+              cf4%Fs = mask%k(:,:,:, idim, ist, ik)            
 
-              mask%k(:,:,:, idim, ist, ik) =  cf4%zRs + cf3%zRs
+              mask%k(:,:,:, idim, ist, ik) =  cf4%Fs + cf3%Fs
 
 
             case default
@@ -1555,7 +1486,10 @@ subroutine PES_mask_calc(mask, mesh, st, dt, mask_fn,hm,geo,iter)
     end do
 
     call zcube_function_free_RS(mask%cube, cf1)
+    call  cube_function_free_FS(mask%cube, cf1)
     call zcube_function_free_RS(mask%cube, cf2)
+    call  cube_function_free_FS(mask%cube, cf2)
+    
     select case(mask%mode) 
     case(MODE_MASK)
       if(mask%back_action .eqv. .true.) then
@@ -1563,16 +1497,15 @@ subroutine PES_mask_calc(mask, mesh, st, dt, mask_fn,hm,geo,iter)
       end if
     case(MODE_PSF)
       call zcube_function_free_RS(mask%cube, cf3)
+      call  cube_function_free_FS(mask%cube, cf3)
       call zcube_function_free_RS(mask%cube, cf4)
+      call  cube_function_free_FS(mask%cube, cf4)
     end select
 
   end if ! time > mask%start_time
 
+
   if(mask%mode .eq. MODE_MASK ) call PES_mask_apply_mask(mask,st,mesh)  !apply the mask to all the KS orbitals
-
-
-
-
 
 
 

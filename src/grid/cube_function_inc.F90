@@ -15,19 +15,22 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube_function_inc.F90 9101 2012-06-03 23:57:46Z xavier $
+!! $Id: cube_function_inc.F90 9209 2012-07-19 15:30:31Z umberto $
 
 
 ! ---------------------------------------------------------
 !> Allocates locally the real space grid, if PFFT library is not used.
 !! Otherwise, it assigns the PFFT real space grid to the cube real space grid,
 !! via pointer.
-subroutine X(cube_function_alloc_rs)(cube, cf, in_device)
+subroutine X(cube_function_alloc_rs)(cube, cf, in_device, force_alloc)
   type(cube_t),          intent(in)    :: cube
   type(cube_function_t), intent(inout) :: cf
   logical, optional,     intent(in)    :: in_device
+  logical, optional,     intent(in)    :: force_alloc
 
   logical :: allocated
+  
+  
 
   PUSH_SUB(X(cube_function_alloc_rs))
 
@@ -35,12 +38,17 @@ subroutine X(cube_function_alloc_rs)(cube, cf, in_device)
 
   allocated = .false.
 
+  cf%forced_alloc = optional_default(force_alloc, .false.)
+
   if(associated(cube%fft)) then
     select case(cube%fft%library)
     case(FFTLIB_PFFT)
-      allocated = .true.
+
       ASSERT(associated(cube%fft))
-      cf%X(rs) => cube%fft%X(rs_data)(1:cube%rs_n(1), 1:cube%rs_n(2), 1:cube%rs_n(3))
+      if(.not. cf%forced_alloc) then  
+        allocated = .true.
+        cf%X(rs) => cube%fft%X(rs_data)(1:cube%rs_n(1), 1:cube%rs_n(2), 1:cube%rs_n(3))
+      end if
     case(FFTLIB_CLAMD)
       if(optional_default(in_device, .true.)) then
         allocated = .true.
@@ -75,8 +83,10 @@ subroutine X(cube_function_free_rs)(cube, cf)
   if(associated(cube%fft)) then
     select case(cube%fft%library)
     case(FFTLIB_PFFT)
-      deallocated = .true.
-      nullify(cf%X(rs))
+      if(.not. cf%forced_alloc) then
+        deallocated = .true.
+        nullify(cf%X(rs))
+      end if
     case(FFTLIB_CLAMD)
 #ifdef HAVE_OPENCL
       if(cf%in_device_memory) then
@@ -97,18 +107,21 @@ subroutine X(cube_function_free_rs)(cube, cf)
 end subroutine X(cube_function_free_rs)
 
 ! ---------------------------------------------------------
-#ifdef HAVE_MPI
-subroutine X(cube_function_allgather)(cube, cf, cf_local)
-  type(cube_t),   intent(in) :: cube
-  R_TYPE,         intent(out) :: cf(:,:,:)
-  R_TYPE,         intent(in)  :: cf_local(:,:,:)
+subroutine X(cube_function_allgather)(cube, cf, cf_local, transpose)
+  type(cube_t),      intent(in) :: cube
+  R_TYPE,            intent(out):: cf(:,:,:)
+  R_TYPE,            intent(in) :: cf_local(:,:,:)
+  logical, optional, intent(in) :: transpose
 
-  integer :: ix, iy, iz, index
+  integer :: ix, iy, iz, index, order(1:3)
   R_TYPE, allocatable :: cf_tmp(:)
   type(profile_t), save :: prof_allgather
 
+  #ifdef HAVE_MPI
+
   PUSH_SUB(X(cube_function_allgather))
   call profiling_in(prof_allgather, "CF_ALLGATHER")
+
 
   SAFE_ALLOCATE(cf_tmp(cube%rs_n_global(1)*cube%rs_n_global(2)*cube%rs_n_global(3)))
 
@@ -122,21 +135,24 @@ subroutine X(cube_function_allgather)(cube, cf, cf_local)
        cube%mpi_grp%comm, mpi_err)
   call mpi_debug_out(cube%mpi_grp%comm, C_MPI_ALLGATHERV)
 
-  ! Copy values to cf in the correct order
+  order = (/1,2,3/)
+  if(optional_default(transpose, .false.)) order = (/2,3,1/) ! transpose the matrix (mainly for output reason)
+
   do index = 1, cube%rs_n_global(1)*cube%rs_n_global(2)*cube%rs_n_global(3)
-    ix = cube%local(index, 1)
-    iy = cube%local(index, 2)
-    iz = cube%local(index, 3)
+    ix = cube%local(index, order(1))
+    iy = cube%local(index, order(2))
+    iz = cube%local(index, order(3))
     cf(ix, iy, iz) = cf_tmp(index)
+
   end do
 
   SAFE_DEALLOCATE_A(cf_tmp)
 
   call profiling_out(prof_allgather)
-
+#endif
   POP_SUB(X(cube_function_allgather))
 end subroutine X(cube_function_allgather)
-#endif
+
 
 ! ---------------------------------------------------------
 !> The next two subroutines convert a function between the normal
@@ -191,6 +207,7 @@ subroutine X(mesh_to_cube)(mesh, mf, cube, cf, local)
     ASSERT(associated(mesh%cube_map%map))
     ASSERT(mesh%sb%dim <= 3)
 
+    !$omp parallel do private(ix, iy, iz, ip, nn, ii)
     do im = 1, mesh%cube_map%nmap
       ix = mesh%cube_map%map(1, im) + cube%center(1)
       iy = mesh%cube_map%map(2, im) + cube%center(2)
@@ -200,6 +217,7 @@ subroutine X(mesh_to_cube)(mesh, mf, cube, cf, local)
       nn = mesh%cube_map%map(MCM_COUNT, im)
       forall(ii = 0:nn - 1) cf%X(rs)(ix, iy, iz + ii) = gmf(ip + ii)
     end do
+    !$omp end parallel do
 
   else
 #ifdef HAVE_OPENCL
@@ -284,6 +302,7 @@ subroutine X(cube_to_mesh) (cube, cf, mesh, mf, local)
     ASSERT(associated(cf%X(rs)))
     ASSERT(associated(mesh%cube_map%map))
 
+    !$omp parallel do private(ix, iy, iz, ip, nn, ii)
     do im = 1, mesh%cube_map%nmap
       ix = mesh%cube_map%map(1, im) + cube%center(1)
       iy = mesh%cube_map%map(2, im) + cube%center(2)
@@ -294,6 +313,7 @@ subroutine X(cube_to_mesh) (cube, cf, mesh, mf, local)
 
       forall(ii = 0:nn - 1) gmf(ip + ii) = cf%X(rs)(ix, iy, iz + ii)
     end do
+    !$omp end parallel do
 
   else
 

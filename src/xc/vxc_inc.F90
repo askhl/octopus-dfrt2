@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: vxc_inc.F90 9152 2012-06-21 08:30:22Z umberto $
+!! $Id: vxc_inc.F90 9223 2012-08-01 14:39:23Z xavier $
 
 subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
@@ -57,8 +57,9 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
   FLOAT, allocatable :: dedldens(:,:)  ! (Functional) Derivative of the exchange or correlation energy with
   !respect to the laplacian of the density.
   FLOAT, allocatable :: symmtmp(:, :)  ! Temporary vector for the symmetrizer
-  FLOAT, allocatable :: vx(:, :)
-  FLOAT, allocatable :: gf(:,:)
+  FLOAT, allocatable :: vx(:)
+  FLOAT, allocatable :: unp_dens(:), unp_dedd(:)
+
   integer :: ib, ib2, ip, isp, families, ixc, spin_channels, is
   integer, save :: xc_get_vxc_counter = 0
   FLOAT   :: rr,ipot_to_pass
@@ -106,7 +107,7 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
   spin_channels = functl(1)%spin_channels
 
   if(xcs%xc_density_correction == LR_X) then
-    SAFE_ALLOCATE(vx(1:der%mesh%np, 1:spin_channels))
+    SAFE_ALLOCATE(vx(1:der%mesh%np))
   end if
 
   call lda_init()
@@ -291,23 +292,52 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
       ! store results
       if(present(vxc)) then
 
+        ib2 = ip
+        do ib = 1, n_block
+          dedd(ib2, 1:spin_channels) = dedd(ib2, 1:spin_channels) + l_dedd(1:spin_channels, ib)
+          ib2 = ib2 + 1
+        end do
+
+        ! calculate the exchange potential
         if(xcs%xc_density_correction == LR_X .and. &
           (functl(ixc)%type == XC_EXCHANGE .or. functl(ixc)%type == XC_EXCHANGE_CORRELATION)) then
 
-          ! in this case, vx goes to a different array
-          ib2 = ip
+          SAFE_ALLOCATE(unp_dens(1:n_block))
+          SAFE_ALLOCATE(unp_dedd(1:n_block))
+
           do ib = 1, n_block
-            vx(ib2, 1:spin_channels) = l_dedd(1:spin_channels, ib)
-            ib2 = ib2 + 1
+            unp_dens(ib) = sum(l_dens(1:spin_channels, ib))
           end do
-          
-        else
+
+          select case(functl(ixc)%family)
+          case(XC_FAMILY_LDA)
+            call XC_F90(lda_vxc)(xcs%functl(ixc, 1)%conf, n_block, unp_dens(1), unp_dedd(1))
+
+          case(XC_FAMILY_GGA, XC_FAMILY_HYB_GGA)
+            l_vsigma = M_ZERO
+
+            call messages_not_implemented('XC density correction for GGA/mGGA')
+
+            if(functl(ixc)%id == XC_GGA_X_LB) then
+              call mesh_r(der%mesh, ip, rr)
+              call XC_F90(gga_lb_modified)(xcs%functl(ixc, 1)%conf, n_block, unp_dens(1), l_sigma(1,1), &
+                rr, unp_dedd(1))
+            else
+              call XC_F90(gga_vxc)(xcs%functl(ixc, 1)%conf, n_block, unp_dens(1), l_sigma(1,1), &
+                unp_dedd(1), l_vsigma(1,1))
+            end if
+          end select
+
           ib2 = ip
           do ib = 1, n_block
-            dedd(ib2, 1:spin_channels) = dedd(ib2, 1:spin_channels) + l_dedd(1:spin_channels, ib)
+            vx(ib2) = unp_dedd(ib)
             ib2 = ib2 + 1
           end do
 
+          ! GGA terms are missing here
+
+          SAFE_DEALLOCATE_A(unp_dens)
+          SAFE_DEALLOCATE_A(unp_dedd)
         end if
 
         if((functl(ixc)%family == XC_FAMILY_GGA).or.(functl(ixc)%family == XC_FAMILY_MGGA)) then
@@ -336,34 +366,22 @@ subroutine dxc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltax
     end do functl_loop
   end do space_loop
 
-  if(present(deltaxc)) then
-    deltaxc = M_ZERO
-  end if
-
-  if(xcs%xc_density_correction == LR_XC) then
-    call xc_density_correction_calc(xcs, der, spin_channels, rho, dedd, deltaxc = deltaxc)
-  end if
+  if(present(deltaxc)) deltaxc = M_ZERO
 
   if(xcs%xc_density_correction == LR_X) then
-    call xc_density_correction_calc(xcs, der, spin_channels, rho, vx, deltaxc = deltaxc)
-    dedd(1:der%mesh%np, 1:spin_channels) = dedd(1:der%mesh%np, 1:spin_channels) + vx(1:der%mesh%np, 1:spin_channels)
+    call xc_density_correction_calc(xcs, der, spin_channels, rho, vx, dedd, deltaxc = deltaxc)
 
     if(calc_energy) then
-      ! get the energy density from Levy-Perdew
-      SAFE_ALLOCATE(gf(1:der%mesh%np, 1:3))
-      
+      ! correct the energy density from Levy-Perdew, note that vx now
+      ! contains the correction applied to the xc potential.
       do is = 1, spin_channels
         do ip = 1, der%mesh%np
-          ex_per_vol(ip) = vx(ip, is)*(CNST(3.0)*rho(ip, is) &
-            + sum(der%mesh%x(ip, 1:der%mesh%sb%dim)*gdens(ip, 1:der%mesh%sb%dim, is)))
+          ex_per_vol(ip) = ex_per_vol(ip) &
+            + vx(ip)*(CNST(3.0)*rho(ip, is) + sum(der%mesh%x(ip, 1:der%mesh%sb%dim)*gdens(ip, 1:der%mesh%sb%dim, is)))
         end do
       end do
-      
-      SAFE_DEALLOCATE_A(gf)
     end if
   end if
-  
-!  print*, deltaxc
 
   ! this has to be done in inverse order
   if(present(vxc)) then
@@ -695,11 +713,12 @@ end subroutine dxc_get_vxc
 
 ! -----------------------------------------------------
 
-subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc, deltaxc)
+subroutine xc_density_correction_calc(xcs, der, nspin, density, refvx, vxc, deltaxc)
   type(xc_t),          intent(in)    :: xcs
   type(derivatives_t), intent(in)    :: der
   integer,             intent(in)    :: nspin
   FLOAT,               intent(in)    :: density(:, :)
+  FLOAT,               intent(inout) :: refvx(:)
   FLOAT,               intent(inout) :: vxc(:, :)
   FLOAT, optional,     intent(out)   :: deltaxc
 
@@ -721,15 +740,11 @@ subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc, deltaxc)
   SAFE_ALLOCATE(nxc(1:der%mesh%np))
   SAFE_ALLOCATE(lrvxc(1:der%mesh%np_part))
 
-  if(nspin > 1) then
-    call messages_not_implemented('XC density correction with spin polarization')
-  end if
-
-  forall(ip = 1:der%mesh%np) lrvxc(ip) = CNST(-1.0)/(CNST(4.0)*M_PI)*vxc(ip, 1)
+  forall(ip = 1:der%mesh%np) lrvxc(ip) = CNST(-1.0)/(CNST(4.0)*M_PI)*refvx(ip)
   call dderivatives_lapl(der, lrvxc, nxc)
 
   call dio_function_output(C_OUTPUT_HOW_AXIS_X, "./static", "rho", der%mesh, density(:, 1), unit_one, ierr)
-  call dio_function_output(C_OUTPUT_HOW_AXIS_X, "./static", "vxcorig", der%mesh, vxc(:, 1), unit_one, ierr)
+  call dio_function_output(C_OUTPUT_HOW_AXIS_X, "./static", "vxcorig", der%mesh, refvx(:), unit_one, ierr)
   call dio_function_output(C_OUTPUT_HOW_AXIS_X, "./static", "nxc", der%mesh, nxc, unit_one, ierr)
 
   if(xcs%xcd_optimize_cutoff) then
@@ -842,7 +857,10 @@ subroutine xc_density_correction_calc(xcs, der, nspin, density, vxc, deltaxc)
   call dio_function_output(C_OUTPUT_HOW_PLANE_Y, "./static", "fulldiffvxc.pl", der%mesh, lrvxc, unit_one, ierr)
   call dio_function_output(C_OUTPUT_HOW_PLANE_Z, "./static", "fulldiffvxc.pl", der%mesh, lrvxc, unit_one, ierr)
 
-  forall(ip = 1:der%mesh%np) vxc(ip, 1) = vxc(ip, 1) + lrvxc(ip)
+  forall(ip = 1:der%mesh%np) 
+    vxc(ip, 1:nspin) = vxc(ip, 1:nspin) + lrvxc(ip)
+    refvx(ip) = lrvxc(ip)
+  end forall
 
   maxdd = -HUGE(maxdd)
   mindd =  HUGE(maxdd)

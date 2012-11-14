@@ -16,7 +16,7 @@
  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  02111-1307, USA.
 
- $Id: oct_f.c 8792 2012-01-24 03:19:40Z dstrubbe $
+ $Id: oct_f.c 9195 2012-07-13 02:11:33Z xavier $
 */
 
 #include <config.h>
@@ -168,12 +168,6 @@ void FC_FUNC_(oct_wfs_list, OCT_WFS_LIST)
 
 /* ------------------------------ from varia.c ------------------------------- */
 #include "varia.h"
-
-void FC_FUNC_(oct_fft_optimize, OCT_FFT_OPTIMIZE)
-  (int *n, int *par)
-{
-  fft_optimize(n, *par);
-}
 
 void FC_FUNC_(oct_progress_bar, OCT_PROGRESS_BAR)
   (int *a, int *max)

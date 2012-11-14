@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube_function.F90 9101 2012-06-03 23:57:46Z xavier $
+!! $Id: cube_function.F90 9182 2012-07-06 12:28:24Z umberto $
 
 #include "global.h"
 
@@ -62,12 +62,15 @@ module cube_function_m
     dmesh_to_cube,                 &
     zmesh_to_cube,                 &
     dcube_to_mesh,                 &
-    zcube_to_mesh
+    zcube_to_mesh,                 &
+    dcube_function_allgather,      &
+    zcube_function_allgather
 
   type cube_function_t
     FLOAT, pointer :: dRS(:, :, :)  !< real-space grid
     CMPLX, pointer :: zRS(:, :, :)  !< real-space grid, complex numbers
     CMPLX, pointer :: FS(:, :, :)   !< Fourier-space grid
+    logical            :: forced_alloc !< Forced to be allocated even when PFFT is associated to the cube
     logical            :: in_device_memory
     type(opencl_mem_t) :: real_space_buffer
     type(opencl_mem_t) :: fourier_space_buffer
@@ -174,6 +177,7 @@ contains
     nullify(cf%dRS)
     nullify(cf%FS)
     cf%in_device_memory = .false.
+    cf%forced_alloc = .false.
 
     POP_SUB(cube_function_null) 
   end subroutine cube_function_null

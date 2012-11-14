@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: v_ks.F90 9146 2012-06-20 21:42:22Z umberto $
+!! $Id: v_ks.F90 9204 2012-07-18 16:55:23Z helbig $
 
 #include "global.h"
  
@@ -25,6 +25,7 @@ module v_ks_m
   use density_m
   use derivatives_m
   use energy_m
+  use energy_calc_m
   use geometry_m
   use global_m
   use grid_m
@@ -163,6 +164,8 @@ contains
     !%Option classical 5
     !% (Experimental) Only the classical interaction between ions is
     !% considered. This is mainly for testing.
+    !%Option rdmft 7 
+    !% (Not fully implemented) Reduced Density Matrix functional theory
     !%End
     call parse_integer(datasets_check('TheoryLevel'), KOHN_SHAM_DFT, ks%theory_level)
     if(.not.varinfo_valid_option('TheoryLevel', ks%theory_level)) call input_error('TheoryLevel')
@@ -170,7 +173,8 @@ contains
     call messages_obsolete_variable('NonInteractingElectrons', 'TheoryLevel')
     call messages_obsolete_variable('HartreeFock', 'TheoryLevel')
     if(ks%theory_level == CLASSICAL) call messages_experimental('Classical theory level')
-
+    if(ks%theory_level == RDMFT ) call messages_experimental('RDMFT theory level')
+    
     ks%xc_family = XC_FAMILY_NONE
     ks%sic_type  = SIC_NONE
     ks%tail_correction = .false.
@@ -291,7 +295,9 @@ contains
       if(iand(ks%xc_family, XC_FAMILY_KS_INVERSION) .ne. 0) then
         call xc_ks_inversion_init(ks%ks_inversion, ks%xc_family, gr, geo, dd, mc)
       endif
-
+    case(RDMFT)
+      call xc_init(ks%xc, gr%mesh%sb%dim, nel, dd%spin_channels, dd%cdft, hartree_fock=.false.)
+      ks%xc_family = ks%xc%family
     end select
 
     ks%frozen_hxc = .false.
@@ -408,7 +414,7 @@ contains
         ! We know the eigenvalues.
         st%eigenval(1:st%nst, 1:st%d%nik) = st%ob_eigenval(1:st%nst, 1:st%d%nik)
       else
-        call energy_calculate_eigenvalues(hm, ks%gr%der, st)
+        call energy_calc_eigenvalues(hm, ks%gr%der, st)
       end if
       
     end if
@@ -1068,7 +1074,7 @@ contains
 
     if (ks%calc%calc_energy .and. poisson_get_solver(ks%hartree_solver) == POISSON_SETE) then !SEC
       hm%energy%hartree = hm%energy%hartree + poisson_energy(ks%hartree_solver)
-      ASSERT(.not. hm%cmplxscl) ! Don't know how to procede here with cmplxscl
+      ASSERT(.not. hm%cmplxscl) ! Don't know how to proceed here with cmplxscl
       ! can not find any reference to unit 89 anywhere else in the code forgotten debug write?
       !write(89,*) hm%energy%hartree*CNST(2.0)*CNST(13.60569193), &
       !  poisson_energy(ks%hartree_solver)*CNST(2.0)*CNST(13.60569193), &
