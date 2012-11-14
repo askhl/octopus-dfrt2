@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: forces_inc.F90 8808 2012-01-25 16:30:52Z joseba $
+!! $Id: forces_inc.F90 9548 2012-11-05 19:00:13Z dstrubbe $
 
 subroutine X(forces_gather)(geo, force)
   type(geometry_t), intent(in)    :: geo
@@ -60,12 +60,10 @@ subroutine X(forces_gather)(geo, force)
 end subroutine X(forces_gather)
 
 !---------------------------------------------------------------------------
-subroutine X(forces_from_local_potential)(gr, geo, ep, st, time, gdensity, force)
+subroutine X(forces_from_local_potential)(gr, geo, ep, gdensity, force)
   type(grid_t),                   intent(inout) :: gr
   type(geometry_t),               intent(inout) :: geo
   type(epot_t),                   intent(inout) :: ep
-  type(states_t),                 intent(inout) :: st
-  FLOAT,                          intent(in)    :: time
   R_TYPE,                         intent(in)    :: gdensity(:, :)
   R_TYPE,                         intent(inout) :: force(:, :)
 
@@ -134,12 +132,11 @@ end subroutine X(total_force_from_local_potential)
 !! First-principles calculations in real-space formalism: Electronic configurations
 !! and transport properties of nanostructures, Imperial College Press (2005)
 !! Section 1.6, page 12
-subroutine X(forces_from_potential)(gr, geo, ep, st, time)
+subroutine X(forces_from_potential)(gr, geo, ep, st)
   type(grid_t),                   intent(inout) :: gr
   type(geometry_t),               intent(inout) :: geo
   type(epot_t),                   intent(inout) :: ep
   type(states_t),                 intent(inout) :: st
-  FLOAT,                          intent(in)    :: time
  
   integer :: iatom, ist, iq, idim, idir, np, np_part, ip, ikpoint
   FLOAT :: ff, kpoint(1:MAX_DIM)
@@ -216,8 +213,8 @@ subroutine X(forces_from_potential)(gr, geo, ep, st, time)
 #if defined(HAVE_MPI)
   if(st%parallel_in_states .or. st%d%kpt%parallel) then
     call profiling_in(prof_comm, "FORCES_COMM")
-    call comm_allreduce(st%st_kpt_mpi_grp%comm, force, dim = (/gr%mesh%sb%dim, geo%natoms/))
-    call comm_allreduce(st%st_kpt_mpi_grp%comm, grad_rho, dim = (/np, gr%mesh%sb%dim/))
+    call comm_allreduce(st%st_kpt_mpi_grp%comm, force)
+    call comm_allreduce(st%st_kpt_mpi_grp%comm, grad_rho)
     call profiling_out(prof_comm)
   end if
 #endif
@@ -226,7 +223,7 @@ subroutine X(forces_from_potential)(gr, geo, ep, st, time)
     geo%atom(iatom)%f(1:gr%mesh%sb%dim) = geo%atom(iatom)%f(1:gr%mesh%sb%dim) + force(1:gr%mesh%sb%dim, iatom)
   end do
 
-  call dforces_from_local_potential(gr, geo, ep, st, time, grad_rho, force)
+  call dforces_from_local_potential(gr, geo, ep, grad_rho, force)
 
   do iatom = 1, geo%natoms
     do idir = 1, gr%mesh%sb%dim
@@ -254,7 +251,7 @@ subroutine X(total_force_from_potential)(gr, geo, ep, st, x)
   FLOAT,  allocatable :: grad_rho(:, :), force(:, :)
   CMPLX :: phase
 
-  PUSH_SUB(X(forces_from_potential))
+  PUSH_SUB(X(total_force_from_potential))
 
   np = gr%mesh%np
   np_part = gr%mesh%np_part
@@ -322,8 +319,8 @@ subroutine X(total_force_from_potential)(gr, geo, ep, st, x)
 #if defined(HAVE_MPI)
   if(st%parallel_in_states .or. st%d%kpt%parallel) then
     call profiling_in(prof_comm, "FORCES_COMM")
-    call comm_allreduce(st%st_kpt_mpi_grp%comm, force, dim = (/gr%mesh%sb%dim, geo%natoms/))
-    call comm_allreduce(st%st_kpt_mpi_grp%comm, grad_rho, dim = (/np, gr%mesh%sb%dim/))
+    call comm_allreduce(st%st_kpt_mpi_grp%comm, force)
+    call comm_allreduce(st%st_kpt_mpi_grp%comm, grad_rho)
     call profiling_out(prof_comm)
   end if
 #endif
@@ -337,17 +334,16 @@ subroutine X(total_force_from_potential)(gr, geo, ep, st, x)
   end do
 
   SAFE_DEALLOCATE_A(force)
-  POP_SUB(X(forces_from_potential))
+  POP_SUB(X(total_force_from_potential))
 end subroutine X(total_force_from_potential)
 
 
 ! --------------------------------------------------------------------------------
-subroutine X(forces_derivative)(gr, geo, ep, st, time, lr, lr2, force_deriv)
+subroutine X(forces_derivative)(gr, geo, ep, st, lr, lr2, force_deriv)
   type(grid_t),                   intent(inout) :: gr
   type(geometry_t),               intent(inout) :: geo
   type(epot_t),                   intent(inout) :: ep
   type(states_t),                 intent(inout) :: st
-  FLOAT,                          intent(in)    :: time
   type(lr_t),                     intent(in)    :: lr
   type(lr_t),                     intent(in)    :: lr2
   CMPLX,                          intent(out)   :: force_deriv(:,:)
@@ -450,13 +446,13 @@ subroutine X(forces_derivative)(gr, geo, ep, st, time, lr, lr2, force_deriv)
   if(st%parallel_in_states .or. st%d%kpt%parallel) then
     call profiling_in(prof_comm, "FORCES_COMM")
     call comm_allreduce(st%st_kpt_mpi_grp%comm, force_deriv, dim = (/gr%mesh%sb%dim, geo%natoms/))
-    call comm_allreduce(st%st_kpt_mpi_grp%comm, grad_rho, dim = (/np, gr%mesh%sb%dim/))
+    call comm_allreduce(st%st_kpt_mpi_grp%comm, grad_rho)
     call profiling_out(prof_comm)
   end if
 #endif
   
   SAFE_ALLOCATE(force_local(1:gr%sb%dim, 1:geo%natoms))
-  call zforces_from_local_potential(gr, geo, ep, st, time, grad_rho, force_local)
+  call zforces_from_local_potential(gr, geo, ep, grad_rho, force_local)
   force_deriv(:,:) = force_deriv(:,:) + force_local(:,:)
   SAFE_DEALLOCATE_A(force_local)
   SAFE_DEALLOCATE_A(grad_rho)
@@ -465,12 +461,11 @@ subroutine X(forces_derivative)(gr, geo, ep, st, time, lr, lr2, force_deriv)
 end subroutine X(forces_derivative)
 
 ! --------------------------------------------------------------------------------
-subroutine X(forces_born_charges)(gr, geo, ep, st, time, lr, lr2, lr_dir, born_charges)
+subroutine X(forces_born_charges)(gr, geo, ep, st, lr, lr2, lr_dir, born_charges)
   type(grid_t),                   intent(inout) :: gr
   type(geometry_t),               intent(inout) :: geo
   type(epot_t),                   intent(inout) :: ep
   type(states_t),                 intent(inout) :: st
-  FLOAT,                          intent(in)    :: time
   type(lr_t),                     intent(in)    :: lr
   type(lr_t),                     intent(in)    :: lr2
   integer,                        intent(in)    :: lr_dir
@@ -487,7 +482,7 @@ subroutine X(forces_born_charges)(gr, geo, ep, st, time, lr, lr2, lr_dir, born_c
   ! need all to calculate Born charges
   ASSERT(lr_dir > 0 .and. lr_dir <= gr%mesh%sb%dim)
 
-  call X(forces_derivative)(gr, geo, ep, st, time, lr, lr2, born_charges%charge(lr_dir, :, :))
+  call X(forces_derivative)(gr, geo, ep, st, lr, lr2, born_charges%charge(lr_dir, :, :))
 
   do iatom = 1, geo%natoms
     born_charges%charge(lr_dir, lr_dir, iatom) = born_charges%charge(lr_dir, lr_dir, iatom) + species_zval(geo%atom(iatom)%spec)

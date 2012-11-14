@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: xyz_file.F90 9049 2012-05-02 07:59:06Z joseba $
+!! $Id: xyz_file.F90 9623 2012-11-14 14:18:01Z mjv500 $
 
 #include "global.h"
 
@@ -145,6 +145,7 @@ contains
       SAFE_ALLOCATE(gf%atom(1:gf%n))
 
       do ia = 1, gf%n
+        ! NOTE: might force space%dim below to be 3 - do people use xyz files in 2D?
         read(iunit,*) gf%atom(ia)%label, gf%atom(ia)%x(1:space%dim)
       end do
 
@@ -280,9 +281,9 @@ contains
         call str_trim(gf%atom(na)%residue)
 
         if(trim(what) == 'Classical') then
-          read(record, '(30x,3f8.3,6x,f5.2)') gf%atom(na)%x, gf%atom(na)%charge
+          read(record, '(30x,3f8.3,6x,f5.2)') gf%atom(na)%x(1:3), gf%atom(na)%charge
         else
-          read(record, '(30x,3f8.3)') gf%atom(na)%x
+          read(record, '(30x,3f8.3)') gf%atom(na)%x(1:3)
         endif
 
         na = na + 1

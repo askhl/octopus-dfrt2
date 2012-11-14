@@ -88,8 +88,6 @@ contains
     !%Option standard 1
     !% The standard routine. Can be used with domain parallelization but not
     !% state parallelization.
-    !%Option old 2
-    !% Old routine, compatible with states parallelization.
     !%Option scalapack 3
     !% State-parallelized version using ScaLAPACK. (Requires that
     !% Octopus was compiled with ScaLAPACK support.)
@@ -128,7 +126,7 @@ contains
       end if
 
       if(st%d%kpt%parallel) then
-        message(1) = 'Currently the scalapack subspace diagonalization cannot work with subspace diagonalization.'
+        message(1) = 'Currently the scalapack subspace diagonalization does not use k-point parallelization.'
         call messages_warning(1)
       end if
 #endif

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: multicomm.F90 9033 2012-04-20 12:31:38Z jrfsousa $
+!! $Id: multicomm.F90 9346 2012-09-06 00:01:45Z dstrubbe $
 
 #include "global.h"
 
@@ -363,7 +363,7 @@ contains
       do ii = 1, mc%n_index
         if(mc%group_sizes(ii) == -1) then
           if(fill_used) then
-            message(1) = "Error: The 'fill' value can be used only once in ParallelizationGroupRanks."
+            message(1) = "The 'fill' value can be used only once in ParallelizationGroupRanks."
             call messages_fatal(1, only_root_writes = .true.)
           end if
           mc%group_sizes(ii) = -base_grp%size / product(mc%group_sizes)

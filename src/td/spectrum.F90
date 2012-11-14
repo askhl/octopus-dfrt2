@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: spectrum.F90 9110 2012-06-11 17:06:23Z umberto $
+!! $Id: spectrum.F90 9613 2012-11-13 17:32:49Z micael $
 
 #include "global.h"
 
@@ -166,7 +166,6 @@ contains
 
     !%Variable PropagationSpectrumDampMode
     !%Type integer
-    !%Default polynomial
     !%Section Utilities::oct-propagation_spectrum
     !%Description
     !% Decides which damping/filtering is to be applied in order to
@@ -451,9 +450,14 @@ contains
     do ie = 0, energy_steps
 
       pp = M_ZERO
-      do is = 1, min(2, nspin) ! we add spin up with spin down
-        pp(:, :) = pp(:, :) + sigma(:, :, ie, is)
-      end do
+      pp(:, :) = pp(:, :) + sigma(:, :, ie, 1)
+      if (nspin >= 2) then
+        if (kick%delta_strength_mode == KICK_SPIN_MODE) then
+          pp(:, :) = pp(:, :) - sigma(:, :, ie, 2)
+        else
+          pp(:, :) = pp(:, :) + sigma(:, :, ie, 2)
+        end if
+      end if
       average = M_THIRD * ( pp(1, 1) + pp(2, 2) + pp(3, 3) )
       ip = matmul(pp, pp)
       anisotropy = M_THIRD * ( M_THREE * ( ip(1, 1) + ip(2, 2) + ip(3, 3) ) - (M_THREE * average)**2 )
@@ -644,8 +648,7 @@ contains
     integer :: nspin, lmax, time_steps, trash, it
     FLOAT   :: dt,  dump
     type(kick_t) :: kick
-    type(unit_system_t) :: file_units, ref_file_units
-    type(batch_t) :: dipoleb, sigmab
+    type(unit_system_t) :: file_units
 
     PUSH_SUB(spectrum_read_dipole)
 
@@ -996,8 +999,8 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine spectrum_hsfunction_min(aa, bb, omega, omega_min, func_min)
-    FLOAT, intent(in)  :: aa, bb, omega
+  subroutine spectrum_hsfunction_min(aa, bb, omega_min, func_min)
+    FLOAT, intent(in)  :: aa, bb
     FLOAT, intent(out) :: omega_min, func_min
 
     integer :: ierr, ie
@@ -1151,10 +1154,11 @@ contains
     FLOAT,  optional, intent(in)    :: w0
 
     integer :: istep, trash, iunit, nspin, time_steps, istart, iend, ntiter, lmax, ierr, jj
-    FLOAT :: dt, dump,aa(MAX_DIM)
+    FLOAT :: dt, dump, aa(MAX_DIM)
+    CMPLX :: nn(MAX_DIM)
     type(kick_t) :: kick
     FLOAT, allocatable :: dd(:,:)
-    CMPLX, allocatable :: acc(:,:),PP(:,:),pos(:,:),nn(:,:),tret(:)
+    CMPLX, allocatable :: acc(:,:),PP(:,:),pos(:,:),tret(:)
     FLOAT :: vv(1:MAX_DIM)   
     type(unit_system_t) :: file_units
 
@@ -1167,7 +1171,6 @@ contains
     SAFE_ALLOCATE(acc(1:MAX_DIM,0:time_steps))
     SAFE_ALLOCATE(PP(1:MAX_DIM,0:time_steps))
     SAFE_ALLOCATE(pos(1:MAX_DIM,0:time_steps))
-    SAFE_ALLOCATE(nn(1:MAX_DIM,0:time_steps))
     SAFE_ALLOCATE(tret(0:time_steps))
 
     acc = M_ZERO
@@ -1180,7 +1183,7 @@ contains
     do istep = 0, time_steps-1
       aa = M_ZERO
       read(iunit, '(28x,e20.12)', advance = 'no', iostat = ierr) aa(1)
-      ! What on earth is the point of this with jj??
+      ! FIXME: parsing of file depends on how code was compiled (MAX_DIM)!!!
       jj = 2
       do while( (ierr.eq.0) .and. (jj <= MAX_DIM) )
        read(iunit, '(e20.12)', advance = 'no', iostat = ierr) aa(jj)
@@ -1232,21 +1235,20 @@ contains
 
     PP(:,0) = M_ZERO
     do istep = 0, time_steps - 1
-       nn(:,istep) = vv(:)-pos(:,istep)
-       nn(:,istep) = nn(:,istep)/sqrt(sum(nn(:,istep)**2 ))
-       tret(istep) = ddot_product(vv(:),Real(pos(:,istep)) )/P_C 
+       nn(:) = vv(:)-pos(:,istep)
+       nn(:) = nn(:)/sqrt(sum(nn(:)**2 ))
+       tret(istep) = ddot_product(vv(:),real(pos(:,istep),REAL_PRECISION))/P_C 
        PP(:,istep) = zcross_product(nn, zcross_product(nn, acc(:,istep))) 
 !       write (*,*) istep, Real(PP(:,istep)),"acc", Real (acc(:,istep))
     end do
 
-    call spectrum_hsfunction_ar_init(dt, istart, iend, time_steps, PP, pos,tret)
+    call spectrum_hsfunction_ar_init(dt, istart, iend, time_steps, PP, pos, tret)
     call spectrum_hs(out_file, spectrum, 'a', w0)
     call spectrum_hsfunction_end()
 
     SAFE_DEALLOCATE_A(acc)
     SAFE_DEALLOCATE_A(PP)
     SAFE_DEALLOCATE_A(pos)
-    SAFE_DEALLOCATE_A(nn)
     SAFE_DEALLOCATE_A(tret)
 
     POP_SUB(spectrum_hs_ar_from_acc)
@@ -1497,7 +1499,7 @@ contains
     do istep = 1, time_steps
       aa = M_ZERO
       read(iunit, '(28x,e20.12)', advance = 'no', iostat = ierr) aa(1)
-      ! What on earth is the point of this with jj??
+      ! FIXME: parsing of file depends on how code was compiled (MAX_DIM)!!!
       jj = 2
       do while( (ierr.eq.0) .and. (jj <= MAX_DIM) )
         read(iunit, '(e20.12)', advance = 'no', iostat = ierr) aa(jj)
@@ -1570,21 +1572,6 @@ contains
   end subroutine spectrum_hs_from_acc
   ! ---------------------------------------------------------
 
-
-  ! ---------------------------------------------------------
-  subroutine spectrum_hs_fourier_transform(spectrum, no_e, time_steps, acc, sp)
-    type(spec_t),     intent(inout) :: spectrum
-    integer,          intent(in)    :: no_e, time_steps
-    FLOAT,            intent(in)    :: acc(0:time_steps)
-    FLOAT,            intent(inout) :: sp(0:no_e)
-
-    PUSH_SUB(spectrum_hs_fourier_transform)
-
-    POP_SUB(spectrum_hs_fourier_transform)
-  end subroutine spectrum_hs_fourier_transform
-  ! ---------------------------------------------------------
-
-
   ! ---------------------------------------------------------
   subroutine spectrum_hs(out_file, spectrum, pol, w0)
     character(len=*), intent(in)    :: out_file
@@ -1610,7 +1597,7 @@ contains
       ! output
       omega = w0
       do while(omega <= spectrum%max_energy)
-        call spectrum_hsfunction_min(omega - w0, omega + w0, omega, xx, hsval)
+        call spectrum_hsfunction_min(omega - w0, omega + w0, xx, hsval)
 
         write(iunit, '(1x,2e20.8)') units_from_atomic(units_out%energy, xx), &
           units_from_atomic((units_out%length / units_out%time)**2, -hsval)
@@ -1756,7 +1743,7 @@ contains
     integer, intent(out)          :: nspin
     type(kick_t), intent(out)     :: kick
     integer, intent(out)          :: energy_steps
-    FLOAT,   intent(out)          :: dw            ! energy step
+    FLOAT,   intent(out)          :: dw            !< energy step
 
     FLOAT :: dummy, e1, e2
 
@@ -1871,8 +1858,7 @@ contains
     FLOAT,              intent(in)    :: time_step
     type(batch_t),      intent(inout) :: time_function
     logical, optional,  intent(in)    :: window
-    FLOAT, optional, 	intent(in)	  :: kick_time
-	
+    FLOAT, optional, 	intent(in)    :: kick_time
 
     integer :: itime, ii
     FLOAT   :: total_time, time, weight

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: restart.F90 9204 2012-07-18 16:55:23Z helbig $
+!! $Id: restart.F90 9583 2012-11-08 23:02:46Z dstrubbe $
 
 #include "global.h"
 
@@ -223,7 +223,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine restart_write(dir, st, gr, geo, ierr, iter, lr)
+  subroutine restart_write(dir, st, gr, geo, ierr, iter, lr, st_start_writing)
     character(len=*),     intent(in)    :: dir
     type(states_t),       intent(inout) :: st
     type(grid_t),         intent(in)    :: gr
@@ -232,11 +232,12 @@ contains
     integer,    optional, intent(in)    :: iter
     !> if this next argument is present, the lr wfs are stored instead of the gs wfs
     type(lr_t), optional, intent(in)    :: lr
+    integer,    optional, intent(in)    :: st_start_writing
 
     integer :: iunit, iunit2, iunit_mesh, iunit_states, iunit_geo, iunit_rho
     integer :: err, ik, idir, ist, idim, isp, itot
     character(len=80) :: filename
-    logical :: lr_wfns_are_associated
+    logical :: lr_wfns_are_associated, should_write
     type(json_object_t) :: json
     FLOAT   :: kpoint(1:MAX_DIM)
     FLOAT,  allocatable :: dpsi(:)
@@ -335,7 +336,15 @@ contains
             write(iunit2, '(e21.14,a,i10.10,3(a,i8))') st%d%kweights(ik), ' | ', itot, ' | ', ik, ' | ', ist, ' | ', idim
           end if
 
-          if(st%st_start <= ist .and. ist <= st%st_end) then
+          should_write = st%st_start <= ist .and. ist <= st%st_end
+          if(should_write .and. present(st_start_writing)) then
+            if(ist < st_start_writing) then
+              should_write = .false.
+              ierr = ierr + 1
+            endif
+          endif
+
+          if(should_write) then
             if( .not. present(lr) ) then
               if(st%d%kpt%start <= ik .and. ik <= st%d%kpt%end) then
                 if (states_are_real(st)) then
@@ -374,10 +383,8 @@ contains
       write(iunit_rho,'(a)') '#     #spin    #nspin    filename'
       write(iunit_rho,'(a)') '%densities'
     end if
-    if(gr%have_fine_mesh)then
+    if(gr%have_fine_mesh) then
       SAFE_ALLOCATE(rho(1:gr%mesh%np))
-    else
-      nullify(rho)
     end if
     do isp = 1, st%d%nspin
       if(st%d%nspin==1) then
@@ -390,11 +397,10 @@ contains
       end if
       if(gr%have_fine_mesh)then
         call dmultigrid_fine2coarse(gr%fine%tt, gr%fine%der, gr%mesh, st%rho(:,isp), rho, INJECTION)
+        call drestart_write_function(dir, filename, gr%mesh, rho, err)
       else
-        rho=>st%rho(:,isp)
+        call drestart_write_function(dir, filename, gr%mesh, st%rho(:,isp), err)
       end if
-      call drestart_write_function(dir, filename, gr%mesh, rho, err)
-      if(.not.gr%have_fine_mesh)nullify(rho)
       if(err==0) ierr = ierr + 1
     end do
     if(gr%have_fine_mesh)then

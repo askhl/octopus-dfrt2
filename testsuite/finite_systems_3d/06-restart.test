@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 06-restart.test 8321 2011-09-25 00:10:12Z xavier $
+# $Id: 06-restart.test 9618 2012-11-13 20:03:09Z dstrubbe $
 
 Test       : Restart
 Programs   : octopus; octopus_mpi
@@ -9,7 +9,8 @@ Enabled    : Yes
 
 # First start a ground state calculation
 Input: 06-restart.01-ground_state.inp
-# no matches here ...
+match ; Eigenvalue [up] ; GREP(static/info, '1   up', 13) ; -0.014047
+match ; Eigenvalue [dn] ; GREP(static/info, '1   dn', 13) ; -0.085321
 
 
 # Now restart the previous calculation

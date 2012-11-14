@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: vxc_inc.F90 9327 2012-09-05 15:54:32Z dstrubbe $
+!! $Id: vxc_inc.F90 9573 2012-11-08 14:50:08Z askhl $
 
 subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc, vxc, vtau)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
@@ -27,7 +27,7 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc
   FLOAT,                intent(in)    :: qtot 
   FLOAT, optional,      intent(inout) :: ex              !< Exchange energy.
   FLOAT, optional,      intent(inout) :: ec              !< Correlation energy.
-  FLOAT, optional,      intent(inout) :: deltaxc         !< The XC derivative descontinuity
+  FLOAT, optional,      intent(inout) :: deltaxc         !< The XC derivative discontinuity
   FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
   FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
 
@@ -190,7 +190,8 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc
     if(mgga) then
       ib2 = ip
       do ib = 1, n_block
-        l_tau  (1:spin_channels, ib) =   tau(ib2, 1:spin_channels)
+        ! we adjust for the different definition of tau in libxc
+        l_tau  (1:spin_channels, ib) =   tau(ib2, 1:spin_channels) / M_TWO
         l_ldens(1:spin_channels, ib) = ldens(ib2, 1:spin_channels)
         ib2 = ib2 + 1
       end do
@@ -356,7 +357,8 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc
           ib2 = ip
           do ib = 1, n_block
             dedldens(ib2, 1:spin_channels) = dedldens(ib2, 1:spin_channels) + l_dedldens(1:spin_channels, ib)
-            vtau    (ib2, 1:spin_channels) = vtau    (ib2, 1:spin_channels) + l_dedtau  (1:spin_channels, ib)
+            ! we adjust for the different definition of tau in libxc
+            vtau    (ib2, 1:spin_channels) = vtau    (ib2, 1:spin_channels) + l_dedtau  (1:spin_channels, ib)/M_TWO
             ib2 = ib2 + 1
           end do
         end if
@@ -406,9 +408,9 @@ subroutine xc_get_vxc(der, xcs, st, rho, ispin, ioniz_pot, qtot, ex, ec, deltaxc
 contains
 
   ! ---------------------------------------------------------
-  ! Takes care of the initialization of the LDA part of the functionals
-  !   *) allocates density and dedd, and their local variants
-  !   *) calculates the density taking into account nlcc and non-collinear spin
+  !> Takes care of the initialization of the LDA part of the functionals
+  !!   *) allocates density and dedd, and their local variants
+  !!   *) calculates the density taking into account nlcc and non-collinear spin
   subroutine lda_init()
     integer :: ii
     FLOAT   :: d(2), dtot, dpol
@@ -458,7 +460,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! deallocate variables allocated in lda_init
+  !> deallocate variables allocated in lda_init
   subroutine lda_end()
     PUSH_SUB(xc_get_vxc.lda_end)
 
@@ -478,7 +480,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! calculates the LDA part of vxc, taking into account non-collinear spin
+  !> calculates the LDA part of vxc, taking into account non-collinear spin
   subroutine lda_process()
     integer :: ip
     FLOAT :: d(2), dpol, vpol
@@ -511,9 +513,8 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! initialize GGAs
-  !   *) allocates gradient of the density (gdens), dedgd, and its local variants
-
+  !> initialize GGAs
+  !!   *) allocates gradient of the density (gdens), dedgd, and its local variants
   subroutine gga_init()
     integer :: ii
 
@@ -545,7 +546,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! cleans up memory allocated in gga_init
+  !> cleans up memory allocated in gga_init
   subroutine gga_end()
     PUSH_SUB(xc_get_vxc.gga_end)
 
@@ -561,7 +562,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! calculates the GGA contribution to vxc
+  !> calculates the GGA contribution to vxc
   subroutine gga_process()
     integer :: ip, is
     FLOAT, allocatable :: gf(:,:)
@@ -597,9 +598,8 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! initialize meta-GGAs
-  !   *) allocate the kinetic-energy density, dedtau, and local variants
-
+  !> initialize meta-GGAs
+  !!   *) allocate the kinetic-energy density, dedtau, and local variants
   subroutine mgga_init()
     PUSH_SUB(xc_get_vxc.mgga_init)
 
@@ -645,7 +645,7 @@ contains
 
       if (n <= CNST(1e-7)) then 
         gnon(ii) = CNST(0.0)
-        ! here you will have to print the true gnon(ii) with the correspondent mesh point ii
+        ! here you will have to print the true gnon(ii) with the corresponding mesh point ii
       else
         gnon(ii) = sqrt(sum((gn(1:der%mesh%sb%dim)/n)**2))
       end if
@@ -665,7 +665,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! clean up memory allocates in mgga_init
+  !> clean up memory allocated in mgga_init
   subroutine mgga_end()
     PUSH_SUB(xc_get_vxc.mgga_end)
 
@@ -688,7 +688,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! calculate the mgga contribution to vxc
+  !> calculate the mgga contribution to vxc
   subroutine mgga_process()
     integer :: is
     FLOAT, allocatable :: lf(:,:)
@@ -1284,27 +1284,22 @@ end subroutine zxc_complex_lda
 
 
 ! ----------------------------------------------------------------------------- 
-! This is the complex scaled interface for xc functionals.
-! It will eventually be merged with the other one dxc_get_vxc after some test
-! -----------------------------------------------------------------------------
-subroutine xc_get_vxc_cmplx(der, xcs, st, rho, ispin, ioniz_pot, qtot, &
-  ex, ec, vxc, vtau, Imrho, Imex, Imec, Imvxc, Imvtau, cmplxscl_th)
+!> This is the complex scaled interface for xc functionals.
+!! It will eventually be merged with the other one dxc_get_vxc after some test
+!! -----------------------------------------------------------------------------
+subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, &
+  ex, ec, vxc, Imrho, Imex, Imec, Imvxc, cmplxscl_th)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
-  type(states_t),       intent(in)    :: st              !< State of the system (wavefunction,eigenvalues...)
   FLOAT,                intent(in)    :: rho(:, :)       !< Electronic density 
   integer,              intent(in)    :: ispin           !< Number of spin channels 
-  FLOAT,                intent(in)    :: ioniz_pot
-  FLOAT,                intent(in)    :: qtot 
   FLOAT, optional,      intent(inout) :: ex              !< Exchange energy.
   FLOAT, optional,      intent(inout) :: ec              !< Correlation energy.
   FLOAT, optional,      intent(inout) :: vxc(:,:)        !< XC potential
-  FLOAT, optional,      intent(inout) :: vtau(:,:)       !< Derivative wrt (two times kinetic energy density)
   FLOAT,                intent(in)    :: Imrho(:, :)     !< cmplxscl: Electronic density 
   FLOAT, optional,      intent(inout) :: Imex            !< cmplxscl: Exchange energy.
   FLOAT, optional,      intent(inout) :: Imec            !< cmplxscl: Correlation energy
   FLOAT, optional,      intent(inout) :: Imvxc(:,:)      !< cmplxscl: XC potential
-  FLOAT, optional,      intent(inout) :: Imvtau(:,:)     !< cmplxscl: Derivative wrt (two times kinetic energy density)
   FLOAT,                intent(in)    :: cmplxscl_th     !< complex scaling angle
 
   
@@ -1316,7 +1311,6 @@ subroutine xc_get_vxc_cmplx(der, xcs, st, rho, ispin, ioniz_pot, qtot, &
 
   PUSH_SUB(xc_get_vxc_cmplx)
 
-  !print *, "LDA calc energy exc"
   ASSERT(present(ex) .eqv. present(ec))
   calc_energy = present(ex)
 

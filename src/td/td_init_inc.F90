@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td_init_inc.F90 9329 2012-09-05 16:15:01Z dstrubbe $
+!! $Id: td_init_inc.F90 9360 2012-09-06 21:35:27Z dstrubbe $
 
 ! ---------------------------------------------------------
 subroutine td_init(td, sys, hm)
@@ -130,7 +130,7 @@ subroutine td_init(td, sys, hm)
   call kick_init(hm%ep%kick, sys%st%d%nspin, sys%gr%mesh%sb%dim)
 
   ! now the photoelectron stuff
-  call PES_init(td%PESv, sys%gr%mesh, sys%gr%sb, sys%st, sys%outp%iter,hm,td%max_iter,td%dt,sys)
+  call PES_init(td%PESv, sys%gr%mesh, sys%gr%sb, sys%st, sys%outp%iter, hm, td%max_iter, td%dt)
 
   !%Variable TDDynamics
   !%Type integer

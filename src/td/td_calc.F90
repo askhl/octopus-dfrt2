@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td_calc.F90 8842 2012-02-07 15:48:53Z joseba $
+!! $Id: td_calc.F90 9367 2012-09-07 16:31:57Z dstrubbe $
 
 #include "global.h"
 
@@ -64,7 +64,7 @@ subroutine td_calc_tacc(gr, geo, st, hm, acc, time)
 
   FLOAT :: field(MAX_DIM), x(MAX_DIM)
   CMPLX, allocatable :: hzpsi(:,:), hhzpsi(:,:), xzpsi(:,:,:), vnl_xzpsi(:,:)
-  integer  :: j, k, i, ik, ist, idim
+  integer  :: j, k, ik, ist, idim
 
 #if defined(HAVE_MPI)
   FLOAT   :: y(MAX_DIM)
@@ -158,12 +158,9 @@ end subroutine td_calc_tacc
 !! d<x>/dt = <p>
 !! \f]
 ! ---------------------------------------------------------
-subroutine td_calc_tvel(gr, geo, st, hm, vel, time)
+subroutine td_calc_tvel(gr, st, vel)
   type(grid_t),        intent(inout) :: gr
-  type(geometry_t),    intent(inout) :: geo
   type(states_t),      intent(inout) :: st
-  type(hamiltonian_t), intent(inout) :: hm
-  FLOAT,               intent(in)    :: time
   FLOAT,               intent(out)   :: vel(MAX_DIM)
 
   FLOAT, allocatable :: momentum(:,:,:)

@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: energy.F90 9180 2012-07-04 16:03:54Z micael $
+!! $Id: energy.F90 9331 2012-09-05 16:57:37Z dstrubbe $
 
 #include "global.h"
 
@@ -26,6 +26,8 @@ module energy_m
   use profiling_m
 
   implicit none
+
+  private
 
   public ::         &
     energy_t,       &

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: preconditioners_inc.F90 9282 2012-08-30 02:27:22Z xavier $
+!! $Id: preconditioners_inc.F90 9346 2012-09-06 00:01:45Z dstrubbe $
 
 ! --------------------------------------------------------- 
 subroutine X(preconditioner_apply)(pre, gr, hm, ik, a, b, omega)
@@ -80,7 +80,7 @@ subroutine X(preconditioner_apply)(pre, gr, hm, ik, a, b, omega)
     call multigrid()
 
   case default
-   write(message(1), '(a,i4,a)') "Error: unknown preconditioner ", pre%which, "."
+   write(message(1), '(a,i4,a)') "Unknown preconditioner ", pre%which, "."
    call messages_fatal(1)
 
   end select

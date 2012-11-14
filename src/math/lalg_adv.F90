@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: lalg_adv.F90 7377 2011-01-31 15:35:41Z xavier $
+!! $Id: lalg_adv.F90 9483 2012-10-05 16:19:43Z dstrubbe $
 
 #include "global.h"
 
@@ -23,11 +23,12 @@ module lalg_adv_m
   use global_m
   use lapack_m
   use messages_m
+  use mpi_m
   use profiling_m
   use blacs_proc_grid_m
   use scalapack_m
-  use mpi_m
-
+  use utils_m
+  
   implicit none
 
   private
@@ -53,83 +54,84 @@ module lalg_adv_m
 
   interface lalg_cholesky
     module procedure dcholesky, zcholesky
-  end interface
+  end interface lalg_cholesky
 
   interface lalg_geneigensolve
     module procedure dgeneigensolve, zgeneigensolve
-  end interface
+  end interface lalg_geneigensolve
 
   interface lalg_eigensolve_nonh
     module procedure zeigensolve_nonh, deigensolve_nonh
-  end interface
+  end interface lalg_eigensolve_nonh
 
   interface lalg_eigensolve
     module procedure deigensolve, zeigensolve
 #ifdef HAVE_SCALAPACK
     module procedure deigensolve_scalapack, zeigensolve_scalapack
 #endif
-  end interface
+  end interface lalg_eigensolve
 
-  ! Note that lalg_determinant and lalg_inverter are just wrappers
-  ! over the same routine.
+  !> Note that lalg_determinant and lalg_inverter are just wrappers
+  !! over the same routine.
   interface lalg_determinant
     module procedure ddeterminant, zdeterminant
-  end interface
+  end interface lalg_determinant
 
   interface lalg_inverter
     module procedure ddeterminant, zdeterminant
-  end interface
+  end interface lalg_inverter
 
   interface lalg_sym_inverter
     module procedure dsym_inverter, zsym_inverter
-  end interface
+  end interface lalg_sym_inverter
 
   interface lalg_linsyssolve
     module procedure dlinsyssolve, zlinsyssolve
-  end interface
+  end interface lalg_linsyssolve
 
   interface lalg_singular_value_decomp
     module procedure zsingular_value_decomp
-  end interface
+  end interface lalg_singular_value_decomp
 
   interface lalg_svd_inverse
     module procedure zsvd_inverse
-  end interface
+  end interface lalg_svd_inverse
 
   interface lalg_invert_upper_triangular
     module procedure dinvert_upper_triangular, zinvert_upper_triangular
-  end interface
+  end interface lalg_invert_upper_triangular
   
   interface lalg_invert_lower_triangular
     module procedure dinvert_lower_triangular, zinvert_lower_triangular
-  end interface
+  end interface lalg_invert_lower_triangular
   
   interface lalg_lowest_geneigensolve
     module procedure dlowest_geneigensolve, zlowest_geneigensolve
-  end interface
+  end interface lalg_lowest_geneigensolve
 
   interface lalg_lowest_eigensolve
     module procedure dlowest_eigensolve, zlowest_eigensolve
-  end interface
+  end interface lalg_lowest_eigensolve
+
 contains
 
-  !-------------------------------------------------
-  !
-  ! This routine calculates the exponential of a matrix by using an
-  ! eigenvalue decomposition.
-  !
-  ! For the hermitian case:
-  !
-  !   A = V D V^T => exp(A) = V exp(D) V^T
-  !
-  ! and in general
-  !
-  !   A = V D V^-1 => exp(A) = V exp(D) V^-1
-  !
-  ! This is slow but it is simple to implement, and for the moment it
-  ! does not affect performance.
-  !
-  !---------------------------------------------
+  !>-------------------------------------------------
+  !!
+  !! This routine calculates the exponential of a matrix by using an
+  !! eigenvalue decomposition.
+  !!
+  !! For the hermitian case:
+  !!
+  !!   A = V D V^T => exp(A) = V exp(D) V^T
+  !!
+  !! and in general
+  !!
+  !!   A = V D V^-1 => exp(A) = V exp(D) V^-1
+  !!
+  !! This is slow but it is simple to implement, and for the moment it
+  !! does not affect performance.
+  !!
+  !!---------------------------------------------
   subroutine zlalg_exp(nn, pp, aa, ex, hermitian)
     integer,           intent(in)      :: nn
     CMPLX,             intent(in)      :: pp
@@ -191,22 +193,22 @@ contains
   end subroutine zlalg_exp
 
 
-  !-------------------------------------------------
-  !
-  ! This routine calculates phi(pp*A), where A is a matrix,
-  ! pp is any complex number, and phi is the function:
-  ! 
-  ! phi(x) = (e^x - 1)/x
-  !
-  ! For the Hermitian case, for any function f:
-  !
-  !   A = V D V^T => f(A) = V f(D) V^T
-  !
-  ! and in general
-  !
-  !   A = V D V^-1 => f(A) = V f(D) V^-1
-  !
-  !---------------------------------------------
+  !>-------------------------------------------------
+  !!
+  !! This routine calculates phi(pp*A), where A is a matrix,
+  !! pp is any complex number, and phi is the function:
+  !! 
+  !! phi(x) = (e^x - 1)/x
+  !!
+  !! For the Hermitian case, for any function f:
+  !!
+  !!   A = V D V^T => f(A) = V f(D) V^T
+  !!
+  !! and in general
+  !!
+  !!   A = V D V^-1 => f(A) = V f(D) V^-1
+  !!
+  !!---------------------------------------------
   subroutine zlalg_phi(nn, pp, aa, ex, hermitian)
     integer,           intent(in)      :: nn
     CMPLX,             intent(in)      :: pp
@@ -282,7 +284,6 @@ contains
 #endif
 
 end module lalg_adv_m
-
 
 !! Local Variables:
 !! mode: f90

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: solver_3d_inc.F90 9095 2012-06-02 02:39:35Z xavier $
+!! $Id: solver_3d_inc.F90 9339 2012-09-05 22:01:37Z dstrubbe $
 
 ! ---------------------------------------------------------
 subroutine poisson3D_init(this, geo, all_nodes_comm)
@@ -107,7 +107,7 @@ subroutine poisson3D_init(this, geo, all_nodes_comm)
     call parse_integer(datasets_check('PoissonSolverMaxIter'), 400, iter)
     call parse_float(datasets_check('PoissonSolverThreshold'), CNST(1.0e-6), threshold)
     call poisson_corrections_init(this%corrector, maxl, this%der%mesh)
-    call poisson_cg_init(this%der%mesh, threshold, iter)
+    call poisson_cg_init(threshold, iter)
 
   case(POISSON_CG_CORRECTED)
     call parse_integer(datasets_check('PoissonSolverMaxMultipole'), 4, maxl)
@@ -116,7 +116,7 @@ subroutine poisson3D_init(this, geo, all_nodes_comm)
     write(message(1),'(a,i2)')'Info: Multipoles corrected up to L =',  maxl
     call messages_info(1)
     call poisson_corrections_init(this%corrector, maxl, this%der%mesh)
-    call poisson_cg_init(this%der%mesh, threshold, iter)
+    call poisson_cg_init(threshold, iter)
 
   case(POISSON_MULTIGRID)
     call parse_integer(datasets_check('PoissonSolverMaxMultipole'), 4, maxl)

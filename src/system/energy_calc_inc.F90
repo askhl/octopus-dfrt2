@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: energy_calc_inc.F90 9160 2012-06-23 20:38:20Z xavier $
+!! $Id: energy_calc_inc.F90 9390 2012-09-10 20:27:48Z dstrubbe $
 
 
 ! ---------------------------------------------------------
@@ -98,7 +98,7 @@ R_TYPE function X(energy_calc_electronic)(hm, der, st, terms, cproduct) result(e
   integer,             intent(in)    :: terms
   logical, optional,   intent(in)    :: cproduct
 
-  integer :: ik, ist, ib, minst, maxst
+  integer :: ik, ib, minst, maxst
   type(batch_t) :: hpsib
   R_TYPE, allocatable  :: tt(:, :)
   logical :: cproduct_
@@ -125,13 +125,18 @@ R_TYPE function X(energy_calc_electronic)(hm, der, st, terms, cproduct) result(e
 
     end do
   end do
-  
+
+  if(hm%cmplxscl) then
 #ifdef R_TCOMPLEX
-  energy = zstates_eigenvalues_sum(st, tt)
-#else  
-  energy = states_eigenvalues_sum(st, real(tt, REAL_PRECISION))
-#endif  
-  
+    energy = zstates_eigenvalues_sum(st, tt)
+#else
+    message(1) = "Internal error in energy_calc_electronic, real states but complex scaling."
+    call messages_fatal(1)
+#endif
+  else
+    energy = states_eigenvalues_sum(st, real(tt, REAL_PRECISION))
+  endif
+
   SAFE_DEALLOCATE_A(tt)
   POP_SUB(X(energy_calc_electronic))
 end function X(energy_calc_electronic)

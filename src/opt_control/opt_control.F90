@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: opt_control.F90 9330 2012-09-05 16:37:27Z dstrubbe $
+!! $Id: opt_control.F90 9510 2012-10-18 17:46:03Z acastro $
 
 #include "global.h"
 
@@ -148,7 +148,7 @@ contains
 
     ! Figure out the starting wavefunction(s), and the target.
     call initial_state_init(sys, hm, initial_st)
-    call target_init(sys%gr, sys%geo, initial_st, td, controlfunction_w0(par), target, oct)
+    call target_init(sys%gr, sys%geo, initial_st, td, controlfunction_w0(par), target, oct, hm%ep)
 
     ! Sanity checks.
     call check_faulty_runmodes(sys, hm, td%tr)

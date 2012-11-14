@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh.F90 9312 2012-09-04 21:32:23Z dstrubbe $
+!! $Id: mesh.F90 9539 2012-10-29 17:20:10Z joseba $
 
 #include "global.h"
 
@@ -93,12 +93,13 @@ module mesh_m
     integer  :: np_part          !< Local points plus ghost points plus boundary points.
     integer  :: np_global        !< Global number of points in mesh.
     integer  :: np_part_global   !< Global number of inner points and boundary points.
-    
-    logical         :: parallel_in_domains !< will I run parallel in domains?
+    !> will I run parallel in domains?
+    !! yes or no??
+    logical         :: parallel_in_domains 
     type(mpi_grp_t) :: mpi_grp             !< the mpi group describing parallelization in domains
     type(pv_t)      :: vp                  !< describes parallel vectors defined on the mesh.
 
-    FLOAT, pointer :: x(:,:)            !< The (local) points,
+    FLOAT, pointer :: x(:,:)            !< The (local) \b points
     integer, pointer :: resolution(:, :, :)
     FLOAT            :: volume_element    !< The global volume element.
     FLOAT, pointer   :: vol_pp(:)         !< Element of volume for curvilinear coordinates.
@@ -574,7 +575,7 @@ contains
     call io_binary_read(trim(filename)//'.obf', mesh%np_part*mesh%sb%dim, mesh%idx%lxyz, ierr)
 
     if(ierr > 0) then
-      message(1) = "Error: failed to read file "//trim(filename)//'.obf'
+      message(1) = "Failed to read file "//trim(filename)//'.obf'
       call messages_fatal(1)
     end if
 

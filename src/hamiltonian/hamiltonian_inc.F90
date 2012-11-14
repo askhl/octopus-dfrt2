@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian_inc.F90 9258 2012-08-25 17:14:47Z xavier $
+!! $Id: hamiltonian_inc.F90 9453 2012-09-20 15:36:35Z dstrubbe $
 
 ! ---------------------------------------------------------
 subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, terms)
@@ -321,10 +321,10 @@ end subroutine X(hamiltonian_external)
 subroutine X(hamiltonian_apply) (hm, der, psi, hpsi, ist, ik, time, terms)
   type(hamiltonian_t), intent(in)    :: hm
   type(derivatives_t), intent(in)    :: der
-  integer,             intent(in)    :: ist       ! the index of the state
-  integer,             intent(in)    :: ik        ! the index of the k-point
-  R_TYPE,   target,    intent(inout) :: psi(:,:)  ! psi(gr%mesh%np_part, hm%d%dim)
-  R_TYPE,              intent(out)   :: hpsi(:,:) ! hpsi(gr%mesh%np, hm%d%dim)
+  integer,             intent(in)    :: ist       !< the index of the state
+  integer,             intent(in)    :: ik        !< the index of the k-point
+  R_TYPE,   target,    intent(inout) :: psi(:,:)  !< (gr%mesh%np_part, hm%d%dim)
+  R_TYPE,              intent(out)   :: hpsi(:,:) !< (gr%mesh%np, hm%d%dim)
   FLOAT,    optional,  intent(in)    :: time
   integer,  optional,  intent(in)    :: terms
 

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: profiling.F90 8768 2012-01-12 19:59:26Z xavier $
+!! $Id: profiling.F90 9479 2012-10-04 22:11:39Z dstrubbe $
 
 #include "global.h"
 
@@ -118,13 +118,13 @@ module profiling_m
          profiling_count_tran_real_8,      &
          profiling_count_tran_complex_4,   &
          profiling_count_tran_complex_8
-  end interface
+  end interface profiling_count_transfers
 
   interface profiling_count_operations
     module procedure iprofiling_count_operations
     module procedure rprofiling_count_operations
     module procedure dprofiling_count_operations
-  end interface
+  end interface profiling_count_operations
  
   integer, parameter, public  ::   &
        PROFILING_TIME        = 1, &

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_partition.F90 9313 2012-09-04 21:43:23Z dstrubbe $
+!! $Id: mesh_partition.F90 9555 2012-11-06 09:07:31Z joseba $
 
 #include "global.h"
 
@@ -71,18 +71,18 @@ contains
   subroutine mesh_partition(mesh, lapl_stencil, part)
     type(mesh_t),    intent(inout)  :: mesh
     type(stencil_t), intent(in)  :: lapl_stencil
-    integer,         intent(out) :: part(:) ! 1:mesh%np_part_global
+    integer,         intent(out) :: part(:) !< 1:mesh%np_part_global
 
     integer              :: iv, jp, inb
     integer              :: ix(1:MAX_DIM), jx(1:MAX_DIM)
     integer              :: ne             !< Number of edges.
     integer              :: nv             !< Number of vertices.
-    ! Number of vertices (nv) is equal to number of
-    ! points np_global and maximum number of edges (ne) is 2*mesh%sb%dim*np_global
-    ! (there are a little fewer because points on the border have fewer
-    ! than two neighbours per dimension).
-    ! xadj has nv+1 entries because last entry contains the total
-    ! number of edges.
+    !! Number of vertices (nv) is equal to number of
+    !! points np_global and maximum number of edges (ne) is 2*mesh%sb%dim*np_global
+    !! (there are a little fewer because points on the border have fewer
+    !! than two neighbours per dimension).
+    !! xadj has nv+1 entries because last entry contains the total
+    !! number of edges.
     integer              :: npart          !< Number of partitions.
     integer              :: ipart          !< number of the current partition
     integer, allocatable :: xadj(:)        !< Indices of adjacency list in adjncy.
@@ -97,7 +97,6 @@ contains
     integer :: ip, ii
     integer :: stencil_to_use, default_method, method
     integer :: library
-    integer, parameter   :: METIS = 2, ZOLTAN = 3, GA = 4, PFFT_PART = 5
     integer, parameter   :: STAR = 1, LAPLACIAN = 2
     integer, allocatable :: istart(:), ifinal(:), lsize(:)
     FLOAT, allocatable   :: xglobal(:, :)
@@ -144,14 +143,14 @@ contains
 
 #ifndef HAVE_METIS
     if(library == METIS) then
-      message(1) = 'Error: METIS was requested, but Octopus was compiled without it.'
+      message(1) = 'METIS was requested, but Octopus was compiled without it.'
       call messages_fatal(1)
     end if
 #endif
 
 #ifndef HAVE_PFFT
     if(library == PFFT_PART) then
-      message(1) = 'Error: PFFT was requested, but Octopus was compiled without it.'
+      message(1) = 'PFFT was requested, but Octopus was compiled without it.'
       call messages_fatal(1)
     end if
 #endif
@@ -313,7 +312,7 @@ contains
         call oct_metis_part_graph_kway(nv, xadj, adjncy, &
           0, 0, 0, 1, npart, options, edgecut, part)
       case default
-        message(1) = 'Error: Selected partition method is not available in METIS.'
+        message(1) = 'Selected partition method is not available in METIS.'
         call messages_fatal(1)
       end select
 #endif
@@ -371,7 +370,7 @@ contains
 
     case(PFFT_PART)
       call cube_init(cube, mesh%idx%ll, mesh%sb, fft_type=FFT_REAL, fft_library=FFTLIB_PFFT)
-      SAFE_ALLOCATE(cube_part(cube%rs_n_global(1), cube%rs_n_global(2), cube%rs_n_global(3)))
+      SAFE_ALLOCATE(cube_part(1:cube%rs_n_global(1), 1:cube%rs_n_global(2), 1:cube%rs_n_global(3)))
       part = 0
       do ip = 1, mesh%np_global
         call index_to_coords(mesh%idx, mesh%sb%dim, ip, ix(1:3))
@@ -520,45 +519,39 @@ contains
 
   ! ----------------------------------------------------
 
-  subroutine mesh_partition_messages_debug(mesh, part)
+  subroutine mesh_partition_messages_debug(mesh)
     type(mesh_t),    intent(in)    :: mesh
-    integer,         intent(inout) :: part(:)
-
+    
     integer              :: ii, jj         ! Counter.
-    integer              :: npart
     integer              :: iunit          ! For debug output to files.
     character(len=3)     :: filenum
 
+    if(.not. in_debug_mode) return
+
     PUSH_SUB(mesh_partition_messages_debug)
 
-    if(in_debug_mode .and. mpi_grp_is_root(mpi_world)) then
+    call io_mkdir('debug/mesh_partition')
 
-      call io_mkdir('debug/mesh_partition')
+    ! Debug output. Write points of each partition in a different file.
+    write(filenum, '(i3.3)') mesh%mpi_grp%rank+1
 
-      npart = mesh%mpi_grp%size
+    iunit = io_open('debug/mesh_partition/mesh_partition.'//filenum, &
+      action='write')
+    do jj = 1, mesh%np_global
+      if(mesh%vp%part(jj) .eq. mesh%mpi_grp%rank+1) write(iunit, '(i8,3f18.8)') jj, mesh_x_global(mesh, jj)
+    end do
+    call io_close(iunit)
 
-      ! Debug output. Write points of each partition in a different file.
-      do ii = 1, npart
+    iunit = io_open('debug/mesh_partition/mesh_partition_all.'//filenum, &
+      action='write')
+    do jj = 1, mesh%np_part_global
+      if(mesh%vp%part(jj) .eq. mesh%mpi_grp%rank+1) write(iunit, '(i8,3f18.8)') jj, mesh_x_global(mesh, jj)
+    end do
+    call io_close(iunit)
 
-        write(filenum, '(i3.3)') ii
-
-        iunit = io_open('debug/mesh_partition/mesh_partition.'//filenum, &
-          action='write')
-        do jj = 1, mesh%np_global
-          if(part(jj) .eq. ii) write(iunit, '(i8,3f18.8)') jj, mesh_x_global(mesh, jj)
-        end do
-        call io_close(iunit)
-
-        iunit = io_open('debug/mesh_partition/mesh_partition_all.'//filenum, &
-          action='write')
-        do jj = 1, mesh%np_part_global
-          if(part(jj) .eq. ii) write(iunit, '(i8,3f18.8)') jj, mesh_x_global(mesh, jj)
-        end do
-        call io_close(iunit)
-
-      end do
+    if(mpi_grp_is_root(mpi_world)) then
       ! Write points from enlargement to file with number p+1.
-      write(filenum, '(i3.3)') npart+1
+      write(filenum, '(i3.3)') mesh%mpi_grp%size+1
       iunit = io_open('debug/mesh_partition/mesh_partition.'//filenum, &
         action='write')
       do ii = mesh%np_global+1, mesh%np_part_global
@@ -566,10 +559,6 @@ contains
       end do
       call io_close(iunit)
     end if
-
-#ifdef HAVE_MPI
-    call MPI_Barrier(mesh%mpi_grp%comm, mpi_err)
-#endif
 
     POP_SUB(mesh_partition_messages_debug)
 

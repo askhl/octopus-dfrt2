@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc_inc.F90 9260 2012-08-26 19:24:04Z xavier $
+!! $Id: states_calc_inc.F90 9621 2012-11-13 23:52:57Z dstrubbe $
 
 
 ! ---------------------------------------------------------
@@ -65,7 +65,7 @@ subroutine X(states_orthogonalization_full)(st, mesh, ik)
     call lalg_cholesky(nst, ss, bof = bof)
 
     if(bof) then
-      message(1) = "Orthogonalization failed; probably your eigenvectors are not independent."
+      message(1) = "Gram-Schmidt orthogonalization failed in Cholesky decomposition; probably eigenvectors are not independent."
       call messages_warning(1)
     end if
 
@@ -128,7 +128,7 @@ contains
 
     if(info /= 0) then
       write(message(1),'(a,i6)') "descinit for psi failed in states_orthogonalization_full.par_gs with error ", info
-      call messages_warning(1)
+      call messages_fatal(1)
     end if
 
     nbl = min(32, st%nst)
@@ -141,7 +141,7 @@ contains
 
     if(info /= 0) then
       write(message(1),'(a,i6)') "descinit for ss failed in states_orthogonalization_full.par_gs with error ", info
-      call messages_warning(1)
+      call messages_fatal(1)
     end if
 
     ss = M_ZERO
@@ -154,9 +154,9 @@ contains
     call scalapack_potrf(uplo = 'U', n = st%nst, a = ss(1, 1), ia = 1, ja = 1, desca = ss_desc(1), info = info)
 
     if(info /= 0) then
-      write(message(1),'(a,i6,a)') &
-        "Orthogonalization with potrf failed with error ", info, "; probably your eigenvectors are not independent."
-      call messages_warning(1)
+      write(message(1),'(a,i6)') &
+        "Parallel Gram-Schmidt orthogonalization with " // TOSTRING(pX(potrf)) // " failed with error ", info
+      call messages_fatal(1)
     end if
 
     call pblas_trsm(side = 'R', uplo = 'U', transa = 'N', diag = 'N', m = total_np, n = st%nst, &
@@ -208,33 +208,51 @@ contains
       call descinit(psi_desc(1), total_np, nst, psi_block(1), psi_block(2), 0, 0, &
         st%dom_st_proc_grid%context, mesh%np_part*st%d%dim, blacs_info)
 
+      if(blacs_info /= 0) then
+        write(message(1),'(a,i6)') 'descinit failed with error code: ', blacs_info
+        call messages_fatal(1)
+      end if
+
       nref = min(nst, total_np)
       SAFE_ALLOCATE(tau(1:nref))
       tau = M_ZERO
 
       ! calculate the QR decomposition
       call scalapack_geqrf(total_np, nst, st%X(psi)(1, 1, st%st_start, ik), 1, 1, psi_desc(1), tau(1), tmp, -1, blacs_info)
+      if(blacs_info /= 0) then
+        write(message(1),'(a,i6)') 'scalapack geqrf workspace query failed with error code: ', blacs_info
+        call messages_fatal(1)
+      end if
       wsize = nint(R_REAL(tmp))
       SAFE_ALLOCATE(work(1:wsize))
       call scalapack_geqrf(total_np, nst, st%X(psi)(1, 1, st%st_start, ik), 1, 1, psi_desc(1), tau(1), work(1), wsize, blacs_info)
+      if(blacs_info /= 0) then
+        write(message(1),'(a,i6)') 'scalapack geqrf call failed with error code: ', blacs_info
+        call messages_fatal(1)
+      end if
       SAFE_DEALLOCATE_A(work)
 
       ! now calculate Q
       call scalapack_orgqr(total_np, nst, nref, st%X(psi)(1, 1, st%st_start, ik), 1, 1, psi_desc(1), tau(1), tmp, -1, blacs_info)
+      if(blacs_info /= 0) then
+        write(message(1),'(a,i6)') 'scalapack orgqr workspace query failed with error code: ', blacs_info
+        call messages_fatal(1)
+      end if
       wsize = nint(R_REAL(tmp))
       SAFE_ALLOCATE(work(1:wsize))
       call scalapack_orgqr(total_np, nst, nref, st%X(psi)(1, 1, st%st_start, ik), &
         1, 1, psi_desc(1), tau(1), work(1), wsize, blacs_info)
+      if(blacs_info /= 0) then
+        write(message(1),'(a,i6)') 'scalapack orgqr call failed with error code: ', blacs_info
+        call messages_fatal(1)
+      end if
       SAFE_DEALLOCATE_A(work)
 
-      if(blacs_info /= 0) then
-        write(message(1),'(a,I6)') 'ScaLAPACK execution failed. Failed code: ', blacs_info
-        call messages_warning(1)
-      end if
 #else
       message(1) = 'The QR orthogonalization in parallel requires ScaLAPACK.'
       call messages_fatal(1)
 #endif 
+
     else
 
       total_np = mesh%np + mesh%np_part*(st%d%dim - 1)
@@ -246,20 +264,36 @@ contains
 
       ! get the optimal size of the work array
       call lapack_geqrf(total_np, nst, st%X(psi)(1, 1, st%st_start, ik), mesh%np_part*st%d%dim, tau(1), tmp, -1, info)
+      if(info /= 0) then
+        write(message(1),'(a,i6)') 'lapack geqrf workspace query failed with error code: ', info
+        call messages_fatal(1)
+      end if
       wsize = nint(R_REAL(tmp))
 
       ! calculate the QR decomposition
       SAFE_ALLOCATE(work(1:wsize))
       call lapack_geqrf(total_np, nst, st%X(psi)(1, 1, st%st_start, ik), mesh%np_part*st%d%dim, tau(1), work(1), wsize, info)
+      if(info /= 0) then
+        write(message(1),'(a,i6)') 'lapack geqrf call failed with error code: ', info
+        call messages_fatal(1)
+      end if
       SAFE_DEALLOCATE_A(work)
 
       ! get the optimal size of the work array
       call lapack_orgqr(total_np, nst, nref, st%X(psi)(1, 1, st%st_start, ik), mesh%np_part*st%d%dim, tau(1), tmp, -1, info)
+      if(info /= 0) then
+        write(message(1),'(a,i6)') 'lapack orgqr workspace query failed with error code: ', info
+        call messages_fatal(1)
+      end if
       wsize = nint(R_REAL(tmp))
 
       ! now calculate Q
       SAFE_ALLOCATE(work(1:wsize))
       call lapack_orgqr(total_np, nst, nref, st%X(psi)(1, 1, st%st_start, ik), mesh%np_part*st%d%dim, tau(1), work(1), wsize, info)
+      if(info /= 0) then
+        write(message(1),'(a,i6)') 'lapack orgqr call failed with error code: ', info
+        call messages_fatal(1)
+      end if
       SAFE_DEALLOCATE_A(work)
     end if
 
@@ -344,10 +378,11 @@ subroutine X(states_trsm)(st, mesh, ik, ss)
   integer,                intent(in)    :: ik
   R_TYPE,                 intent(in)    :: ss(:, :)
 
-  integer :: idim, block_size, ib, size, sp, ierr
+  integer :: idim, block_size, ib, size, sp
   R_TYPE, allocatable :: psicopy(:, :, :)
-  type(opencl_mem_t) :: psicopy_buffer, ss_buffer
 #ifdef HAVE_OPENCL
+  integer :: ierr
+  type(opencl_mem_t) :: psicopy_buffer, ss_buffer
   type(octcl_kernel_t), save :: dkernel, zkernel
   type(cl_kernel) :: kernel_ref
   type(profile_t), save :: prof_copy
@@ -364,7 +399,6 @@ subroutine X(states_trsm)(st, mesh, ik, ss)
       call blas_trsm('R', 'U', 'N', 'N', mesh%np, st%nst, R_TOTYPE(M_ONE), ss(1, 1), st%nst, &
         st%X(psi)(1, idim, 1, ik), ubound(st%X(psi), dim = 1)*st%d%dim)
 
-      call profiling_count_operations(mesh%np*dble(st%nst)*(st%nst + 1)*CNST(0.5)*(R_ADD + R_MUL))
     end do
 
   else if(.not. (states_are_packed(st) .and. opencl_is_enabled())) then
@@ -413,7 +447,7 @@ subroutine X(states_trsm)(st, mesh, ik, ss)
     call profiling_in(prof_copy, 'STATES_TRSM_COPY')
     call opencl_write_buffer(ss_buffer, product(ubound(ss)), ss)
     call profiling_count_transfers(product(ubound(ss)), ss(1, 1))
-    call opencl_finish()
+
     call profiling_out(prof_copy)
 
     do sp = 1, mesh%np, block_size
@@ -453,6 +487,7 @@ subroutine X(states_trsm)(st, mesh, ik, ss)
       call opencl_kernel_run(kernel_ref, (/size/), (/1/))
 
 #endif
+      call opencl_finish()
 
       do ib = st%block_start, st%block_end
         call batch_set_points(st%psib(ib, ik), sp, sp + size - 1, psicopy_buffer, st%nst)
@@ -463,6 +498,9 @@ subroutine X(states_trsm)(st, mesh, ik, ss)
     call opencl_release_buffer(psicopy_buffer)
 #endif
   end if
+
+  call profiling_count_operations(mesh%np*dble(st%nst)*(st%nst + 1)*CNST(0.5)*(R_ADD + R_MUL))
+
 
   call profiling_out(prof)
   POP_SUB(X(states_trsm))
@@ -1022,9 +1060,8 @@ end subroutine X(states_matrix)
 
 ! -----------------------------------------------------------
 
-subroutine X(states_calc_orth_test)(st, mc, mesh)
+subroutine X(states_calc_orth_test)(st, mesh)
   type(states_t),    intent(inout) :: st
-  type(multicomm_t), intent(in)    :: mc
   type(mesh_t),      intent(in)    :: mesh
   
   PUSH_SUB(X(states_calc_orth_test))
@@ -1050,6 +1087,7 @@ subroutine X(states_calc_orth_test)(st, mc, mesh)
   POP_SUB(X(states_calc_orth_test))
 
 contains
+
   subroutine print_results()
     integer :: ist, jst
     FLOAT :: dd

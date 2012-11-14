@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: atomic.F90 9173 2012-07-02 15:10:00Z dstrubbe $
+!! $Id: atomic.F90 9346 2012-09-06 00:01:45Z dstrubbe $
 
 #include "global.h"
 #define R_TOPREC(x) real(x, REAL_PRECISION)
@@ -135,7 +135,7 @@ contains
        case('d'); c%l(j) = 2
        case('f'); c%l(j) = 3
        case default
-          message(1) = 'Error: read_valconf.'
+          message(1) = 'read_valconf.'
           call messages_fatal(1)
        end select
     end do
@@ -315,7 +315,7 @@ contains
       GGA = .TRUE.
     ELSE
       GGA = .FALSE.
-      write(message(1),'(a,a)') 'Error: atomxc: Unknown functional ', FUNCTL
+      write(message(1),'(a,a)') 'atomxc: Unknown functional ', FUNCTL
       call messages_fatal(1)
     ENDIF
     
@@ -331,7 +331,7 @@ contains
       else IF ( AUTHOR.EQ.'PW92' .OR. AUTHOR.EQ.'pw92' ) THEN
         call xc_f90_func_init(c_conf, c_info, XC_LDA_C_PW, NSPIN)
       else
-        write(message(1),'(a,a)') 'Error: LDAXC: Unknown author ', AUTHOR
+        write(message(1),'(a,a)') 'LDAXC: Unknown author ', AUTHOR
         call messages_fatal(1)
       end if
     end if

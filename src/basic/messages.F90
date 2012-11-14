@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: messages.F90 9326 2012-09-05 15:48:37Z dstrubbe $
+!! $Id: messages.F90 9591 2012-11-09 21:45:00Z dstrubbe $
 
 #include "global.h"
 
@@ -271,7 +271,7 @@ end subroutine messages_end
     call switch_status('aborted')
 
 #ifdef HAVE_MPI
-    call MPI_Abort(mpi_world%comm, mpi_err)
+    call MPI_Abort(mpi_world%comm, 999, mpi_err)
 #endif
 
     call loct_exit_failure()
@@ -554,7 +554,7 @@ end subroutine messages_end
     call switch_status('aborted')
 
 #ifdef HAVE_MPI
-    call MPI_Abort(mpi_world%comm, mpi_err)
+    call MPI_Abort(mpi_world%comm, 999, mpi_err)
 #endif
 
     call loct_exit_failure()
@@ -992,7 +992,7 @@ end subroutine messages_end
     INCR(experimentals, 1)
 
     if(.not. conf%devel_version) then
-      write(message(1), '(a)') 'Error: '//trim(name)//' is under development.'
+      write(message(1), '(a)') trim(name)//' is under development.'
       write(message(2), '(a)') 'To use it (at your own risk) set the variable ExperimentalFeatures to yes.'
       call messages_fatal(2, only_root_writes = .true.)
     else
@@ -1008,16 +1008,34 @@ end subroutine messages_end
   
 
   !--------------------------------------------------------------
-  subroutine messages_check_def(var, def, text)
-    FLOAT,            intent(in) :: var
-    FLOAT,            intent(in) :: def
-    character(len=*), intent(in) :: text
+  subroutine messages_check_def(var, should_be_less, def, name, unit)
+    FLOAT,                  intent(in) :: var
+    logical,                intent(in) :: should_be_less
+    FLOAT,                  intent(in) :: def
+    character(len=*),       intent(in) :: name
+    type(unit_t), optional, intent(in) :: unit
+
+    logical :: is_bad
+    character(len=3) :: op_str
 
     PUSH_SUB(messages_check_def)
 
-    if(var > def) then
-      write(message(1), '(3a)') "The value for '", text, "' does not match the recommended value."
-      write(message(2), '(f8.3,a,f8.3)') var, ' > ', def
+    if(should_be_less) then
+      is_bad = var > def
+      op_str = ' > '
+    else
+      is_bad = var < def
+      op_str = ' < '
+    endif
+
+    if(is_bad) then
+      write(message(1), '(3a)') "The value for '", name, "' is inconsistent with the recommended value."
+      if(present(unit)) then
+        write(message(2), '(a,f8.3,4a,f8.3,a,a)') 'given ', units_from_atomic(unit, var), ' ', trim(units_abbrev(unit)), &
+          op_str, 'recommended ', units_from_atomic(unit, def), ' ', trim(units_abbrev(unit))
+      else
+        write(message(2), '(a,f8.3,2a,f8.3)') 'given ', var, op_str, 'recommended ', def
+      endif
       call messages_warning(2)
     end if
 
@@ -1059,29 +1077,35 @@ end subroutine messages_end
 
   ! ------------------------------------------------------------
 
-  subroutine messages_write_float(val, fmt, new_line, units)
+  subroutine messages_write_float(val, fmt, new_line, units, align_left, print_units)
     FLOAT,                      intent(in) :: val
     character(len=*), optional, intent(in) :: fmt
     logical,          optional, intent(in) :: new_line
-    type(unit_t),     optional, intent(in) :: units 
+    type(unit_t),     optional, intent(in) :: units
+    logical,          optional, intent(in) :: align_left
+    logical,          optional, intent(in) :: print_units
 
-    character(len=5) :: fmt_
+    character(len=30) :: number
     FLOAT            :: tval
-
-    if(present(fmt)) then
-      fmt_ = trim(fmt)
-    else
-      fmt_ = 'f12.6'
-    end if
 
     tval = val
     if(present(units)) tval = units_from_atomic(units, val)
     
-    write(message(current_line), '(a, '//trim(fmt_)//')') trim(message(current_line)), tval
-
-    if(present(new_line)) then
-      if(new_line) call messages_new_line()
+    if(present(fmt)) then
+      write(number, '('//trim(fmt)//')') tval
+    else
+      write(number, '(f12.6)') tval
     end if
+
+    if(optional_default(align_left, .false.)) number = ' '//adjustl(number)
+
+    write(message(current_line), '(a, a)') trim(message(current_line)), trim(number)
+
+    if(present(units) .and. optional_default(print_units, .true.)) then
+      write(message(current_line), '(a, a, a)') trim(message(current_line)), ' ', trim(units_abbrev(units))
+    end if
+
+    if(optional_default(new_line, .false.)) call messages_new_line()
 
   end subroutine messages_write_float
 

@@ -28,7 +28,7 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
   integer,                intent(inout) :: niter
   integer,                intent(inout) :: converged
   integer,                intent(in)    :: ik
-  FLOAT,                  intent(out)   :: diff(1:st%nst)
+  FLOAT,                  intent(out)   :: diff(:) !< (1:st%nst)
 
   R_TYPE, allocatable :: mm(:, :, :, :), evec(:, :, :), finalpsi(:)
   R_TYPE, allocatable :: eigen(:)
@@ -303,12 +303,11 @@ subroutine X(eigensolver_rmmdiis) (gr, st, hm, pre, tol, niter, converged, ik, d
 end subroutine X(eigensolver_rmmdiis)
 
 ! ---------------------------------------------------------
-subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, ik)
+subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, niter, converged, ik)
   type(grid_t),           intent(in)    :: gr
   type(states_t),         intent(inout) :: st
   type(hamiltonian_t),    intent(in)    :: hm
   type(preconditioner_t), intent(in)    :: pre
-  FLOAT,                  intent(in)    :: tol
   integer,                intent(inout) :: niter
   integer,                intent(inout) :: converged
   integer,                intent(in)    :: ik
@@ -352,7 +351,7 @@ subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, i
       call X(mesh_batch_dotp_vector)(gr%mesh, st%psib(ib, ik), resb, me1(1, :), reduce = .false.)
       call X(mesh_batch_dotp_vector)(gr%mesh, st%psib(ib, ik), st%psib(ib, ik), me1(2, :), reduce = .false.)
 
-      if(gr%mesh%parallel_in_domains) call comm_allreduce(gr%mesh%mpi_grp%comm, me1, (/2, st%d%block_size/))
+      if(gr%mesh%parallel_in_domains) call comm_allreduce(gr%mesh%mpi_grp%comm, me1)
 
       forall(ist = minst:maxst) st%eigenval(ist, ik) = R_REAL(me1(1, ist - minst + 1)/me1(2, ist - minst + 1))
  
@@ -369,7 +368,7 @@ subroutine X(eigensolver_rmmdiis_min) (gr, st, hm, pre, tol, niter, converged, i
       call X(mesh_batch_dotp_vector)(gr%mesh, kresb, resb,  me2(3, :), reduce = .false.)
       call X(mesh_batch_dotp_vector)(gr%mesh, st%psib(ib, ik),  resb,  me2(4, :), reduce = .false.)
 
-      if(gr%mesh%parallel_in_domains) call comm_allreduce(gr%mesh%mpi_grp%comm, me2, (/4, st%d%block_size/))
+      if(gr%mesh%parallel_in_domains) call comm_allreduce(gr%mesh%mpi_grp%comm, me2)
 
       do ist = minst, maxst
         ii = ist - minst + 1

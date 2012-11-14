@@ -78,6 +78,10 @@ XC(gga_x_ityh_set_params)(XC(func_type) *p, int func_id, FLOAT omega)
     case XC_GGA_X_APBE:
       params->enhancement_factor = XC(gga_x_pbe_enhance);
       break;
+    case XC_GGA_X_PW91:
+    case XC_GGA_X_mPW91:
+      params->enhancement_factor = XC(gga_x_pw91_enhance);
+      break;
     case XC_GGA_X_RPBE:
       params->enhancement_factor = XC(gga_x_rpbe_enhance);
       break;
@@ -88,6 +92,9 @@ XC(gga_x_ityh_set_params)(XC(func_type) *p, int func_id, FLOAT omega)
     case XC_GGA_X_OPTB88_VDW:
     case XC_GGA_X_MB88:
       params->enhancement_factor = XC(gga_x_b88_enhance);
+      break;
+    case XC_GGA_X_G96:
+      params->enhancement_factor = XC(gga_x_g96_enhance);
       break;
     default:
       fprintf(stderr, "Internal error in gga_x_ityh\n");

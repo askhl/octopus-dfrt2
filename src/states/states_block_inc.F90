@@ -19,23 +19,20 @@
 
 
 ! ---------------------------------------------------------
-! Multiplication of two blocks of states:
-! res <- psi1(xpsi1)^+ * psi2(xpsi2) with the index sets xpsi1 and xpsi2.
-subroutine X(states_blockt_mul)(mesh, st, psi1_start, psi1_end, psi2_start, psi2_end, &
+!> Multiplication of two blocks of states:
+!! res <- psi1(xpsi1)^+ * psi2(xpsi2) with the index sets xpsi1 and xpsi2.
+subroutine X(states_blockt_mul)(mesh, st, psi1_start, psi2_start, &
   psi1, psi2, res, xpsi1, xpsi2, symm)
   type(mesh_t),      intent(in)  :: mesh
   type(states_t),    intent(in)  :: st
   integer,           intent(in)  :: psi1_start
-  integer,           intent(in)  :: psi1_end
   integer,           intent(in)  :: psi2_start
-  integer,           intent(in)  :: psi2_end
   R_TYPE, target,    intent(in)  :: psi1(:, :, psi1_start:)
   R_TYPE, target,    intent(in)  :: psi2(:, :, psi2_start:)
   R_TYPE,            intent(out) :: res(:, :)
   integer, optional, intent(in)  :: xpsi1(:)
   integer, optional, intent(in)  :: xpsi2(:)
-  logical, optional, intent(in)  :: symm    ! Indicates if res(j, i) can be calculated as
-                                            ! res(i, j)*.
+  logical, optional, intent(in)  :: symm    !< Indicates if res(j, i) can be calculated as res(i, j)*.
 
   logical              :: symm_
   integer              :: ii
@@ -50,7 +47,7 @@ subroutine X(states_blockt_mul)(mesh, st, psi1_start, psi1_end, psi2_start, psi2
   integer, pointer     :: xpsi1_count(:), xpsi2_count(:), xpsi1_node(:, :), xpsi2_node(:, :)
   R_TYPE, pointer      :: sendbuf(:, :, :), recvbuf(:, :, :), tmp_ptr(:, :, :)
   R_TYPE, allocatable  :: res_tmp(:, :)
-  R_TYPE, allocatable  :: psi1_block(:, :, :), psi2_block(:, :, :), res_local(:, :)
+  R_TYPE, allocatable  :: psi1_block(:, :, :), res_local(:, :)
 #endif
 
   call profiling_in(C_PROFILING_BLOCKT)
@@ -142,7 +139,7 @@ subroutine X(states_blockt_mul)(mesh, st, psi1_start, psi1_end, psi2_start, psi2
 
           call profiling_in(C_PROFILING_BLOCKT_MM)
           call lalg_gemmt(xpsi1_count(rank), sendcnt, mesh%np*st%d%dim, R_TOTYPE(mesh%vol_pp(1)), &
-            psi1_block(:, :, 1), sendbuf(:, :, 1), R_TOTYPE(M_ZERO), res_local)
+            psi1_block, sendbuf, R_TOTYPE(M_ZERO), res_local)
           call profiling_out(C_PROFILING_BLOCKT_MM)
 
           call profiling_in(C_PROFILING_BLOCKT_CP)
@@ -217,7 +214,7 @@ end subroutine X(states_blockt_mul)
 
 
 ! ---------------------------------------------------------
-! Gather all states on all nodes. out has to be of sufficient size.
+!> Gather all states on all nodes. out has to be of sufficient size.
 #if defined(HAVE_MPI)
 subroutine X(states_gather)(mesh, st, in, out)
   type(states_t), intent(in)  :: st
@@ -259,59 +256,20 @@ end subroutine X(states_gather)
 
 
 ! ---------------------------------------------------------
-! Multiplication of block of states with indices idxp by matrix and
-! update columns with idxr in the result.
-! res(xres) <- psi(xpsi) * matr.
-subroutine X(states_block_matr_mul)(mesh, st, psi_start, psi_end, res_start, res_end, &
-  psi, matr, res, xpsi, xres)
-  type(mesh_t),      intent(in)  :: mesh
-  type(states_t),    intent(in)  :: st
-  integer,           intent(in)  :: psi_start
-  integer,           intent(in)  :: psi_end
-  integer,           intent(in)  :: res_start
-  integer,           intent(in)  :: res_end
-  R_TYPE,            intent(in)  :: psi(mesh%np_part, st%d%dim, psi_start:psi_end)
-  R_TYPE,            intent(in)  :: matr(:, :)
-  R_TYPE,            intent(out) :: res(:, :, :)
-  integer, optional, intent(in)  :: xpsi(:), xres(:)
-
-  PUSH_SUB(X(states_block_matr_mul))
-
-  if(present(xpsi).and.present(xres)) then
-    call X(states_block_matr_mul_add)(mesh, st, R_TOTYPE(M_ONE), psi_start, psi_end, &
-      res_start, res_end, psi, matr, R_TOTYPE(M_ZERO), res, xpsi, xres)
-  else if(present(xpsi)) then
-    call X(states_block_matr_mul_add)(mesh, st, R_TOTYPE(M_ONE), psi_start, psi_end, &
-      res_start, res_end, psi, matr, R_TOTYPE(M_ZERO), res, xpsi=xpsi)
-  else if(present(xres)) then
-    call X(states_block_matr_mul_add)(mesh, st, R_TOTYPE(M_ONE), psi_start, psi_end, &
-      res_start, res_end, psi, matr, R_TOTYPE(M_ZERO), res, xres=xres)
-  else
-    call X(states_block_matr_mul_add)(mesh, st, R_TOTYPE(M_ONE), psi_start, psi_end, &
-      res_start, res_end, psi, matr, R_TOTYPE(M_ZERO), res)
-  end if
-
-  POP_SUB(X(states_block_matr_mul))
-end subroutine X(states_block_matr_mul)
-
-
-! ---------------------------------------------------------
-! Multiplication of block of states by matrix plus block of states
-! (with the corresponding column indices):
-! res(xres) <- alpha * psi(xpsi) * matr + beta * res(xres).
-subroutine X(states_block_matr_mul_add)(mesh, st, alpha, psi_start, psi_end, res_start, res_end, &
+!> Multiplication of block of states by matrix plus block of states
+!! (with the corresponding column indices):
+!! res(xres) <- alpha * psi(xpsi) * matr + beta * res(xres).
+subroutine X(states_block_matr_mul_add)(mesh, st, alpha, psi_start, res_start, &
   psi, matr, beta, res, xpsi, xres)
   type(mesh_t),      intent(in)    :: mesh
   type(states_t),    intent(in)    :: st
   R_TYPE,            intent(in)    :: alpha
   integer,           intent(in)    :: psi_start
-  integer,           intent(in)    :: psi_end
   integer,           intent(in)    :: res_start
-  integer,           intent(in)    :: res_end
-  R_TYPE,            intent(in)    :: psi(mesh%np_part, st%d%dim, psi_start:psi_end)
+  R_TYPE,            intent(in)    :: psi(:, :, psi_start:) !< (mesh%np_part, st%d%dim, psi_start:psi_end)
   R_TYPE,            intent(in)    :: matr(:, :)
   R_TYPE,            intent(in)    :: beta
-  R_TYPE,            intent(inout) :: res(mesh%np_part, st%d%dim, res_start:res_end)
+  R_TYPE,            intent(inout) :: res(:, :, res_start:) !< (mesh%np_part, st%d%dim, res_start:res_end)
   integer, optional, intent(in)    :: xpsi(:), xres(:)
 
   integer              :: res_col, psi_col, matr_col
@@ -326,7 +284,7 @@ subroutine X(states_block_matr_mul_add)(mesh, st, alpha, psi_start, psi_end, res
 #endif
 
   call profiling_in(C_PROFILING_BLOCK_MATR)
-  PUSH_SUB(X(states_block_matr_add))
+  PUSH_SUB(X(states_block_matr_mul_add))
 
   ! Calculate global index sets of state block psi and res.
   if(present(xpsi)) then
@@ -424,7 +382,7 @@ subroutine X(states_block_matr_mul_add)(mesh, st, alpha, psi_start, psi_end, res
         call profiling_out(C_PROFILING_BLOCK_MATR_CP)
         call profiling_in(C_PROFILING_BLOCK_MATR_MM)
         call lalg_gemm(mesh%np * st%d%dim, xres_count(rank), sendcnt, alpha, &
-          sendbuf(:, :, 1), matr_block, R_TOTYPE(M_ONE), res_block(:, :, 1))
+          sendbuf, matr_block, R_TOTYPE(M_ONE), res_block)
         call profiling_out(C_PROFILING_BLOCK_MATR_MM)
       end if
       SAFE_DEALLOCATE_A(matr_block)
@@ -462,7 +420,7 @@ subroutine X(states_block_matr_mul_add)(mesh, st, alpha, psi_start, psi_end, res
     SAFE_ALLOCATE(matr_block(1:psi_col, 1:matr_col))
     matr_block = matr
     call lalg_gemm(mesh%np * st%d%dim, matr_col, psi_col, alpha, &
-      psi_block(:, :, 1), matr_block, beta, res_block(:, :, 1))
+      psi_block, matr_block, beta, res_block)
     SAFE_DEALLOCATE_A(matr_block)
 
     ! Copy result.
@@ -476,13 +434,13 @@ subroutine X(states_block_matr_mul_add)(mesh, st, alpha, psi_start, psi_end, res
   SAFE_DEALLOCATE_P(xpsi_)
   SAFE_DEALLOCATE_P(xres_)
 
-  POP_SUB(X(states_block_matr_add))
+  POP_SUB(X(states_block_matr_mul_add))
   call profiling_out(C_PROFILING_BLOCK_MATR)
 end subroutine X(states_block_matr_mul_add)
 
 
 ! ---------------------------------------------------------
-! Copy in(:, :, idx) to out out(:, :, 1:ubound(idx, 1)).
+!> Copy in(:, :, idx) to out out(:, :, 1:ubound(idx, 1)).
 subroutine X(states_compactify)(dim, mesh, in_start, idx, in, out)
   integer,      intent(in)  :: dim
   type(mesh_t), intent(in)  :: mesh
@@ -511,9 +469,9 @@ end subroutine X(states_compactify)
 
 
 ! ---------------------------------------------------------
-! Undo the effect of X(states_compactify), i.e.
-! X(states_compactify)(st, mesh, idx, in, out) followed by
-! X(states_uncompactify)(st, mesh, idx, out, in) is identity.
+!> Undo the effect of X(states_compactify), i.e.
+!! X(states_compactify)(st, mesh, idx, in, out) followed by
+!! X(states_uncompactify)(st, mesh, idx, out, in) is identity.
 subroutine X(states_uncompactify)(dim, mesh, out_start, idx, in, out)
   integer,      intent(in)  :: dim
   type(mesh_t), intent(in)  :: mesh

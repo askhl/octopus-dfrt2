@@ -64,8 +64,8 @@ contains
   end function kdotp_wfs_tag
 
 ! ---------------------------------------------------------
-! v = (dE_nk/dk)/hbar = -Im < u_nk | -i grad | u_nk >
-! This is identically zero for real wavefunctions.
+!> v = (dE_nk/dk)/hbar = -Im < u_nk | -i grad | u_nk >
+!! This is identically zero for real wavefunctions.
 subroutine zcalc_band_velocity(sys, hm, pert, velocity)
   type(system_t),      intent(inout) :: sys
   type(hamiltonian_t), intent(inout) :: hm
@@ -93,7 +93,7 @@ subroutine zcalc_band_velocity(sys, hm, pert, velocity)
       do idir = 1, sys%gr%sb%periodic_dim
         call pert_setup_dir(pert, idir)
         call zpert_apply(pert, sys%gr, sys%geo, hm, ik, psi, pertpsi)
-        velocity(ik, ist, idir) = -aimag(zmf_dotp(sys%gr%mesh, sys%st%d%dim, psi, pertpsi))
+        velocity(idir, ist, ik) = -aimag(zmf_dotp(sys%gr%mesh, sys%st%d%dim, psi, pertpsi))
       end do
     end do
   end do
@@ -103,9 +103,9 @@ subroutine zcalc_band_velocity(sys, hm, pert, velocity)
 
 #ifdef HAVE_MPI
   if(sys%st%parallel_in_states .or. sys%st%d%kpt%parallel) then
-    SAFE_ALLOCATE(vel_temp(1:sys%st%d%nik, 1:sys%st%nst, 1:sys%gr%sb%periodic_dim))
+    SAFE_ALLOCATE(vel_temp(1:sys%gr%sb%periodic_dim, 1:sys%st%nst, 1:sys%st%d%nik))
 
-    call MPI_Allreduce(velocity, vel_temp, sys%st%d%nik*sys%st%nst*sys%gr%sb%periodic_dim, &
+    call MPI_Allreduce(velocity, vel_temp, sys%gr%sb%periodic_dim * sys%st%nst * sys%st%d%nik, &
       MPI_FLOAT, MPI_SUM, sys%st%st_kpt_mpi_grp%comm, mpi_err)
 
     velocity(:,:,:) = vel_temp(:,:,:)
@@ -117,8 +117,10 @@ subroutine zcalc_band_velocity(sys, hm, pert, velocity)
 end subroutine zcalc_band_velocity
 
 ! ---------------------------------------------------------
-! This routine cannot be used with d/dk wavefunctions calculated
-! by perturbation theory.
+!> This routine cannot be used with d/dk wavefunctions calculated
+!! by perturbation theory.
+!! mu_i = sum(m occ, k) <u_mk(0)|(-id/dk_i|u_mk(0)>)
+!!      = Im sum(m occ, k) <u_mk(0)|(d/dk_i|u_mk(0)>)
 subroutine zcalc_dipole_periodic(sys, lr, dipole)
   type(system_t),         intent(inout) :: sys
   type(lr_t),             intent(in)    :: lr(:,:)
@@ -128,9 +130,6 @@ subroutine zcalc_dipole_periodic(sys, lr, dipole)
   type(mesh_t), pointer :: mesh
   CMPLX :: term, moment
   mesh => sys%gr%mesh
-
-  ! mu_i = sum(m occ, k) <u_mk(0)|(-id/dk_i|u_mk(0)>)
-  !      = Im sum(m occ, k) <u_mk(0)|(d/dk_i|u_mk(0)>)
 
   PUSH_SUB(zcalc_dipole_periodic)
 

@@ -181,7 +181,7 @@ module opt_control_propagation_m
       call epot_precalc_local_potential(hm%ep, sys%gr, sys%geo)
     end if
 
-    call target_tdcalc(target, hm, gr, sys%geo, psi, 0)
+    call target_tdcalc(target, hm, gr, sys%geo, psi, 0, td%max_iter)
 
     if(present(prop)) call oct_prop_output(prop, 0, psi, gr, sys%geo)
     ii = 1
@@ -199,10 +199,10 @@ module opt_control_propagation_m
       if(hm%ab == MASK_ABSORBING) call zvmask(gr, hm, psi)
 
       ! if td_target
-      call target_tdcalc(target, hm, gr, sys%geo, psi, i)
+      call target_tdcalc(target, hm, gr, sys%geo, psi, i, td%max_iter)
 
       ! calculate velocity and new position of each atom
-      if(vel_target_) then
+      if(move_ions_) then
          call forces_calculate(gr, sys%geo, hm%ep, psi, i*td%dt)
          do iatom=1, sys%geo%natoms
            if(i.ne.td%max_iter) then
@@ -212,10 +212,8 @@ module opt_control_propagation_m
              sys%geo%atom(iatom)%v(1:MAX_DIM) = sys%geo%atom(iatom)%v(1:MAX_DIM) + &
                M_HALF * sys%geo%atom(iatom)%f(1:MAX_DIM)*td%dt/species_weight(sys%geo%atom(iatom)%spec)
            end if
-           if(move_ions_) then
-             sys%geo%atom(iatom)%x(1:MAX_DIM) = sys%geo%atom(iatom)%x(1:MAX_DIM) + &
-               sys%geo%atom(iatom)%v(1:MAX_DIM)*td%dt
-           end if
+           sys%geo%atom(iatom)%x(1:MAX_DIM) = sys%geo%atom(iatom)%x(1:MAX_DIM) + &
+           sys%geo%atom(iatom)%v(1:MAX_DIM)*td%dt
          end do
          call hamiltonian_epot_generate(hm, gr, sys%geo, psi, time = i*td%dt)
       end if
@@ -352,7 +350,7 @@ module opt_control_propagation_m
 
     call oct_prop_output(prop_psi, 0, psi, gr, sys%geo)
     call states_copy(chi, psi)
-    call oct_prop_read_state(prop_chi, chi, gr, sys%geo, 0)
+    call oct_prop_read_state(prop_chi, chi, gr, 0)
 
     do i = 1, td%max_iter
       call update_field(i, par, gr, hm, psi, chi, par_chi, dir = 'f')
@@ -366,9 +364,9 @@ module opt_control_propagation_m
       call update_hamiltonian_psi(i, gr, sys%ks, hm, td, target, par, psi)
       call hamiltonian_update(hm, gr%mesh, time = (i - 1)*td%dt)
       call propagator_dt(sys%ks, hm, gr, psi, td%tr, i*td%dt, td%dt, td%mu, td%max_iter, i)
-      call target_tdcalc(target, hm, gr, sys%geo, psi, i) 
+      call target_tdcalc(target, hm, gr, sys%geo, psi, i, td%max_iter) 
       call oct_prop_output(prop_psi, i, psi, gr, sys%geo)
-      call oct_prop_check(prop_chi, chi, gr, sys%geo, i)
+      call oct_prop_check(prop_chi, chi, gr, i)
     end do
     call update_field(td%max_iter+1, par, gr, hm, psi, chi, par_chi, dir = 'f')
 
@@ -428,7 +426,7 @@ module opt_control_propagation_m
     call propagator_remove_scf_prop(tr_chi)
 
     call states_copy(psi, chi)
-    call oct_prop_read_state(prop_psi, psi, gr, sys%geo, td%max_iter)
+    call oct_prop_read_state(prop_psi, psi, gr, td%max_iter)
 
     call density_calc(psi, gr, psi%rho)
     call v_ks_calc(sys%ks, hm, psi)
@@ -439,7 +437,7 @@ module opt_control_propagation_m
     td%dt = -td%dt
     call oct_prop_output(prop_chi, td%max_iter, chi, gr, sys%geo)
     do i = td%max_iter, 1, -1
-      call oct_prop_check(prop_psi, psi, gr, sys%geo, i)
+      call oct_prop_check(prop_psi, psi, gr, i)
       call update_field(i, par_chi, gr, hm, psi, chi, par, dir = 'b')
       call update_hamiltonian_chi(i-1, gr, sys%ks, hm, td, target, par_chi, psi)
       call hamiltonian_update(hm, gr%mesh, time = abs(i*td%dt))
@@ -490,7 +488,6 @@ module opt_control_propagation_m
     type(grid_t), pointer :: gr
     type(propagator_t) :: tr_chi
     type(states_t) :: psi
-    type(states_t) :: psi_aux
     type(states_t) :: st_ref
     FLOAT, allocatable :: vhxc(:, :)
 
@@ -508,7 +505,7 @@ module opt_control_propagation_m
     call propagator_remove_scf_prop(tr_chi)
 
     call states_copy(psi, chi)
-    call oct_prop_read_state(prop_psi, psi, gr, sys%geo, td%max_iter)
+    call oct_prop_read_state(prop_psi, psi, gr, td%max_iter)
 
     SAFE_ALLOCATE(vhxc(gr%mesh%np, hm%d%nspin))
 
@@ -523,30 +520,22 @@ module opt_control_propagation_m
     call states_copy(st_ref, psi)
 
     do i = td%max_iter, 1, -1
-      call oct_prop_check(prop_psi, psi, gr, sys%geo, i)
+      call oct_prop_check(prop_psi, psi, gr, i)
       call update_field(i, par_chi, gr, hm, psi, chi, par, dir = 'b')
-      if(target_mode(target) == oct_targetmode_td) then
-        call states_copy(psi_aux, psi)
-        call update_hamiltonian_psi(i-1, gr, sys%ks, hm, td, target, par, psi_aux)
-        call propagator_dt(sys%ks, hm, gr, psi_aux, td%tr, abs((i-1)*td%dt), td%dt*M_HALF, td%mu, td%max_iter, i)
-        call update_hamiltonian_chi(i-1, gr, sys%ks, hm, td, target, par, psi, st_aux = psi_aux)
-        call propagator_dt(sys%ks, hm, gr, chi, tr_chi, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
-        call update_hamiltonian_psi(i-1, gr, sys%ks, hm, td, target, par, psi)
-        call propagator_dt(sys%ks, hm, gr, psi, td%tr, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
-        call oct_prop_output(prop_chi, i-1, chi, gr, sys%geo)
-        call states_end(psi_aux)
-      else
-        call update_hamiltonian_psi(i-1, gr, sys%ks, hm, td, target, par, psi)
-        st_ref%zpsi = psi%zpsi
-        vhxc(:, :) = hm%vhxc(:, :)
-        call propagator_dt(sys%ks, hm, gr, psi, td%tr, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
-        st_ref%zpsi = M_HALF * (st_ref%zpsi + psi%zpsi)
-        hm%vhxc(:, :) = M_HALF * (hm%vhxc(:, :) + vhxc(:, :))
-        call update_hamiltonian_chi(i-1, gr, sys%ks, hm, td, target, par, st_ref)
-        call propagator_dt(sys%ks, hm, gr, chi, tr_chi, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
-        hm%vhxc(:, :) = vhxc(:, :)
-        call oct_prop_output(prop_chi, i-1, chi, gr, sys%geo)
-      end if
+
+      ! Here propagate psi one full step, and then simply interpolate to get the state
+      ! at half the time interval. Perhaps one could gain some accuracy by performing two
+      ! successive propagations of half time step.
+      call update_hamiltonian_psi(i-1, gr, sys%ks, hm, td, target, par, psi)
+      st_ref%zpsi = psi%zpsi
+      vhxc(:, :) = hm%vhxc(:, :)
+      call propagator_dt(sys%ks, hm, gr, psi, td%tr, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
+      st_ref%zpsi = M_HALF * (st_ref%zpsi + psi%zpsi)
+      hm%vhxc(:, :) = M_HALF * (hm%vhxc(:, :) + vhxc(:, :))
+      call update_hamiltonian_chi(i-1, gr, sys%ks, hm, td, target, par, st_ref)
+      call propagator_dt(sys%ks, hm, gr, chi, tr_chi, abs((i-1)*td%dt), td%dt, td%mu, td%max_iter, i)
+      hm%vhxc(:, :) = vhxc(:, :)
+      call oct_prop_output(prop_chi, i-1, chi, gr, sys%geo)
     end do
 
     call states_end(st_ref)
@@ -563,7 +552,6 @@ module opt_control_propagation_m
     call propagator_end(tr_chi)
 
     SAFE_DEALLOCATE_A(vhxc)
-    if(target_mode(target) == oct_targetmode_td) call states_end(psi_aux)
     call states_end(psi)
 
     POP_SUB(bwd_step_2)
@@ -574,7 +562,7 @@ module opt_control_propagation_m
   ! ----------------------------------------------------------
   !
   ! ----------------------------------------------------------
-  subroutine update_hamiltonian_chi(iter, gr, ks, hm, td, target, par_chi, st, st_aux)
+  subroutine update_hamiltonian_chi(iter, gr, ks, hm, td, target, par_chi, st)
     integer, intent(in)                        :: iter
     type(grid_t), intent(inout)                :: gr
     type(v_ks_t), intent(inout)                :: ks
@@ -583,7 +571,6 @@ module opt_control_propagation_m
     type(target_t), intent(inout)              :: target
     type(controlfunction_t), intent(in)        :: par_chi
     type(states_t), intent(inout)              :: st
-    type(states_t), optional, intent(inout)    :: st_aux
 
     type(states_t)                             :: inh
     integer :: j
@@ -591,18 +578,14 @@ module opt_control_propagation_m
     PUSH_SUB(update_hamiltonian_chi)
 
     if(target_mode(target) == oct_targetmode_td) then
-      if(present(st_aux)) then
-        call states_copy(inh, st_aux)
-        call target_inh(st_aux, gr, target, td%dt*iter, inh)
-      else
-        call states_copy(inh, st)
-        call target_inh(st, gr, target, td%dt*iter, inh)
-      end if
+      call states_copy(inh, st)
+      call target_inh(st, gr, target, td%dt*iter, inh)
       call hamiltonian_set_inh(hm, inh)
       call states_end(inh)
     end if
 
     if( hm%theory_level.ne.INDEPENDENT_PARTICLES .and. (.not.ks%frozen_hxc) ) then
+      call density_calc(st, gr, st%rho)
       call hamiltonian_set_oct_exchange(hm, st, gr, ks%xc)
     end if
 
@@ -690,7 +673,7 @@ module opt_control_propagation_m
             call zvlaser_operator_linear(hm%ep%lasers(j), gr%der, hm%d, psi%zpsi(:, :, p, ik), &
               oppsi%zpsi(:, :, p, ik), ik, hm%ep%gyromagnetic_ratio)
           end if
-          dl(j) = dl(j) + psi%occ(p, ik) * zmf_dotp(gr%mesh, psi%d%dim, chi%zpsi(:, :, p, ik), &
+          dl(j) = dl(j) + zmf_dotp(gr%mesh, psi%d%dim, chi%zpsi(:, :, p, ik), &
             oppsi%zpsi(:, :, p, ik))
         end do
       end do
@@ -705,7 +688,7 @@ module opt_control_propagation_m
             oppsi%zpsi(:, :, p, ik) = M_z0
             call zvlaser_operator_quadratic(hm%ep%lasers(j), gr%der, &
               psi%zpsi(:, :, p, ik), oppsi%zpsi(:, :, p, ik))
-            dq(j) = dq(j) + psi%occ(p, ik)*zmf_dotp(gr%mesh, psi%d%dim, &
+            dq(j) = dq(j) + zmf_dotp(gr%mesh, psi%d%dim, &
               chi%zpsi(:, :, p, ik), oppsi%zpsi(:, :, p, ik))
           end do
         end do
@@ -823,11 +806,10 @@ module opt_control_propagation_m
 
 
   ! ---------------------------------------------------------
-  subroutine oct_prop_check(prop, psi, gr, geo, iter)
+  subroutine oct_prop_check(prop, psi, gr, iter)
     type(oct_prop_t),  intent(in)    :: prop
     type(states_t),    intent(inout) :: psi
     type(grid_t),      intent(in)    :: gr
-    type(geometry_t),  intent(in)    :: geo
     integer,           intent(in)    :: iter
 
     type(states_t) :: stored_st
@@ -847,7 +829,7 @@ module opt_control_propagation_m
        overlap = zstates_mpdotp(gr%mesh, stored_st, psi)
        if( abs(overlap - prev_overlap) > WARNING_THRESHOLD ) then
           write(message(1), '(a,es13.4)') &
-            "WARNING: forward-backward propagation produced an error of", abs(overlap-prev_overlap)
+            "Forward-backward propagation produced an error of", abs(overlap-prev_overlap)
           write(message(2), '(a,i8)') "Iter = ", iter
           call messages_warning(2)
        end if
@@ -865,11 +847,10 @@ module opt_control_propagation_m
 
 
   ! ---------------------------------------------------------
-  subroutine oct_prop_read_state(prop, psi, gr, geo, iter)
+  subroutine oct_prop_read_state(prop, psi, gr, iter)
     type(oct_prop_t),  intent(in)    :: prop
     type(states_t),    intent(inout) :: psi
     type(grid_t),      intent(in)    :: gr
-    type(geometry_t),  intent(in)    :: geo
     integer,           intent(in)    :: iter
 
     character(len=100) :: filename

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states.F90 9290 2012-08-31 13:56:41Z xavier $
+!! $Id: states.F90 9619 2012-11-13 20:58:51Z dstrubbe $
 
 #include "global.h"
 
@@ -113,15 +113,16 @@ module states_m
     cmplx_array2_t,                   &
     states_wfs_t
 
-
-  type states_wfs_t    !cmplxscl: Left and Right eigenstates
+  !> cmplxscl: Left and Right eigenstates
+  type states_wfs_t    
     CMPLX, pointer     :: zL(:, :, :, :) !< (np, st%d%dim, st%nst, st%d%nik)
     CMPLX, pointer     :: zR(:, :, :, :) !< (np, st%d%dim, st%nst, st%d%nik)
     FLOAT, pointer     :: dL(:, :, :, :) !< (np, st%d%dim, st%nst, st%d%nik)
     FLOAT, pointer     :: dR(:, :, :, :) !< (np, st%d%dim, st%nst, st%d%nik)
   end type states_wfs_t
-
-  type cmplx_array2_t    !cmplxscl: complex 2D matrices 
+  
+  !>cmplxscl: complex 2D matrices 
+  type cmplx_array2_t    
     FLOAT, pointer     :: Re(:, :) !< Real components 
     FLOAT, pointer     :: Im(:, :) !< Imaginary components
   end type cmplx_array2_t
@@ -212,7 +213,6 @@ module states_m
     FLOAT          :: qtot          !< (-) The total charge in the system (used in Fermi)
     FLOAT          :: val_charge    !< valence charge
 
-    logical        :: extrastates   ! are there extra states?
     logical        :: fromScratch
     type(smear_t)  :: smear         ! smearing of the electronic occupations
 
@@ -228,12 +228,14 @@ module states_m
     integer                     :: lnst               !< Number of states on local node.
     integer                     :: st_start, st_end   !< Range of states processed by local node.
     integer, pointer            :: node(:)            !< To which node belongs each state.
-    integer, pointer            :: st_range(:, :)     !< Node r manages states st_range(1, r) to
-                                                      !! st_range(2, r) for r = 0, ..., mpi_grp%size-1,
-                                                      !! i. e. st_start = st_range(1, r) and
-                                                      !! st_end = st_range(2, r) on node r.
-    integer, pointer            :: st_num(:)          !< Number of states on node r, i. e.
-                                                      !! st_num(r) = st_num(2, r)-st_num(1, r).
+    !> Node r manages states st_range(1, r) to
+    !! st_range(2, r) for r = 0, ..., mpi_grp%size-1,
+    !! i. e. st_start = st_range(1, r) and
+    !! st_end = st_range(2, r) on node r.
+    integer, pointer            :: st_range(:, :)  
+    !> Number of states on node r, i. e.
+    !! st_num(r) = st_num(2, r)-st_num(1, r).
+    integer, pointer            :: st_num(:)         
     type(multicomm_all_pairs_t) :: ap                 !< All-pairs schedule.
 
     logical                     :: symmetrize_density
@@ -310,7 +312,7 @@ contains
     type(geometry_t),  intent(in)    :: geo
 
     FLOAT :: excess_charge
-    integer :: nempty, ierr, il, ntot, theory_level, default, nthreads
+    integer :: nempty, ierr, il, ntot, default, nthreads
     integer, allocatable :: ob_k(:), ob_st(:), ob_d(:)
     character(len=256)   :: restart_dir
 
@@ -347,7 +349,7 @@ contains
 
     call parse_integer(datasets_check('StatesBlockSize'), default, st%d%block_size)
     if(st%d%block_size < 1) then
-      message(1) = "Error: The variable 'StatesBlockSize' must be greater than 0."
+      message(1) = "The variable 'StatesBlockSize' must be greater than 0."
       call messages_fatal(1)
     end if
 
@@ -366,7 +368,7 @@ contains
     !% Spin-restricted calculations.
     !%Option polarized 2
     !%Option spin_polarized 2
-    !% Spin unrestricted, also known as spin-DFT, SDFT. This mode will double the number of
+    !% Spin-unrestricted, also known as spin-DFT, SDFT. This mode will double the number of
     !% wavefunctions necessary for a spin-unpolarized calculation.
     !%Option non_collinear 3
     !%Option spinors 3
@@ -444,15 +446,13 @@ contains
       call messages_fatal(2)
     end if
 
-    st%extrastates = (nempty > 0)
-
     if(ntot > 0 .and. nempty > 0) then
-      message(1) = 'Error: You cannot set TotalStates and ExtraStates at the same time.'
+      message(1) = 'You cannot set TotalStates and ExtraStates at the same time.'
       call messages_fatal(1)
     end if
 
     ! For non-periodic systems this should just return the Gamma point
-    call states_choose_kpoints(st%d, gr%sb, geo)
+    call states_choose_kpoints(st%d, gr%sb)
 
     call geometry_val_charge(geo, st%val_charge)
 
@@ -547,11 +547,10 @@ contains
      
     if(ntot > 0) then
       if(ntot < st%nst) then
-        message(1) = 'Error: TotalStates is smaller than the number of states required by the system.'
+        message(1) = 'TotalStates is smaller than the number of states required by the system.'
         call messages_fatal(1)
       end if
 
-      st%extrastates = (ntot > st%nst)
       st%nst = ntot
     end if
 
@@ -843,7 +842,7 @@ contains
   end subroutine states_look
 
   ! ---------------------------------------------------------
-  ! Allocate the lead densities.
+  !> Allocate the lead densities.
   subroutine states_lead_densities_init(st, gr)
     type(states_t), intent(inout) :: st
     type(grid_t),   intent(in)    :: gr
@@ -864,7 +863,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  ! Deallocate the lead density.
+  !> Deallocate the lead density.
   subroutine states_lead_densities_end(st, gr)
     type(states_t), intent(inout) :: st
     type(grid_t),   intent(in)    :: gr
@@ -888,8 +887,9 @@ contains
   !! block "Occupations" is present. Otherwise, it makes an initial
   !! guess for the occupations, maybe using the "Smearing"
   !! variable.
-  !! The resulting occupations are placed on the st%occ variable. The
-  !! boolean st%fixed_occ is also set to .true., if the occupations are
+  !!
+  !! The resulting occupations are placed on the st\%occ variable. The
+  !! boolean st\%fixed_occ is also set to .true., if the occupations are
   !! set by the user through the "Occupations" block; false otherwise.
   subroutine states_read_initial_occs(st, excess_charge)
     type(states_t), intent(inout) :: st
@@ -959,7 +959,7 @@ contains
     !%
     !% If the sum of occupations is not equal to the total charge set by <tt>ExcessCharge</tt>,
     !% an error message is printed.
-    !% If </tt>FromScratch = no</tt> and <tt>RestartFixedOccupations = yes</tt>,
+    !% If <tt>FromScratch = no</tt> and <tt>RestartFixedOccupations = yes</tt>,
     !% this block will be ignored.
     !%End
 
@@ -1079,8 +1079,8 @@ contains
 
     if(.not. smear_is_semiconducting(st%smear) .and. .not. st%smear%method == SMEAR_FIXED_OCC &
        .and. st%nst * st%smear%el_per_state .le. st%qtot) then
-      message(1) = "Smearing needs unoccupied states (via ExtraStates) to be useful."
-      call messages_warning(1)
+      call messages_write('Smearing needs unoccupied states (via ExtraStates) to be useful.')
+      call messages_warning()
     endif
 
     ! sanity check
@@ -1101,8 +1101,8 @@ contains
   ! ---------------------------------------------------------
   !> Reads, if present, the "InitialSpins" block. This is only
   !! done in spinors mode; otherwise the routine does nothing. The
-  !! resulting spins are placed onto the st%spin pointer. The boolean
-  !! st%fixed_spins is set to true if (and only if) the InitialSpins
+  !! resulting spins are placed onto the st\%spin pointer. The boolean
+  !! st\%fixed_spins is set to true if (and only if) the InitialSpins
   !! block is present.
   subroutine states_read_initial_spins(st)
     type(states_t), intent(inout) :: st
@@ -1187,14 +1187,14 @@ contains
     type(type_t), optional, intent(in)      :: wfs_type
     logical,      optional, intent(in)      :: alloc_zphi ! only needed for gs transport
 
-    integer :: ip, ik, il, ist, idim, st1, st2, k1, k2, np_part
+    integer :: ip, ik, ist, idim, st1, st2, k1, k2, np_part
     logical :: force
 
     PUSH_SUB(states_allocate_wfns)
 
     if(associated(st%dpsi).or.associated(st%zpsi)) then
-      message(1) = "Trying to allocate wavefunctions that are already allocated."
-      call messages_fatal(1)
+      call messages_write('Trying to allocate wavefunctions that are already allocated.')
+      call messages_fatal()
     end if
 
     if (present(wfs_type)) then
@@ -1257,12 +1257,12 @@ contains
   end subroutine states_allocate_wfns
 
   ! ---------------------------------------------------------
-  ! Allocates the interface wavefunctions defined within a states_t structure.
+  !> Allocates the interface wavefunctions defined within a states_t structure.
   subroutine states_allocate_intf_wfns(st, ob_mesh)
     type(states_t),         intent(inout)   :: st
     type(mesh_t),           intent(in)      :: ob_mesh(:)
 
-    integer :: ip, ik, ist, idim, st1, st2, k1, k2, il
+    integer :: st1, st2, k1, k2, il
 
     PUSH_SUB(states_allocate_intf_wfns)
 
@@ -1291,19 +1291,19 @@ contains
   !> Initializes the data components in st that describe how the states
   !! are distributed in blocks:
   !!
-  !! st%nblocks: this is the number of blocks in which the states are divided. Note that
+  !! st\%nblocks: this is the number of blocks in which the states are divided. Note that
   !!   this number is the total number of blocks, regardless of how many are actually stored
   !!   in each node.
   !! block_start: in each node, the index of the first block.
   !! block_end: in each node, the index of the last block.
-  !!   If the states are not parallelized, then block_start is 1 and block_end is st%nblocks.
-  !! st%iblock(1:st%nst, 1:st%d%nik): it points, for each state, to the block that contains it.
-  !! st%block_is_local(): st%block_is_local(ib) is .true. if block ib is stored in the running node.
-  !! st%block_range(1:st%nblocks, 1:2): Block ib contains states fromn st%block_range(ib, 1) to st%block_range(ib, 2)
-  !! st%block_size(1:st%nblocks): Block ib contains a number st%block_size(ib) of states.
-  !! st%block_initialized: it should be .false. on entry, and .true. after exiting this routine.
+  !!   If the states are not parallelized, then block_start is 1 and block_end is st\%nblocks.
+  !! st\%iblock(1:st\%nst, 1:st\%d\%nik): it points, for each state, to the block that contains it.
+  !! st\%block_is_local(): st\%block_is_local(ib) is .true. if block ib is stored in the running node.
+  !! st\%block_range(1:st\%nblocks, 1:2): Block ib contains states fromn st\%block_range(ib, 1) to st\%block_range(ib, 2)
+  !! st\%block_size(1:st\%nblocks): Block ib contains a number st\%block_size(ib) of states.
+  !! st\%block_initialized: it should be .false. on entry, and .true. after exiting this routine.
   !!
-  !! The set of batches st%psib(1:st%nblocks) contains the blocks themselves.
+  !! The set of batches st\%psib(1:st\%nblocks) contains the blocks themselves.
   subroutine states_init_block(st, mesh)
     type(states_t),           intent(inout) :: st
     type(mesh_t),   optional, intent(in)    :: mesh
@@ -1459,11 +1459,12 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine states_densities_init(st, gr, geo, mc)
+  subroutine states_densities_init(st, gr, geo)
     type(states_t),    intent(inout) :: st
     type(grid_t),      intent(in)    :: gr
     type(geometry_t),  intent(in)    :: geo
-    type(multicomm_t), intent(in)    :: mc
+
+    FLOAT :: size
 
     PUSH_SUB(states_densities_init)
 
@@ -1476,7 +1477,6 @@ contains
       st%zrho%Im = M_ZERO
     end if
 
-    
     if(st%d%cdft) then
       SAFE_ALLOCATE(st%current(1:gr%mesh%np_part, 1:gr%mesh%sb%dim, 1:st%d%nspin))
       st%current = M_ZERO
@@ -1490,15 +1490,21 @@ contains
       end if
     end if
 
+    size = gr%mesh%np_part*CNST(8.0)*st%d%block_size
+
+    call messages_write('Info: states-block size = ')
+    call messages_write(size, fmt = '(f10.1)', align_left = .true., units = unit_megabytes, print_units = .true.)
+    call messages_info()
+
     POP_SUB(states_densities_init)
   end subroutine states_densities_init
 
 
 
   !---------------------------------------------------------------------
-  !> This subroutine: (i) Fills in the block size (st%d%block_size);
-  !! (ii) Finds out whether or not to pack the states (st%d%pack_states);
-  !! (iii) Finds out the orthogonalization method (st%d%orth_method).
+  !> This subroutine: (i) Fills in the block size (st\%d\%block_size);
+  !! (ii) Finds out whether or not to pack the states (st\%d\%pack_states);
+  !! (iii) Finds out the orthogonalization method (st\%d\%orth_method).
   subroutine states_exec_init(st, mc)
     type(states_t),    intent(inout) :: st
     type(multicomm_t), intent(in)    :: mc
@@ -1547,9 +1553,6 @@ contains
     !% (Experimental) Orthogonalization is performed based on a QR
     !% decomposition based on Lapack routines _getrf and _orgqr.
     !% Compatible with states parallelization.
-    !%Option old_gram_schmidt 5
-    !% Old Gram-Schmidt implementation, compatible with states
-    !% parallelization.
     !%End
 
     if(multicomm_strategy_is_parallel(mc, P_STRATEGY_STATES)) then
@@ -1569,16 +1572,16 @@ contains
     !%Variable StatesCLDeviceMemory
     !%Type float
     !%Section Execution::Optimization
+    !%Default -512
     !%Description
-    !% This variable select the amount of OpenCL device memory that
-    !% would be used by Octopus to store the states. 
+    !% This variable selects the amount of OpenCL device memory that
+    !% will be used by Octopus to store the states. 
     !%
-    !% A number smaller than 1 indicates a fraction of the total
+    !% A positive number smaller than 1 indicates a fraction of the total
     !% device memory. A number larger than one indicates an absolute
     !% amount of memory in megabytes. A negative number indicates an
     !% amount of memory in megabytes that would be substracted from
-    !% the total device memory. The default is -512.
-    !%
+    !% the total device memory.
     !%End
     call parse_float(datasets_check('StatesCLDeviceMemory'), CNST(-512.0), st%d%cl_states_mem)
 
@@ -1690,7 +1693,6 @@ contains
     stout%qtot       = stin%qtot
     stout%val_charge = stin%val_charge
 
-    stout%extrastates = stin%extrastates
     call smear_copy(stout%smear, stin%smear)
 
     stout%parallel_in_states = stin%parallel_in_states
@@ -1913,8 +1915,6 @@ contains
     integer            :: ist, ik
     FLOAT              :: charge
     CMPLX, allocatable :: zpsi(:, :)
-    FLOAT, allocatable :: cmplxsclevals(:,:)
-    FLOAT              :: emin
 #if defined(HAVE_MPI)
     integer            :: jj
     integer            :: tmp
@@ -1948,6 +1948,10 @@ contains
       message(1) = 'Occupations do not integrate to total charge.'
       write(message(2), '(6x,f12.8,a,f12.8)') charge, ' != ', st%qtot
       call messages_warning(2)
+      if(charge < M_EPSILON) then
+        message(1) = "There don't seem to be any electrons at all!"
+        call messages_fatal(1)
+      endif
     end if
 
     if(st%d%ispin == SPINORS) then
@@ -1981,7 +1985,7 @@ contains
   !> function to calculate the eigenvalues sum using occupations as weights
   function states_eigenvalues_sum(st, alt_eig) result(tot)
     type(states_t), intent(in)  :: st
-    FLOAT, optional, intent(in) :: alt_eig(st%st_start:st%st_end, 1:st%d%nik)
+    FLOAT, optional, intent(in) :: alt_eig(st%st_start:, :) !< (st%st_start:st%st_end, 1:st%d%nik)
     FLOAT                       :: tot
 
     integer :: ik
@@ -2008,7 +2012,7 @@ contains
   !> Same as states_eigenvalues_sum but suitable for cmplxscl
   function zstates_eigenvalues_sum(st, alt_eig) result(tot)
     type(states_t), intent(in)  :: st
-    CMPLX, optional, intent(in) :: alt_eig(st%st_start:st%st_end, 1:st%d%nik)
+    CMPLX, optional, intent(in) :: alt_eig(st%st_start:, :) !< (st%st_start:st%st_end, 1:st%d%nik)
     CMPLX                       :: tot
 
     integer :: ik
@@ -2182,7 +2186,9 @@ contains
 
     SAFE_ALLOCATE( wf_psi(1:der%mesh%np_part, 1:st%d%dim))
     SAFE_ALLOCATE(gwf_psi(1:der%mesh%np, 1:der%mesh%sb%dim, 1:st%d%dim))
-    if(present(density_laplacian)) SAFE_ALLOCATE(lwf_psi(1:der%mesh%np, 1:st%d%dim))
+    if(present(density_laplacian)) then
+      SAFE_ALLOCATE(lwf_psi(1:der%mesh%np, 1:st%d%dim))
+    endif
 
     sp = 1
     if(st%d%ispin == SPIN_POLARIZED) sp = 2

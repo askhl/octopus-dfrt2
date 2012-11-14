@@ -26,7 +26,7 @@ subroutine X(eigensolver_evolution) (gr, st, hm, tol, niter, converged, ik, diff
   integer,                     intent(inout) :: niter
   integer,                     intent(inout) :: converged
   integer,                     intent(in)    :: ik
-  FLOAT,                       intent(out)   :: diff(1:st%nst)
+  FLOAT,                       intent(out)   :: diff(:) !< (1:st%nst)
   FLOAT,                       intent(in)    :: tau
 
   integer :: ist, iter, maxiter, conv, matvec, i, j
@@ -39,7 +39,7 @@ subroutine X(eigensolver_evolution) (gr, st, hm, tol, niter, converged, ik, diff
   maxiter = niter
   matvec = 0
 
-  call exponential_init(te, gr%der)
+  call exponential_init(te)
 
   SAFE_ALLOCATE(hpsi(1:gr%mesh%np_part, 1:st%d%dim))
   SAFE_ALLOCATE(m(1:st%nst, 1:st%nst))

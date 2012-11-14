@@ -17,7 +17,7 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 # 02111-1307, USA.
 #
-# $Id: oct-run_regression_test.pl 9240 2012-08-22 02:49:50Z dstrubbe $
+# $Id: oct-run_regression_test.pl 9450 2012-09-19 16:12:57Z dstrubbe $
 
 use Getopt::Std;
 use File::Basename;
@@ -168,6 +168,14 @@ chomp($mpiexec);
 $mpiexec_raw = $mpiexec;
 $mpiexec_raw =~ s/\ (.*)//;
 
+if ("$mpiexec_raw" ne "") {
+    if(!( -e "$mpiexec_raw")) {
+	print "mpiexec ($mpiexec_raw) does not exist\n";
+    } elsif(!( -x "$mpiexec_raw")) {
+	print "mpiexec ($mpiexec_raw) is not executable\n";
+    }
+}
+
 # default number of processors for MPI runs is 2
 $np = 2;
 
@@ -244,7 +252,7 @@ foreach my $octopus_exe (@executables){
 	if( ! -x "$command") {
 	  print "\nCannot find utility : $1 . Skipping utilities test \n";
 	  if (!$opt_p && !$opt_m) { system ("rm -rf $workdir"); }
-	  exit 0;
+	  exit $failures;
 	}
       }
 

@@ -15,11 +15,12 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: lcao.F90 8841 2012-02-06 20:18:47Z dstrubbe $
+!! $Id: lcao.F90 9620 2012-11-13 22:42:20Z dstrubbe $
 
 #include "global.h"
 
 module lcao_m
+  use atom_m
   use batch_m
   use blacs_proc_grid_m
   use datasets_m
@@ -27,17 +28,20 @@ module lcao_m
   use global_m
   use grid_m
   use hamiltonian_m
+  use io_m
   use output_m
   use lalg_adv_m
   use lalg_basic_m
   use lapack_m
   use loct_m
+  use math_m
   use mesh_m
   use mesh_function_m
   use messages_m
   use mpi_m ! if not before parser_m, ifort 11.072 can`t compile with MPI2
   use parser_m
   use profiling_m
+  use ps_m
   use simul_box_m
   use scalapack_m
   use solids_m
@@ -50,6 +54,8 @@ module lcao_m
   use states_io_m
   use submesh_m
   use system_m
+  use unit_m
+  use unit_system_m
   use v_ks_m
   use varinfo_m
 
@@ -72,20 +78,26 @@ module lcao_m
 
   type lcao_t
     private
+    integer           :: mode
+    logical           :: write_matrices !< whether to output H and S to file
     logical           :: initialized !< are k, s and v1 matrices filled?
-    integer           :: norbs !< number of orbitals
-    integer           :: maxorbs
+    integer           :: norbs   !< number of orbitals used
+    integer           :: maxorbs !< largest number of orbitals that could be used
     integer, pointer  :: atom(:)
     integer, pointer  :: level(:)
     integer, pointer  :: ddim(:)
     logical           :: alternative
     logical           :: derivative
-    
+    integer, pointer  :: cst(:, :)
+    integer, pointer  :: ck(:, :)
+    real(4), pointer  :: dbuff(:, :, :, :)
+    real(8), pointer  :: zbuff(:, :, :, :)
+
     !> For the alternative LCAO
     logical             :: keep_orb     !< Whether we keep orbitals in memory.
     FLOAT,   pointer    :: radius(:)    !< The localization radius of each atom orbitals
     FLOAT               :: lapdist      !< This is the extra distance that the Laplacian adds to the localization radius.
-    integer             :: mult         !< The number of basis per atomic function (with derivatives is 2, 1 otherwise).
+    integer             :: mult         !< The number of basis orbitals per atomic function (with derivatives is 2, 1 otherwise).
     integer             :: maxorb       !< The maximum value of the orbitals over all atoms.
     integer             :: nbasis       !< The total number of basis functions.
     !> The following functions map between a basis index and atom/orbital index
@@ -100,9 +112,16 @@ module lcao_m
     integer             :: desc(1:BLACS_DLEN)
     logical, pointer    :: calc_atom(:)
     FLOAT               :: diag_tol
+    type(submesh_t), pointer :: sphere(:)
+    type(batch_t),   pointer :: orbitals(:)
   end type lcao_t
   
   type(profile_t), save :: prof_orbitals
+
+  integer, parameter :: INITRHO_PARAMAGNETIC  = 1, &
+                        INITRHO_FERROMAGNETIC = 2, &
+                        INITRHO_RANDOM        = 3, &
+                        INITRHO_USERDEF       = 77
 
 contains
 
@@ -114,6 +133,7 @@ contains
     type(states_t),       intent(in)    :: st
 
     integer :: ia, n, ii, jj, maxj, idim
+    integer :: mode_default
 
     PUSH_SUB(lcao_init)
 
@@ -121,15 +141,59 @@ contains
     nullify(this%atom)
     nullify(this%level)
     nullify(this%ddim)
+    nullify(this%cst)
+    nullify(this%ck)
+    nullify(this%dbuff)
+    nullify(this%zbuff)
+
     nullify(this%radius)
     nullify(this%basis_atom)
     nullify(this%basis_orb)
     nullify(this%atom_orb_basis)
     nullify(this%norb_atom)
     nullify(this%calc_atom)
-    
+    nullify(this%sphere)
+    nullify(this%orbitals)
+
     this%initialized = .true.
 
+    ! The initial LCAO calculation is done by default if we have pseudopotentials.
+    ! Otherwise, it is not the default value and has to be enforced in the input file.
+    mode_default = LCAO_START_FULL
+    if(geo%only_user_def) mode_default = LCAO_START_NONE
+    
+    !%Variable LCAOStart
+    !%Type integer
+    !%Section SCF
+    !%Description
+    !% Before starting a SCF calculation, <tt>Octopus</tt> can perform
+    !% a LCAO calculation. These can provide <tt>Octopus</tt> with a good set
+    !% of initial wavefunctions and with a new guess for the density.
+    !% (Up to the current version, only a minimal basis set is used.)
+    !% The default is <tt>lcao_full</tt> unless all species are user-defined, in which case
+    !% the default is <tt>lcao_none</tt>.
+    !%Option lcao_none 0
+    !% Do not perform a LCAO calculation before the SCF cycle. Instead use random wavefunctions.
+    !%Option lcao_states 2
+    !% Do a LCAO calculation before the SCF cycle and use the resulting wavefunctions as 
+    !% initial wavefunctions without changing the guess density.
+    !% This will speed up the convergence of the eigensolver during the first SCF iterations.
+    !%Option lcao_full 3
+    !% Do a LCAO calculation before the SCF cycle and use the LCAO wavefunctions to build a new
+    !% guess density and a new KS potential.
+    !% Using the LCAO density as a new guess density may improve the convergence, but can
+    !% also slow it down or yield wrong results (especially for spin-polarized calculations).
+    !%End
+    call parse_integer(datasets_check('LCAOStart'), mode_default, this%mode)
+    if(.not.varinfo_valid_option('LCAOStart', this%mode)) call input_error('LCAOStart')
+
+    call messages_print_var_option(stdout, 'LCAOStart', this%mode)
+
+    if(this%mode == LCAO_START_NONE) then
+      POP_SUB(lcao_init)
+      return
+    end if
+    
     !%Variable LCAOAlternative
     !%Type logical
     !%Default false
@@ -140,6 +204,18 @@ contains
     !% large systems and parallel in states.
     !%End
     call parse_logical(datasets_check('LCAOAlternative'), .false., this%alternative)
+
+    !!%Variable LCAOWriteMatrices
+    !!%Type logical
+    !!%Default false
+    !!%Section SCF::LCAO
+    !!%Description
+    !!% If this variable is set, the LCAO Hamiltonian and overlap matrices will be written to files
+    !!% <tt>lcao_hamiltonian</tt> and <tt>lcao_overlap</tt> in the <tt>static</tt> directory.
+    !!%End
+    !call parse_logical(datasets_check('LCAOWriteMatrices'), .false., this%write_matrices)
+! The code to do this exists but is commented out, in src/scf/lcao_inc.F90, because it causes
+! mysterious problems with optimization on PGI 12.4.0.
 
     if(.not. this%alternative) then
 
@@ -213,15 +289,15 @@ contains
 
       !%Variable LCAODimension
       !%Type integer
-      !%Default 0
       !%Section SCF::LCAO
       !%Description
+      !% (Only applies if <tt>LCAOAlternative = no</tt>.)
       !% Before starting the SCF cycle, an initial LCAO calculation can be performed
       !% in order to obtain reasonable initial guesses for spin-orbitals and densities.
       !% For this purpose, the code calculates a number of atomic orbitals -- this
       !% number depends on the given species. The default dimension for the LCAO basis
-      !% set will be the sum of all these numbers, unless this dimension is larger than
-      !% twice the number of required orbitals for the full calculation. 
+      !% set will be the sum of all these numbers, or twice the number of required orbitals
+      !% for the full calculation, whichever is less.
       !%
       !% This dimension however can be changed by making use of this
       !% variable. Note that <tt>LCAODimension</tt> cannot be smaller than the
@@ -235,12 +311,16 @@ contains
       call parse_integer(datasets_check('LCAODimension'), 0, n)
 
       if(n > 0 .and. n <= st%nst) then
+        ! n was made too small
         this%norbs = st%nst
       else if(n > st%nst .and. n <= this%maxorbs) then
+        ! n is a reasonable value
         this%norbs = n
       else if(n == 0) then
+        ! using the default
         this%norbs = min(this%maxorbs, 2*st%nst)
       else
+        ! n was negative, or greater than maxorbs
         this%norbs = this%maxorbs
       end if
 
@@ -253,6 +333,7 @@ contains
     POP_SUB(lcao_init)
 
   contains
+
     subroutine lcao2_init()
       integer :: iatom, iorb, norbs
       FLOAT   :: maxradius
@@ -262,8 +343,8 @@ contains
 #endif
       PUSH_SUB(lcao_init.lcao2_init)
 
-      message(1) = "Info: Using LCAO alternative implementation."
-      call messages_info(1)
+      call messages_write('Info: Using LCAO alternative implementation.')
+      call messages_info()
 
       call messages_experimental('LCAO alternative implementation')
 
@@ -272,6 +353,7 @@ contains
       !%Default yes
       !%Section SCF::LCAO
       !%Description
+      !% Only applies if <tt>LCAOAlternative = true</tt>.
       !% If set to yes (the default) Octopus keeps atomic orbitals in
       !% memory during the LCAO procedure. If set to no, the orbitals
       !% are generated each time that they are needed, increasing
@@ -288,20 +370,38 @@ contains
       !%Default false
       !%Section SCF::LCAO
       !%Description
+      !% Only applies if <tt>LCAOAlternative = true</tt>.
       !% (experimental) If this variable is set to yes, the LCAO
       !% procedure will add an extra set of numerical orbitals (by
       !% using the derivative of the radial part of the original
-      !% orbitals).
+      !% orbitals). Note that this corresponds roughly to adding orbitals
+      !% with higher principal quantum numbers, but the same angular momentum.
+      !% This option may cause problems for unoccupied states since you may miss
+      !% some lower-lying states which correspond to higher angular momenta instead
+      !% of higher principal quantum number.
       !%End
       call parse_logical(datasets_check('LCAOExtraOrbitals'), .false., this%derivative)
 
-      if(this%derivative) call messages_experimental('LCAO extra orbitals')
+      ! DAS: if you calculate the Na atom this way, spin-polarized, with just one unoccupied state,
+      ! you will obtain states (up and down) which are actually the 10th states if you start with
+      ! random wavefunctions! We really need to implement taking the derivative of the angular part
+      ! instead to be sure of getting decent results!
+
+      if(this%derivative) then
+        call messages_experimental('LCAO extra orbitals')
+
+        if(st%nst * st%smear%el_per_state > st%qtot) then
+          message(1) = "Lower-lying empty states may be missed with LCAOExtraOrbitals."
+          call messages_warning(1)
+        endif
+      endif
 
       !%Variable LCAODiagTol
       !%Type float
       !%Default 1e-10
       !%Section SCF::LCAO
       !%Description
+      !% Only applies if <tt>LCAOAlternative = true</tt>.
       !% The tolerance for the diagonalization of the LCAO Hamiltonian. The default is 1e-10.
       !%End
       call parse_float(datasets_check('LCAODiagTol'), CNST(1e-10), this%diag_tol)
@@ -427,10 +527,10 @@ contains
     type(hamiltonian_t), intent(inout) :: hm
     integer, optional,   intent(in)    :: st_start !< use for unoccupied-states run
 
-    integer :: lcao_start_default, lcao_start
     type(lcao_t) :: lcao
     integer :: s1, s2, k1, k2, is, ik, ip, idim
     logical :: lcao_done
+    type(profile_t), save :: prof
 
     PUSH_SUB(lcao_run)
 
@@ -439,22 +539,7 @@ contains
       return
     end if
 
-    if (.not. present(st_start)) then
-      call guess_density(sys%gr%fine%mesh, sys%gr%sb, sys%geo, sys%st%qtot, sys%st%d%nspin, &
-        sys%st%d%spin_channels, sys%st%rho)
-
-      ! set up Hamiltonian (we do not call system_h_setup here because we do not want to
-      ! overwrite the guess density)
-      message(1) = 'Info: Setting up Hamiltonian.'
-      call messages_info(1)
-
-      ! get the effective potential (we don`t need the eigenvalues yet)
-      call v_ks_calc(sys%ks, hm, sys%st, sys%geo, calc_eigenval=.false., calc_berry=.false.)
-      ! eigenvalues have nevertheless to be initialized to something
-      sys%st%eigenval = M_ZERO
-
-      call init_states(sys%st, sys%gr%mesh, sys%geo)
-    else
+    if (present(st_start)) then
       ! If we are doing unocc calculation, do not mess with the correct eigenvalues
       ! of the occupied states.
       call v_ks_calc(sys%ks, hm, sys%st, sys%geo, calc_eigenval=.not. present(st_start))
@@ -466,71 +551,58 @@ contains
       endif
     endif
 
-    ! The initial LCAO calculation is done by default if we have pseudopotentials.
-    ! Otherwise, it is not the default value and has to be enforced in the input file.
-    lcao_start_default = LCAO_START_FULL
-    if(sys%geo%only_user_def) lcao_start_default = LCAO_START_NONE
-    
-    !%Variable LCAOStart
-    !%Type integer
-    !%Section SCF
-    !%Description
-    !% Before starting a SCF calculation, <tt>Octopus</tt> can perform
-    !% a LCAO calculation. These can provide <tt>Octopus</tt> with a good set
-    !% of initial wavefunctions and with a new guess for the density.
-    !% (Up to the current version, only a minimal basis set is used.)
-    !% The default is <tt>lcao_full</tt> unless all species are user-defined, in which case
-    !% the default is <tt>lcao_none</tt>.
-    !%Option lcao_none 0
-    !% Do not perform a LCAO calculation before the SCF cycle. Instead use random wavefunctions.
-    !%Option lcao_states 2
-    !% Do a LCAO calculation before the SCF cycle and use the resulting wavefunctions as 
-    !% initial wavefunctions without changing the guess density.
-    !% This will speed up the convergence of the eigensolver during the first SCF iterations.
-    !%Option lcao_full 3
-    !% Do a LCAO calculation before the SCF cycle and use the LCAO wavefunctions to build a new
-    !% guess density and a new KS potential.
-    !% Using the LCAO density as a new guess density may improve the convergence, but can
-    !% also slow it down or yield wrong results (especially for spin-polarized calculations).
-    !%End
-    call parse_integer(datasets_check('LCAOStart'), lcao_start_default, lcao_start)
-    if(.not.varinfo_valid_option('LCAOStart', lcao_start)) call input_error('LCAOStart')
+    call profiling_in(prof, 'LCAO_RUN')
 
-    call messages_print_var_option(stdout, 'LCAOStart', lcao_start)
+    call lcao_init(lcao, sys%gr, sys%geo, sys%st)
+
+    call lcao_init_orbitals(lcao, sys%st, sys%gr, sys%geo, start = st_start)
+
+    if (.not. present(st_start)) then
+      call lcao_guess_density(lcao, sys%st, sys%gr, sys%gr%sb, sys%geo, sys%st%qtot, sys%st%d%nspin, &
+        sys%st%d%spin_channels, sys%st%rho)
+      
+      ! set up Hamiltonian (we do not call system_h_setup here because we do not want to
+      ! overwrite the guess density)
+      message(1) = 'Info: Setting up Hamiltonian.'
+      call messages_info(1)
+    
+      ! get the effective potential (we don`t need the eigenvalues yet)
+      call v_ks_calc(sys%ks, hm, sys%st, sys%geo, calc_eigenval=.false., calc_berry=.false.)
+      ! eigenvalues have nevertheless to be initialized to something
+      sys%st%eigenval = M_ZERO
+      
+    end if
+
 
     lcao_done = .false.
-    if (lcao_start /= LCAO_START_NONE) then
-      call lcao_init(lcao, sys%gr, sys%geo, sys%st)
 
-      ! after initialized, can check that LCAO is possible
-      if(lcao_is_available(lcao)) then
-        lcao_done = .true.
+    ! after initialized, can check that LCAO is possible
+    if(lcao_is_available(lcao)) then
+      lcao_done = .true.
+      
+      call lcao_wf(lcao, sys%st, sys%gr, sys%geo, hm, start = st_start)
+      
+      if (.not. present(st_start)) then
+        call states_fermi(sys%st, sys%gr%mesh)
+        call states_write_eigenvalues(stdout, sys%st%nst, sys%st, sys%gr%sb)
         
-        call lcao_wf(lcao, sys%st, sys%gr, sys%geo, hm, start = st_start)
-
-        if (.not. present(st_start)) then
-          !Just populate again the states, so that the eigenvalues are properly written
-          call states_fermi(sys%st, sys%gr%mesh)
-          call states_write_eigenvalues(stdout, sys%st%nst, sys%st, sys%gr%sb)
-
-          ! Update the density and the Hamiltonian
-          if (lcao_start == LCAO_START_FULL) call system_h_setup(sys, hm, calc_eigenval = .false.)
-        endif
+        ! Update the density and the Hamiltonian
+        if (lcao%mode == LCAO_START_FULL) call system_h_setup(sys, hm, calc_eigenval = .false.)
       endif
-
-      call lcao_end(lcao)
-
-    endif
-
+    else
+      if(.not. present(st_start)) call init_states(sys%st, sys%gr%mesh, sys%geo)
+    end if
+    
     if(.not. lcao_done) then
-
 
       if(.not. sys%gr%ob_grid%open_boundaries) then
 
         ! Randomly generate the initial wavefunctions.
         call states_generate_random(sys%st, sys%gr%mesh, ist_start_ = st_start)
-        message(1) = "Orthogonalizing random wavefunctions."
-        call messages_info(1)
+
+        call messages_write('Orthogonalizing random wavefunctions.')
+        call messages_info()
+
         call states_orthogonalize(sys%st, sys%gr%mesh)
         ! If we are doing unocc calculation, do not mess with the correct eigenvalues and occupations
         ! of the occupied states.
@@ -560,6 +632,9 @@ contains
 
     end if
 
+    call lcao_end(lcao)
+
+    call profiling_out(prof)
     POP_SUB(lcao_run)
 
   contains
@@ -589,7 +664,7 @@ contains
           INCR(ist, 1)
           if(ist < st%st_start .or. ist > st%st_end) cycle
 
-          do ispin = 1, st%d%spin_channels ! we have to iterate over spinors dimensions or spin
+          do ispin = 1, st%d%spin_channels ! we have to iterate over spinor dimensions or spin
             idim = min(st%d%dim, ispin)
 
             call species_get_orbital(geo%atom(iatom)%spec, mesh, iorb, 1, geo%atom(iatom)%x, aorbital)
@@ -623,9 +698,16 @@ contains
     SAFE_DEALLOCATE_P(this%basis_orb)
     SAFE_DEALLOCATE_P(this%atom_orb_basis)
     SAFE_DEALLOCATE_P(this%radius)
+    SAFE_DEALLOCATE_P(this%sphere)
+    SAFE_DEALLOCATE_P(this%orbitals)
+
     SAFE_DEALLOCATE_P(this%atom)
     SAFE_DEALLOCATE_P(this%level)
     SAFE_DEALLOCATE_P(this%ddim)
+    SAFE_DEALLOCATE_P(this%cst)
+    SAFE_DEALLOCATE_P(this%ck)
+    SAFE_DEALLOCATE_P(this%dbuff)
+    SAFE_DEALLOCATE_P(this%zbuff)
 
     this%initialized = .false.
     POP_SUB(lcao_end)
@@ -654,9 +736,9 @@ contains
 
     if(this%alternative) then
       if (states_are_real(st)) then
-        call dlcao_wf2(this, st, gr, geo, hm, start_)
+        call dlcao_alt_wf(this, st, gr, geo, hm, start_)
       else
-        call zlcao_wf2(this, st, gr, geo, hm, start_)
+        call zlcao_alt_wf(this, st, gr, geo, hm, start_)
       end if
     else
       if (states_are_real(st)) then
@@ -675,7 +757,8 @@ contains
     type(lcao_t), intent(in) :: this
 
     PUSH_SUB(lcao_is_available)
-    available = this%initialized
+
+    available = this%initialized .and. this%mode /= LCAO_START_NONE
 
     POP_SUB(lcao_is_available)
   end function lcao_is_available
@@ -720,10 +803,9 @@ contains
   !> This function generates the set of an atomic orbitals for an atom
   !! and stores it in the batch orbitalb. It can be called when the
   !! orbitals are already stored. In that case it does not do anything.
-  subroutine lcao_get_orbital(orbitalb, sphere, st, geo, ispin, iatom, norbs)
+  subroutine lcao_alt_get_orbital(orbitalb, sphere, geo, ispin, iatom, norbs)
     type(batch_t),     intent(inout) :: orbitalb
     type(submesh_t),   intent(in)    :: sphere
-    type(states_t),    intent(in)    :: st
     type(geometry_t),  intent(in)    :: geo
     integer,           intent(in)    :: ispin
     integer,           intent(in)    :: iatom
@@ -731,7 +813,7 @@ contains
 
     integer :: iorb
 
-    PUSH_SUB(lcao_get_orbital)
+    PUSH_SUB(lcao_alt_get_orbital)
 
     if(.not. batch_is_ok(orbitalb)) then
 
@@ -754,30 +836,424 @@ contains
       call profiling_out(prof_orbitals)
     end if
 
-    POP_SUB(lcao_get_orbital)
+    POP_SUB(lcao_alt_get_orbital)
 
-  end subroutine lcao_get_orbital
+  end subroutine lcao_alt_get_orbital
 
   ! ---------------------------------------------------------
 
   !> This function deallocates a set of an atomic orbitals for an
   !! atom. It can be called when the batch is empty, in that case it
   !! does not do anything.
-  subroutine lcao_end_orbital(orbitalb)
+  subroutine lcao_alt_end_orbital(orbitalb)
     type(batch_t),   intent(inout) :: orbitalb
 
-    PUSH_SUB(lcao_end_orbital)
+    PUSH_SUB(lcao_alt_end_orbital)
 
     if(batch_is_ok(orbitalb)) then
       call batch_delete(orbitalb)
     end if
 
-    POP_SUB(lcao_end_orbital)
+    POP_SUB(lcao_alt_end_orbital)
 
-  end subroutine lcao_end_orbital
+  end subroutine lcao_alt_end_orbital
 
   ! ---------------------------------------------------------
 
+  subroutine lcao_atom_density(this, st, gr, sb, geo, iatom, spin_channels, rho)
+    type(lcao_t),      intent(inout) :: this
+    type(states_t),    intent(in)    :: st
+    type(grid_t),      intent(in)    :: gr
+    type(simul_box_t), intent(in)    :: sb
+    type(geometry_t),  intent(in)    :: geo
+    integer,           intent(in)    :: iatom
+    integer,           intent(in)    :: spin_channels
+    FLOAT,             intent(inout) :: rho(:, :) !< (gr[%fine]%mesh%np, spin_channels)
+    
+    FLOAT, allocatable :: dorbital(:, :)
+    CMPLX, allocatable :: zorbital(:, :)
+    FLOAT, allocatable :: factors(:)
+    FLOAT :: factor, aa
+    integer :: iorb, ip, ii, ll, mm
+    type(ps_t), pointer :: ps
+    logical :: use_stored_orbitals
+
+    PUSH_SUB(lcao_atom_density)
+
+    rho = M_ZERO
+
+    use_stored_orbitals = species_is_ps(geo%atom(iatom)%spec) &
+      .and. states_are_real(st) .and. spin_channels == 1 .and. lcao_is_available(this) &
+      .and. st%d%dim == 1 .and. .not. gr%have_fine_mesh
+
+    ps => species_ps(geo%atom(iatom)%spec)
+
+    ! we can use the orbitals we already have calculated
+    if(use_stored_orbitals) then
+      ASSERT(.not. gr%have_fine_mesh)
+
+      if(.not. this%alternative) then
+        
+        if(states_are_real(st)) then
+          SAFE_ALLOCATE(dorbital(1:gr%mesh%np, 1:st%d%dim))
+        else
+          SAFE_ALLOCATE(zorbital(1:gr%mesh%np, 1:st%d%dim))
+        end if
+        
+        do iorb = 1, this%norbs
+          if(iatom /= this%atom(iorb)) cycle
+          
+          call species_iwf_ilm(geo%atom(iatom)%spec, this%level(iorb), 1, ii, ll, mm)
+          factor = ps%conf%occ(ii, 1)/(CNST(2.0)*ll + CNST(1.0))
+         
+          if(states_are_real(st)) then
+            call dget_ao(this, st, gr%mesh, geo, iorb, 1, dorbital, use_psi = .true.)
+            !$omp parallel do
+            do ip = 1, gr%mesh%np
+              rho(ip, 1) = rho(ip, 1) + factor*dorbital(ip, 1)**2
+            end do
+          else
+            call zget_ao(this, st, gr%mesh, geo, iorb, 1, zorbital, use_psi = .true.)
+            !$omp parallel do
+            do ip = 1, gr%mesh%np
+              rho(ip, 1) = rho(ip, 1) + factor*abs(zorbital(ip, 1))**2
+            end do
+          end if
+          
+        end do
+
+        SAFE_DEALLOCATE_A(dorbital)
+        SAFE_DEALLOCATE_A(zorbital)
+
+      else
+
+        call lcao_alt_get_orbital(this%orbitals(iatom), this%sphere(iatom), geo, 1, iatom, this%norb_atom(iatom))
+
+        ! the extra orbitals with the derivative are not relevant here, hence we divide by this%mult
+        SAFE_ALLOCATE(factors(1:this%norb_atom(iatom)/this%mult))
+
+        do iorb = 1, this%norb_atom(iatom)/this%mult
+          call species_iwf_ilm(geo%atom(iatom)%spec, iorb, 1, ii, ll, mm)
+          factors(iorb) = ps%conf%occ(ii, 1)/(CNST(2.0)*ll + CNST(1.0))
+        end do
+
+        !$omp parallel do private(ip, aa)
+        do ip = 1, this%sphere(iatom)%np
+          aa = CNST(0.0)
+          do iorb = 1, this%norb_atom(iatom)/this%mult
+            aa = aa + factors(iorb)*this%orbitals(iatom)%states_linear(iorb)%dpsi(ip)**2
+          end do
+          rho(this%sphere(iatom)%map(ip), 1) = aa
+        end do
+
+        SAFE_DEALLOCATE_A(factors)
+
+      end if
+
+    else
+      call species_atom_density(gr%fine%mesh, sb, geo%atom(iatom), spin_channels, rho)
+    end if
+
+    POP_SUB(lcao_atom_density)
+  end subroutine lcao_atom_density
+
+  ! ---------------------------------------------------------
+  !> builds a density which is the sum of the atomic densities
+  subroutine lcao_guess_density(this, st, gr, sb, geo, qtot, nspin, spin_channels, rho)
+    type(lcao_t),      intent(inout) :: this
+    type(states_t),    intent(in)    :: st
+    type(grid_t),      intent(in)    :: gr
+    type(simul_box_t), intent(in)    :: sb
+    type(geometry_t),  intent(in)    :: geo
+    FLOAT,             intent(in)    :: qtot  !< the total charge of the system
+    integer,           intent(in)    :: nspin, spin_channels
+    FLOAT,             intent(out)   :: rho(:, :)
+
+    integer :: ia, is, idir, gmd_opt
+    integer, save :: iseed = 321
+    type(block_t) :: blk
+    FLOAT :: rr, rnd, phi, theta, mag(1:3), lmag, n1, n2
+    FLOAT, allocatable :: atom_rho(:,:)
+    logical :: parallelized_in_atoms
+
+
+    PUSH_SUB(lcao_guess_density)
+
+    parallelized_in_atoms = .false.
+
+    if (spin_channels == 1) then
+      gmd_opt = INITRHO_PARAMAGNETIC
+    else
+      !%Variable GuessMagnetDensity
+      !%Type integer
+      !%Default ferromagnetic
+      !%Section SCF
+      !%Description
+      !% The guess density for the SCF cycle is just the sum of all the atomic densities.
+      !% When performing spin-polarized or non-collinear-spin calculations this option sets 
+      !% the guess magnetization density.
+      !%
+      !% For anti-ferromagnetic configurations, the <tt>user_defined</tt> option should be used.
+      !%
+      !% Note that if the <tt>paramagnetic</tt> option is used, the final ground state will also be
+      !% paramagnetic, but the same is not true for the other options.
+      !%Option paramagnetic 1
+      !% Magnetization density is zero.
+      !%Option ferromagnetic 2
+      !% Magnetization density is the sum of the atomic magnetization densities.
+      !%Option random 3
+      !% Each atomic magnetization density is randomly rotated.
+      !%Option user_defined 77
+      !% The atomic magnetization densities are rotated so that the magnetization 
+      !% vector has the same direction as a vector provided by the user. In this case,
+      !% the <tt>AtomsMagnetDirection</tt> block has to be set.
+      !%End
+      call parse_integer(datasets_check('GuessMagnetDensity'), INITRHO_FERROMAGNETIC, gmd_opt)
+      if(.not.varinfo_valid_option('GuessMagnetDensity', gmd_opt)) call input_error('GuessMagnetDensity')
+      call messages_print_var_option(stdout, 'GuessMagnetDensity', gmd_opt)
+    end if
+
+    rho = M_ZERO
+    select case (gmd_opt)
+    case (INITRHO_PARAMAGNETIC)
+      SAFE_ALLOCATE(atom_rho(1:gr%fine%mesh%np, 1:spin_channels))
+
+      parallelized_in_atoms = .true.
+
+      do ia = geo%atoms_dist%start, geo%atoms_dist%end
+        call lcao_atom_density(this, st, gr, sb, geo, ia, spin_channels, atom_rho)
+        rho(1:gr%fine%mesh%np, 1:spin_channels) = rho(1:gr%fine%mesh%np, 1:spin_channels) + &
+                                                  atom_rho(1:gr%fine%mesh%np, 1:spin_channels)
+      end do
+
+      if (spin_channels == 2) then
+        rho(1:gr%fine%mesh%np, 1) = M_HALF*(sum(rho(1:gr%fine%mesh%np, 1:2), dim=2))
+        rho(1:gr%fine%mesh%np, 2) = rho(1:gr%fine%mesh%np, 1)
+      end if
+
+    case (INITRHO_FERROMAGNETIC)
+      SAFE_ALLOCATE(atom_rho(1:gr%fine%mesh%np, 1:2))
+
+      parallelized_in_atoms = .true.
+
+      atom_rho = M_ZERO
+      rho = M_ZERO
+      do ia = geo%atoms_dist%start, geo%atoms_dist%end
+        call lcao_atom_density(this, st, gr, sb, geo, ia, 2, atom_rho(1:gr%fine%mesh%np, 1:2))
+        rho(1:gr%fine%mesh%np, 1:2) = rho(1:gr%fine%mesh%np, 1:2) + atom_rho(1:gr%fine%mesh%np, 1:2)
+      end do
+
+    case (INITRHO_RANDOM) ! Randomly oriented spins
+      SAFE_ALLOCATE(atom_rho(1:gr%fine%mesh%np, 1:2))
+      do ia = 1, geo%natoms
+        call lcao_atom_density(this, st, gr, sb, geo, ia, 2, atom_rho)
+
+        if (nspin == 2) then
+          call quickrnd(iseed, rnd)
+          rnd = rnd - M_HALF
+          if (rnd > M_ZERO) then
+            rho(1:gr%fine%mesh%np, 1:2) = rho(1:gr%fine%mesh%np, 1:2) + atom_rho(1:gr%fine%mesh%np, 1:2)
+          else
+            rho(1:gr%fine%mesh%np, 1) = rho(1:gr%fine%mesh%np, 1) + atom_rho(1:gr%fine%mesh%np, 2)
+            rho(1:gr%fine%mesh%np, 2) = rho(1:gr%fine%mesh%np, 2) + atom_rho(1:gr%fine%mesh%np, 1)
+          end if
+        elseif (nspin == 4) then
+          call quickrnd(iseed, phi)
+          call quickrnd(iseed, theta)
+          phi = phi*M_TWO*M_PI
+          theta = theta*M_PI
+          rho(1:gr%fine%mesh%np, 1) = rho(1:gr%fine%mesh%np, 1) + cos(theta/M_TWO)**2*atom_rho(1:gr%fine%mesh%np, 1) &
+            + sin(theta/M_TWO)**2*atom_rho(1:gr%fine%mesh%np, 2)
+          rho(1:gr%fine%mesh%np, 2) = rho(1:gr%fine%mesh%np, 2) + sin(theta/M_TWO)**2*atom_rho(1:gr%fine%mesh%np, 1) &
+            + cos(theta/M_TWO)**2*atom_rho(1:gr%fine%mesh%np, 2)
+          rho(1:gr%fine%mesh%np, 3) = rho(1:gr%fine%mesh%np, 3) + cos(theta/M_TWO)*sin(theta/M_TWO)*cos(phi)* &
+            (atom_rho(1:gr%fine%mesh%np, 1) - atom_rho(1:gr%fine%mesh%np, 2))
+          rho(1:gr%fine%mesh%np, 4) = rho(1:gr%fine%mesh%np, 4) - cos(theta/M_TWO)*sin(theta/M_TWO)*sin(phi)* &
+            (atom_rho(1:gr%fine%mesh%np, 1) - atom_rho(1:gr%fine%mesh%np, 2))
+        end if
+      end do
+
+    case (INITRHO_USERDEF) ! User-defined
+      
+      !%Variable AtomsMagnetDirection
+      !%Type block
+      !%Section Hamiltonian
+      !%Description
+      !% This option is only used when <tt>GuessMagnetDensity</tt> is
+      !% set to <tt>user_defined</tt>. It provides a direction for the
+      !% magnetization vector of each atom when building the guess
+      !% density. In order to do that, the user should specify the
+      !% coordinates of a vector that has the desired direction and
+      !% norm.  Note that it is necessary to maintain the ordering in
+      !% which the species were defined in the coordinates
+      !% specifications.
+      !%
+      !% For spin-polarized calculations, the vectors should have only
+      !% one component; for non-collinear-spin calculations, they
+      !% should have three components.
+      !%End
+      if(parse_block(datasets_check('AtomsMagnetDirection'), blk) < 0) then
+        message(1) = "AtomsMagnetDirection block is not defined."
+        call messages_fatal(1)
+      end if
+
+      if (parse_block_n(blk) /= geo%natoms) then
+        message(1) = "AtomsMagnetDirection block has the wrong number of rows."
+        call messages_fatal(1)
+      end if
+
+      SAFE_ALLOCATE(atom_rho(1:gr%fine%mesh%np, 1:2))
+      do ia = 1, geo%natoms
+        !Read from AtomsMagnetDirection block 
+        if (nspin == 2) then
+          call parse_block_float(blk, ia-1, 0, mag(1))
+          lmag = abs(mag(1))
+        elseif (nspin == 4) then
+          do idir = 1, 3
+            call parse_block_float(blk, ia-1, idir-1, mag(idir))
+            if (abs(mag(idir)) < CNST(1.0e-20)) mag(idir) = M_ZERO
+          end do
+          lmag = sqrt(dot_product(mag(1:3), mag(1:3)))
+        end if
+
+        !Get atomic density
+        call lcao_atom_density(this, st, gr, sb, geo, ia, 2, atom_rho)
+
+        !Scale magnetization density
+        n1 = dmf_integrate(gr%fine%mesh, atom_rho(:, 1))
+        n2 = dmf_integrate(gr%fine%mesh, atom_rho(:, 2))
+        if (lmag > n1 + n2) then
+          mag = mag*(n1 + n2)/lmag
+          lmag = n1 + n2
+        elseif (lmag == M_ZERO) then
+          if (n1 - n2 == M_ZERO) then
+            rho(1:gr%fine%mesh%np, 1:2) = rho(1:gr%fine%mesh%np, 1:2) + atom_rho(1:gr%fine%mesh%np, 1:2)
+          else
+            atom_rho(:, 1) = (atom_rho(:, 1) + atom_rho(:, 2))/M_TWO
+            rho(1:gr%fine%mesh%np, 1) = rho(1:gr%fine%mesh%np, 1) + atom_rho(1:gr%fine%mesh%np, 1)
+            rho(1:gr%fine%mesh%np, 2) = rho(1:gr%fine%mesh%np, 2) + atom_rho(1:gr%fine%mesh%np, 1)
+          end if
+          cycle
+        end if
+        if (n1 - n2 /= lmag .and. n2 /= M_ZERO) then
+          if (n1 - n2 < lmag) then
+            atom_rho(:, 1) = atom_rho(:, 1) + (lmag - n1 + n2)/M_TWO/n2*atom_rho(:, 2)
+            atom_rho(:, 2) = (n1 + n2 - lmag)/M_TWO/n2*atom_rho(:, 2)
+          elseif (n1 - n2 > lmag) then
+            atom_rho(:, 2) = atom_rho(:, 2) + (n1 - n2 - lmag)/M_TWO/n1*atom_rho(:, 1)
+            atom_rho(:, 1) = (lmag + n1 + n2)/M_TWO/n1*atom_rho(:, 1)
+          end if
+        end if
+
+        !Rotate magnetization density
+        if (nspin == 2) then
+          if (mag(1) > M_ZERO) then
+            rho(1:gr%fine%mesh%np, 1:2) = rho(1:gr%fine%mesh%np, 1:2) + atom_rho(1:gr%fine%mesh%np, 1:2)
+          else
+            rho(1:gr%fine%mesh%np, 1) = rho(1:gr%fine%mesh%np, 1) + atom_rho(1:gr%fine%mesh%np, 2)
+            rho(1:gr%fine%mesh%np, 2) = rho(1:gr%fine%mesh%np, 2) + atom_rho(1:gr%fine%mesh%np, 1)
+          end if
+
+        elseif (nspin == 4) then
+          theta = acos(mag(3)/lmag)
+          if (mag(1) == M_ZERO) then
+            if (mag(2) == M_ZERO) then
+              phi = M_ZERO
+            elseif (mag(2) < M_ZERO) then
+              phi = M_PI*M_TWOTHIRD
+            elseif (mag(2) > M_ZERO) then
+              phi = M_PI*M_HALF
+            end if
+          else
+            if (mag(2) < M_ZERO) then
+              phi = M_TWO*M_PI - acos(mag(1)/sin(theta)/lmag)
+            elseif (mag(2) >= M_ZERO) then
+              phi = acos(mag(1)/sin(theta)/lmag)
+            end if
+          end if
+
+          rho(1:gr%fine%mesh%np, 1) = rho(1:gr%fine%mesh%np, 1) + cos(theta/M_TWO)**2*atom_rho(1:gr%fine%mesh%np, 1) &
+            + sin(theta/M_TWO)**2*atom_rho(1:gr%fine%mesh%np, 2)
+          rho(1:gr%fine%mesh%np, 2) = rho(1:gr%fine%mesh%np, 2) + sin(theta/M_TWO)**2*atom_rho(1:gr%fine%mesh%np, 1) &
+               + cos(theta/M_TWO)**2*atom_rho(1:gr%fine%mesh%np, 2)
+          rho(1:gr%fine%mesh%np, 3) = rho(1:gr%fine%mesh%np, 3) + cos(theta/M_TWO)*sin(theta/M_TWO)*cos(phi)* &
+            (atom_rho(1:gr%fine%mesh%np, 1) - atom_rho(1:gr%fine%mesh%np, 2))
+          rho(1:gr%fine%mesh%np, 4) = rho(1:gr%fine%mesh%np, 4) - cos(theta/M_TWO)*sin(theta/M_TWO)*sin(phi)* &
+            (atom_rho(1:gr%fine%mesh%np, 1) - atom_rho(1:gr%fine%mesh%np, 2))
+        end if
+      end do
+
+      call parse_block_end(blk)
+
+    end select
+
+
+#ifdef HAVE_MPI
+    if(geo%atoms_dist%parallel .and. parallelized_in_atoms) then
+      do is = 1, spin_channels
+        atom_rho(1:gr%fine%mesh%np, 1) = rho(1:gr%fine%mesh%np, is)
+        call MPI_Allreduce(atom_rho(1, 1), rho(1, is), gr%fine%mesh%np, &
+          MPI_FLOAT, MPI_SUM, geo%atoms_dist%mpi_grp%comm, mpi_err)
+      end do
+    end if
+#endif
+
+    ! we now renormalize the density (necessary if we have a charged system)
+    rr = M_ZERO
+    do is = 1, spin_channels
+      rr = rr + dmf_integrate(gr%fine%mesh, rho(:, is))
+    end do
+
+    write(message(1),'(a,f13.6)')'Info: Unnormalized total charge = ', rr
+    call messages_info(1)
+
+    if (abs(rr) > M_EPSILON) then ! We only renormalize if the density is not zero
+      rr = qtot / rr
+      rho = rr * rho
+    end if
+    rr = M_ZERO
+    do is = 1, spin_channels
+      rr = rr + dmf_integrate(gr%fine%mesh, rho(:, is))
+    end do
+
+    write(message(1),'(a,f13.6)')'Info: Renormalized total charge = ', rr
+    call messages_info(1)
+
+    SAFE_DEALLOCATE_A(atom_rho)
+    POP_SUB(lcao_guess_density)
+  end subroutine lcao_guess_density
+
+  ! ---------------------------------------------------------
+
+  subroutine lcao_init_orbitals(this, st, gr, geo, start)
+    type(lcao_t),        intent(inout) :: this
+    type(states_t),      intent(inout) :: st
+    type(grid_t),        intent(inout) :: gr
+    type(geometry_t),    intent(in)    :: geo
+    integer, optional,   intent(in)    :: start
+
+    if(.not. lcao_is_available(this)) return
+  
+    PUSH_SUB(lcao_init_orbitals)
+        
+    if(.not. this%alternative) then
+      if(states_are_real(st)) then
+        call dinit_orbitals(this, st, gr, geo, start)
+      else
+        call zinit_orbitals(this, st, gr, geo, start)
+      end if
+    else
+      if(states_are_real(st)) then
+        call dlcao_alt_init_orbitals(this, st, gr, geo, start)
+      else
+        call zlcao_alt_init_orbitals(this, st, gr, geo, start)
+      end if
+
+    end if
+
+    POP_SUB(lcao_init_orbitals)
+  end subroutine lcao_init_orbitals
+  
 #include "undef.F90"
 #include "real.F90"
 #include "lcao_inc.F90"

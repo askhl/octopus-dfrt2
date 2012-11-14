@@ -84,11 +84,10 @@ module xc_ks_inversion_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine xc_ks_inversion_init(ks_inv, family, gr, geo, d, mc)
+  subroutine xc_ks_inversion_init(ks_inv, family, gr, geo, mc)
     type(xc_ks_inversion_t), intent(out)   :: ks_inv
     integer,                 intent(in)    :: family
     type(grid_t),            intent(inout) :: gr
-    type(states_dim_t),      intent(in)    :: d
     type(geometry_t),        intent(inout) :: geo
     type(multicomm_t),       intent(in)    :: mc  
 
@@ -152,7 +151,7 @@ contains
       call states_allocate_wfns(ks_inv%aux_st, gr%mesh)
       call states_generate_random(ks_inv%aux_st, gr%mesh)      
       ! initialize densities, hamiltonian and eigensolver
-      call states_densities_init(ks_inv%aux_st, gr, geo, mc)
+      call states_densities_init(ks_inv%aux_st, gr, geo)
       call states_exec_init(ks_inv%aux_st, mc)
       call hamiltonian_init(ks_inv%aux_hm, gr, geo, ks_inv%aux_st, INDEPENDENT_PARTICLES, XC_FAMILY_NONE)
       call eigensolver_init(ks_inv%eigensolver, gr, ks_inv%aux_st)
@@ -272,7 +271,7 @@ contains
     integer :: iunit, iunit2, verbosity, counter, np
     FLOAT :: rr
     FLOAT :: alpha, beta, convergence, alphascale, betascale
-    FLOAT :: stabilizer, convdensity, diffdensity, aa
+    FLOAT :: stabilizer, convdensity, diffdensity
     FLOAT, allocatable :: vhxc(:,:)
 
     character(len=20) :: alpha_str
@@ -534,13 +533,12 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine xc_ks_inversion_calc(ks_inversion, gr, hm, st, ex, ec, vxc, time)
+  subroutine xc_ks_inversion_calc(ks_inversion, gr, hm, st, vxc, time)
     type(xc_ks_inversion_t),  intent(inout) :: ks_inversion
     type(grid_t),             intent(inout) :: gr
     type(hamiltonian_t),      intent(in)    :: hm
     type(states_t),           intent(inout) :: st
-    FLOAT,                    intent(inout) :: ex, ec
-    FLOAT,                    intent(inout) :: vxc(:,:) ! vxc(gr%mesh%np, st%d%nspin)
+    FLOAT,                    intent(inout) :: vxc(:,:) !< vxc(gr%mesh%np, st%d%nspin)
     FLOAT, optional,          intent(in)    :: time
 
     integer :: ii

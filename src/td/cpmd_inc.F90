@@ -88,7 +88,7 @@ subroutine X(cpmd_propagate)(this, gr, hm, st, iter, dt)
       call calc_xx()
 
       ! psi <= psi + X * psi2
-      call states_block_matr_mul_add(gr%mesh, st, one, st%st_start, st%st_end, st%st_start, st%st_end, &
+      call states_block_matr_mul_add(gr%mesh, st, one, st%st_start, st%st_start, &
         this%X(psi2)(:, :, :, ik), xx, one, st%X(psi)(:, :, :, ik)) !(4.3)
 
       call profiling_out(cpmd_orth)
@@ -158,29 +158,31 @@ contains
   subroutine calc_xx()
     integer :: ist1, ist2, it
     FLOAT   :: res
-    FLOAT,  allocatable :: ii(:, :)
-    R_TYPE, allocatable :: aa(:, :), bb(:, :), xxi(:, :)
+    R_TYPE, allocatable :: aa(:, :), bb(:, :), xb(:, :), xxi(:, :)
 
     PUSH_SUB(X(cpmd_propagate).calc_xx)
 
     SAFE_ALLOCATE( aa(1:st%nst, 1:st%nst))
     SAFE_ALLOCATE( bb(1:st%nst, 1:st%nst))
-    SAFE_ALLOCATE( ii(1:st%nst, 1:st%nst))
+    SAFE_ALLOCATE( xb(1:st%nst, 1:st%nst))
     SAFE_ALLOCATE(xxi(1:st%nst, 1:st%nst))
-
-    do ist1 = 1, st%nst
-      do ist2 = 1, st%nst
-        ii(ist1, ist2) = ddelta(ist1, ist2)
-      end do
-    end do
 
     call X(states_calc_overlap)(st, gr%mesh, ik, aa)
     call X(states_calc_overlap)(st, gr%mesh, ik, bb, psi2 = oldpsi)
+    do ist1 = 1, st%nst
+      aa(ist1, ist1) = aa(ist1, ist1) - M_ONE
+      bb(ist1, ist1) = bb(ist1, ist1) - M_ONE
+    end do    
 
-    xx = M_HALF*(ii - aa) !(4.6)
+    xx = -M_HALF * aa !(4.6)
 
     do it = 1, 10
-      xxi = M_HALF*(ii - aa + matmul(xx, ii - bb) + matmul(ii - transpose(bb), xx) - matmul(xx, xx)) !(4.5)
+      xxi = aa
+      call lalg_gemm(st%nst, st%nst, st%nst, R_TOTYPE(-M_HALF), xx, xx, R_TOTYPE(-M_HALF), xxi)
+      call lalg_gemm(st%nst, st%nst, st%nst, R_TOTYPE(-M_HALF), xx, bb, R_TOTYPE(M_ZERO), xb)
+      xxi = xxi + xb + R_CONJ(transpose(xb))
+    ! from eq. 4.5 in the paper, where we redefined aa and bb here to include the delta function, and rearranged to optimize
+    ! xxi = M_HALF*(ii - aa + matmul(xx, ii - bb) + matmul(ii - R_CONJ(transpose(bb)), xx) - matmul(xx, xx)) !(4.5)
       res = maxval(abs(xxi - xx))
       xx = xxi
       if (res < CNST(1e-5)) exit
@@ -188,7 +190,7 @@ contains
 
     SAFE_DEALLOCATE_A(aa)
     SAFE_DEALLOCATE_A(bb)
-    SAFE_DEALLOCATE_A(ii)
+    SAFE_DEALLOCATE_A(xb)
     SAFE_DEALLOCATE_A(xxi)
 
     POP_SUB(X(cpmd_propagate).calc_xx)
@@ -243,7 +245,7 @@ subroutine X(cpmd_propagate_vel)(this, gr, hm, st, dt)
     call calc_yy()
 
     ! psi2 <= psi2 + Y * psi
-    call states_block_matr_mul_add(gr%mesh, st, one, st%st_start, st%st_end, st%st_start, st%st_end, &
+    call states_block_matr_mul_add(gr%mesh, st, one, st%st_start, st%st_start, &
       st%X(psi)(:, :, :, ik), yy, one, this%X(psi2)(:, :, :, ik)) !(4.11)
 
     call calc_yy()
@@ -270,7 +272,7 @@ contains
 
     call X(states_calc_overlap)(st, gr%mesh, ik, cc, psi2 = this%X(psi2)(:, :, :, ik))
 
-    yy = -M_HALF*(cc + transpose(cc))
+    yy = -M_HALF*(cc + R_CONJ(transpose(cc))) !(4.12)
 
     SAFE_DEALLOCATE_A(cc)
     POP_SUB(X(cpmd_propagate_vel).calc_yy)

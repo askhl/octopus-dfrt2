@@ -1,4 +1,4 @@
-!! Copyright (C) 2005-2006 M. Marques, X. Andrade
+!! Copyright (C) 2005-2012 M. Marques, X. Andrade, David Strubbe
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -18,9 +18,8 @@
 !! $Id: sternheimer_inc.F90 2663 2007-01-25 09:04:29Z lorenzen $
 
 !--------------------------------------------------------------
-! This routine calculates the first-order variations of the wavefunctions 
-! for an applied perturbation.
-!--------------------------------------------------------------
+!> This routine calculates the first-order variations of the wavefunctions 
+!! for an applied perturbation.
 subroutine X(sternheimer_solve)(                           &
      this, sys, hm, lr, nsigma, omega, perturbation,       &
      restart_dir, rho_tag, wfs_tag, have_restart_rho, have_exact_freq)
@@ -124,7 +123,7 @@ subroutine X(sternheimer_solve)(                           &
        call lalg_copy(mesh%np, lr(1)%X(dl_rho)(:, ispin), dl_rhoin(:, ispin, 1))
     end do
 
-    call X(sternheimer_calc_hvar)(this, sys, hm, lr, nsigma, hvar)
+    call X(sternheimer_calc_hvar)(this, sys, lr, nsigma, hvar)
 
     SAFE_ALLOCATE(psi(1:sys%gr%mesh%np, 1:sys%st%d%dim))
 
@@ -182,7 +181,7 @@ subroutine X(sternheimer_solve)(                           &
             ! project RHS onto the unoccupied states
             call X(lr_orth_vector)(mesh, st, rhs(:, :, sigma), ist, ik, omega_sigma)
           endif
-        
+
           !solve the Sternheimer equation
           call X(solve_HXeY)(this%solver, hm, sys%gr, sys%st, ist, ik, &
                lr(sigma)%X(dl_psi)(1:mesh%np_part, 1:st%d%dim, ist, ik), &
@@ -343,13 +342,12 @@ end subroutine X(sternheimer_solve)
 
 
 !--------------------------------------------------------------
-subroutine X(sternheimer_calc_hvar)(this, sys, hm, lr, nsigma, hvar)
+subroutine X(sternheimer_calc_hvar)(this, sys, lr, nsigma, hvar)
   type(sternheimer_t),    intent(inout) :: this
   type(system_t),         intent(inout) :: sys
-  type(hamiltonian_t),    intent(inout) :: hm
   type(lr_t),             intent(inout) :: lr(:) 
   integer,                intent(in)    :: nsigma 
-  R_TYPE,                 intent(out)   :: hvar(:,:,:)
+  R_TYPE,                 intent(out)   :: hvar(:,:,:) !< (1:mesh%np, 1:st%d%nspin, 1:nsigma)
 
   R_TYPE, allocatable :: tmp(:), hartree(:)
   integer :: np, ip, ispin, ispin2
@@ -448,7 +446,7 @@ subroutine X(sternheimer_solve_order2)( &
   R_TYPE,       optional, intent(in)    :: give_pert1psi2(:,:,:,:)
 
   integer :: isigma, ik, ist, idim, ispin
-  R_TYPE :: dl_eig1, dl_eig2, proj
+  R_TYPE :: dl_eig1, dl_eig2
   R_TYPE, allocatable :: inhomog(:,:,:,:,:), hvar1(:,:,:), hvar2(:,:,:), &
     pert1psi2(:,:), pert2psi1(:,:), pert1psi(:,:), pert2psi(:,:)
   R_TYPE, allocatable :: psi(:, :)
@@ -471,8 +469,8 @@ subroutine X(sternheimer_solve_order2)( &
   SAFE_ALLOCATE(pert2psi(1:mesh%np, 1:st%d%dim))
   SAFE_ALLOCATE(psi(1:mesh%np, 1:st%d%dim))
 
-  call X(sternheimer_calc_hvar)(sh1, sys, hm, lr1, nsigma, hvar1)
-!  call X(sternheimer_calc_hvar)(sh2, sys, hm, lr2, nsigma, hvar2)
+  call X(sternheimer_calc_hvar)(sh1, sys, lr1, nsigma, hvar1)
+!  call X(sternheimer_calc_hvar)(sh2, sys, lr2, nsigma, hvar2)
 ! for kdotp, hvar = 0
   hvar2 = M_ZERO
 

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: unit_system.F90 9241 2012-08-22 03:04:36Z dstrubbe $
+!! $Id: unit_system.F90 9391 2012-09-11 04:22:41Z xavier $
 
 
 
@@ -70,6 +70,9 @@ module unit_system_m
   type(unit_t),        public :: unit_susc_ppm_cgs  !< Some magnetic stuff.
   type(unit_t),        public :: unit_kelvin        !< For converting energies into temperatures.
   type(unit_t),        public :: unit_femtosecond   !< Time in femtoseconds.
+  type(unit_t),        public :: unit_kilobytes     !< For small amounts of data (natural code units are bytes)
+  type(unit_t),        public :: unit_megabytes     !< For large amounts of data (natural code units are bytes)
+  type(unit_t),        public :: unit_gigabytes     !< For larger amounts of data (natural code units are bytes)
 
   integer, parameter, public :: UNITS_ATOMIC = 0, UNITS_EVA = 1, UNITS_FS = 2
 
@@ -189,6 +192,18 @@ contains
     unit_femtosecond%factor = CNST(1.0)/CNST(0.024188843)
     unit_femtosecond%abbrev = 'fs'
     unit_femtosecond%name   = 'femtoseconds'
+
+    unit_kilobytes%factor = CNST(1024.0)**2
+    unit_kilobytes%abbrev = 'kb'
+    unit_kilobytes%name   = 'kilobytes'
+
+    unit_megabytes%factor = CNST(1024.0)**2
+    unit_megabytes%abbrev = 'Mb'
+    unit_megabytes%name   = 'megabytes'
+
+    unit_gigabytes%factor = CNST(1024.0)**2
+    unit_gigabytes%abbrev = 'Gb'
+    unit_gigabytes%name   = 'gigabytes'
 
     call unit_system_get(units_inp, mod(cinp, 2))
     call unit_system_get(units_out, mod(cout, 2))

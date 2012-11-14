@@ -31,7 +31,6 @@ module eigensolver_m
   use global_m
   use grid_m
   use hamiltonian_m
-  use kpoints_m
   use lalg_adv_m
   use lalg_basic_m
   use loct_m
@@ -61,7 +60,6 @@ module eigensolver_m
     eigensolver_end,   &
     eigensolver_run
 
-
   type eigensolver_t
     integer :: es_type    !< which eigensolver to use
 
@@ -70,8 +68,8 @@ module eigensolver_m
     FLOAT   :: tolerance
     integer :: es_maxiter
 
-    type(eigen_arpack_t) :: arpack !< arpack solver
-    
+    type(eigen_arpack_t) :: arpack !< arpack solver !!!
+    integer :: arnoldi_vectors
     FLOAT   :: imag_time
 
     !> Stores information about how well it performed.
@@ -123,10 +121,12 @@ contains
     !%Option cg 5
     !% Conjugate-gradients algorithm.
     !%Option plan 11
-    !% Preconditioned Lanczos scheme.
+    !% Preconditioned Lanczos scheme. Ref: Y. Saad, A. Stathopoulos, J. Chelikowsky, K. Wu and S. Ogut,
+    !% "Solution of Large Eigenvalue Problems in Electronic Structure Calculations", <i>BIT</i> <b>36</b>, 1 (1996).
     !%Option cg_new 6
     !% An alternative conjugate-gradients eigensolver, faster for
     !% larger systems but less mature.
+    !% Ref: Jiang et al., <i>Phys. Rev. B</i> <b>68</b>, 165337 (2003)
     !%Option evolution 9
     !% Propagation in imaginary time. WARNING: Sometimes it misbehaves. Use with 
     !% caution.
@@ -148,8 +148,10 @@ contains
     !%Option multigrid 7
     !% (Experimental) Multigrid eigensolver.
     !%Option arpack 12
-    !% Implicitly Restarted Arnoldi Method. Requires the ARPACK package. 
-    !% method.
+    !% Implicitly Restarted Arnoldi Method. Requires the ARPACK package.
+    !%Option direct 14
+    !% Direct eigensolver. Experimental, and only implemented for complex
+    !% wavefunctions.
     !%End
 
     if(st%parallel_in_states) then
@@ -166,8 +168,6 @@ contains
       call messages_fatal(2)
     end if
 
-    call messages_print_var_option(stdout, "Eigensolver", eigens%es_type)
-    
     call messages_obsolete_variable('EigensolverVerbose')
 
     !%Variable EigensolverSubspaceDiag
@@ -190,6 +190,8 @@ contains
     case(RS_CG)
     case(RS_PLAN)
     case(RS_DIRECT)
+      if(states_are_real(st)) call messages_not_implemented("direct eigensolver for real wavefunctions")
+      call messages_experimental("direct eigensolver")
     case(RS_EVO)
       !%Variable EigensolverImaginaryTime
       !%Type float
@@ -221,17 +223,30 @@ contains
 
       if(gr%mesh%use_curvilinear) call messages_experimental("RMMDIIS eigensolver for curvilinear coordinates")
 
-
+#if defined(HAVE_ARPACK) 
     case(RS_ARPACK) 
-
+      	 	 
+      !%Variable EigensolverArnoldiVectors 
+      !%Type integer 
+      !%Default 20 
+      !%Section SCF::Eigensolver
+      !%Description 
+      !% For <tt>Eigensolver = arpack</tt>, this indicates how many Arnoldi vectors are generated.
+      !% It must satisfy <tt>EigensolverArnoldiVectors</tt> - Number Of Eigenvectors >= 2. 
+      !% See the ARPACK documentation for more details. It will default to  
+      !% twice the number of eigenvectors (which is the number of states) 
+      !%End 
+      call parse_integer(datasets_check('EigensolverArnoldiVectors'), 2*st%nst, eigens%arnoldi_vectors) 
+      if(eigens%arnoldi_vectors-st%nst < (M_TWO - st%nst)) call input_error('EigensolverArnoldiVectors') 
+      	 	 
       ! Arpack is not working in some cases, so let us check. 
       if(st%d%ispin .eq. SPINORS) then 
         write(message(1), '(a)') 'The ARPACK diagonalizer does not handle spinors (yet).' 
-        write(message(2), '(a)') 'Please provide a different EigenSolver.' 
+        write(message(2), '(a)') 'Please provide a different Eigensolver.' 
         call messages_fatal(2) 
       end if 
-      
-      call arpack_init(eigens%arpack, gr, st%nst)   
+
+      call arpack_init(eigens%arpack, gr, st%nst)
 
       !Some default values 
       eigens%subspace_diag = .false. ! no need of subspace diagonalization in this case
@@ -239,10 +254,12 @@ contains
       default_tol = M_ZERO ! default is machine precision   
 
 
+#endif 
+
     case default
       call input_error('Eigensolver')
     end select
-
+    call messages_print_var_option(stdout, "Eigensolver", eigens%es_type)
 
     call messages_obsolete_variable('EigensolverInitTolerance', 'EigensolverTolerance')
     call messages_obsolete_variable('EigensolverFinalTolerance', 'EigensolverTolerance')
@@ -253,7 +270,8 @@ contains
     !%Default 1.0e-6
     !%Section SCF::Eigensolver
     !%Description
-    !% This is the tolerance for the eigenvectors. The default is 1e-6.
+    !% This is the tolerance for the eigenvectors. The default is 1e-6
+    !% except for the ARPACK solver for which it is 0.
     !%End
     call parse_float(datasets_check('EigensolverTolerance'), default_tol, eigens%tolerance)
 
@@ -292,9 +310,14 @@ contains
 
     SAFE_ALLOCATE(eigens%converged(1:st%d%nik))
     eigens%converged(1:st%d%nik) = 0
-    eigens%matvec    = 0
+    eigens%matvec = 0
     
-    if (eigens%subspace_diag) call subspace_init(eigens%sdiag, st)
+    if(eigens%subspace_diag) then
+      call subspace_init(eigens%sdiag, st)
+    else
+      message(1) = "No subspace diagonalization will be done."
+      call messages_info(1)
+    endif
         
     POP_SUB(eigensolver_init)
 
@@ -330,15 +353,13 @@ contains
     integer,              intent(in)    :: iter
     logical,    optional, intent(inout) :: conv
 
-    integer :: maxiter, ik, ns, idir
-    FLOAT :: kpoint(1:MAX_DIM)
+    integer :: maxiter, ik, ns, ist
 #ifdef HAVE_MPI
     logical :: conv_reduced
-    integer :: outcount, ist
+    integer :: outcount
     FLOAT, allocatable :: ldiff(:), leigenval(:)
 #endif
     type(profile_t), save :: prof
-    character(len=100) :: str_tmp
 
     call profiling_in(prof, "EIGEN_SOLVER")
     PUSH_SUB(eigensolver_run)
@@ -375,6 +396,8 @@ contains
         case(RS_CG)
           call deigensolver_cg2(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
                eigens%converged(ik), ik, eigens%diff(:, ik))
+        case(RS_DIRECT)
+          call messages_not_implemented("direct eigensolver for real wavefunctions")
         case(RS_PLAN)
           call deigensolver_plan(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, eigens%converged(ik), ik, eigens%diff(:, ik))
         case(RS_EVO)
@@ -384,24 +407,22 @@ contains
           call deigensolver_lobpcg(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
                eigens%converged(ik), ik, eigens%diff(:, ik), hm%d%block_size)
         case(RS_MG)
-          call deigensolver_mg(gr%der, st, hm, eigens%sdiag, eigens%tolerance, maxiter, &
-            eigens%converged(ik), ik, eigens%diff(:, ik))
+          call deigensolver_mg(gr%der, st, hm, eigens%sdiag, maxiter, ik, eigens%diff(:, ik))
         case(RS_RMMDIIS)
           if(iter <= eigens%rmmdiis_minimization_iter) then
-            call deigensolver_rmmdiis_min(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
-              eigens%converged(ik), ik)
+            call deigensolver_rmmdiis_min(gr, st, hm, eigens%pre, maxiter, eigens%converged(ik), ik)
           else
             call deigensolver_rmmdiis(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
               eigens%converged(ik), ik, eigens%diff(:, ik))
           end if
-#if defined(HAVE_ARPACK) 
- 	      case(RS_ARPACK) 
- 	        call deigen_solver_arpack(eigens%arpack, gr, st, hm, eigens%tolerance, maxiter, & 
- 	             eigens%converged(ik), ik, eigens%diff(:,ik)) 
+#if defined(HAVE_ARPACK)
+        case(RS_ARPACK)
+          call deigen_solver_arpack(eigens%arpack, gr, st, hm, eigens%tolerance, maxiter, & 
+            eigens%converged(ik), ik, eigens%diff(:,ik)) 
 #endif 
         end select
 
-        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS) then
+        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and. eigens%es_type /= RS_ARPACK) then
           call dsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
         end if
 
@@ -413,7 +434,7 @@ contains
         case(RS_CG)
           call zeigensolver_cg2(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, eigens%converged(ik), ik, eigens%diff(:, ik))
         case(RS_DIRECT)
-           call eigensolver_direct(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, eigens%converged(ik), ik, eigens%diff(:, ik))
+           call eigensolver_direct(gr, st, hm, maxiter, eigens%converged(ik), ik, eigens%diff(:, ik))
         case(RS_PLAN)
           call zeigensolver_plan(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
                eigens%converged(ik), ik, eigens%diff(:, ik))
@@ -424,37 +445,45 @@ contains
           call zeigensolver_lobpcg(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
             eigens%converged(ik), ik, eigens%diff(:, ik), hm%d%block_size)
         case(RS_MG)
-          call zeigensolver_mg(gr%der, st, hm, eigens%sdiag, eigens%tolerance, maxiter, &
-            eigens%converged(ik), ik, eigens%diff(:, ik))
+          call zeigensolver_mg(gr%der, st, hm, eigens%sdiag, maxiter, ik, eigens%diff(:, ik))
         case(RS_RMMDIIS)
           if(iter <= eigens%rmmdiis_minimization_iter) then
-            call zeigensolver_rmmdiis_min(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
-              eigens%converged(ik), ik)
+            call zeigensolver_rmmdiis_min(gr, st, hm, eigens%pre, maxiter, eigens%converged(ik), ik)
           else
             call zeigensolver_rmmdiis(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
               eigens%converged(ik), ik,  eigens%diff(:, ik))
           end if         
 #if defined(HAVE_ARPACK) 
        	case(RS_ARPACK) 
- 	        call zeigen_solver_arpack(eigens%arpack, gr, st, hm, eigens%tolerance, maxiter, & 
- 	             eigens%converged(ik), ik, eigens%diff(:,ik)) 
+          call zeigen_solver_arpack(eigens%arpack, gr, st, hm, eigens%tolerance, maxiter, & 
+            eigens%converged(ik), ik, eigens%diff(:,ik)) 
 #endif 
         end select
 
-        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and. eigens%es_type /= RS_DIRECT ) then
+        if(eigens%subspace_diag.and.eigens%es_type /= RS_RMMDIIS .and.eigens%es_type /= RS_ARPACK &
+          .and.eigens%es_type /= RS_DIRECT ) then
           call zsubspace_diag(eigens%sdiag, gr%der, st, hm, ik, st%eigenval(:, ik), eigens%diff(:, ik))
-         
         end if
 
       end if
 
+      ! recheck convergence after subspace diagonalization, since states may have reordered
+      eigens%converged(ik) = 0
+      do ist = 1, st%nst
+        if(eigens%diff(ist, ik) < eigens%tolerance) then
+          eigens%converged(ik) = ist
+        else
+          exit
+        endif
+      enddo
+
       eigens%matvec = eigens%matvec + maxiter
     end do ik_loop
     
-    ! If we complex scale H the eigenstates need to be otrhonormalized with respect to the c-product.
+    ! If we complex scale H the eigenstates need to be orthonormalized with respect to the c-product.
     ! Moreover the eigenvalues ordering need to be imposed as there is no eigensolver 
     ! supporting this ordering (yet).
-    if(hm%cmplxscl) then !cmplxscl
+    if(hm%cmplxscl) then
       call states_sort_complex(gr%mesh, st, eigens%diff, hm%cmplxscl_th)
       call states_orthogonalize_cproduct(st, gr%mesh)
     end if
@@ -540,6 +569,14 @@ contains
 #include "eigen_plan_inc.F90"
 #include "eigen_evolution_inc.F90"
 
+!#if defined(HAVE_ARPACK) 
+!#include "undef.F90" 
+!#include "real.F90" 
+!#include "eigen_arpack_inc.F90" 
+!#include "undef.F90" 
+!#include "complex.F90" 
+!#include "eigen_arpack_inc.F90" 
+!#endif 
 
 end module eigensolver_m
 

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 05-adw.test 9187 2012-07-08 11:22:44Z acastro $
+# $Id: 05-adw.test 9601 2012-11-12 23:24:24Z dstrubbe $
 
 Test       : 1D Asymmetric Double Well
-Programs   : octopus
+Programs   : octopus; octopus_mpi
 TestGroups : long-run, oct
 Enabled    : Yes
 

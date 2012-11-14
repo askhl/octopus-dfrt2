@@ -74,7 +74,12 @@ double bessel_K0_scaled(const double x);
 double bessel_K0(const double x);
 double bessel_K1_scaled(const double x);
 double bessel_K1(const double x);
-double expint_e1(const double x);
+
+double expint_e1_impl(const double x, const int scale);
+static inline double expint_e1(const double x)         { return  expint_e1_impl( x, 0); }
+static inline double expint_e1_scaled(const double x)  { return  expint_e1_impl( x, 1); }
+static inline double expint_Ei(const double x)         { return -expint_e1_impl(-x, 0); }
+static inline double expint_Ei_scaled(const double x)  { return -expint_e1_impl(-x, 1); }
 
 /* integration */
 typedef void integr_fn(FLOAT *x, int n, void *ex);
@@ -139,13 +144,16 @@ void XC(lda_c_pw_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
 void XC(lda_c_pz_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
 
 /* GGAs */
+void work_gga_becke_init(XC(func_type) *p);
 
 /* exchange enhancement factors: if you add one, please add it also to the gga_x_ityh.c */
 void XC(gga_x_wc_enhance)  (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 void XC(gga_x_pbe_enhance) (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
+void XC(gga_x_pw91_enhance)(const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 void XC(gga_x_rpbe_enhance)(const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 void XC(gga_x_htbs_enhance)(const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 void XC(gga_x_b88_enhance) (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
+void XC(gga_x_g96_enhance) (const XC(func_type) *p, int order, FLOAT x, FLOAT *f, FLOAT *dfdx, FLOAT *d2fdx2);
 
 /* correlation functions */
 

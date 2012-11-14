@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: main.F90 8798 2012-01-24 18:03:44Z joseba $
+!! $Id: main.F90 9335 2012-09-05 18:34:09Z dstrubbe $
 
 #include "global.h"
 
@@ -39,7 +39,6 @@ program octopus
 
   integer :: ns, inp_calc_mode, ierr
   type(block_t) :: blk
-  character(len=256) :: sys_name
 
   call getopt_init(ierr)
   if(ierr .eq. 0) call getopt_octopus()

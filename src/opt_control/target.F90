@@ -23,7 +23,9 @@ module opt_control_target_m
   use datasets_m
   use density_m
   use derivatives_m
+  use epot_m
   use excited_states_m
+  use forces_m
   use geometry_m
   use global_m
   use grid_m
@@ -141,7 +143,7 @@ module opt_control_target_m
 
   ! ----------------------------------------------------------------------
   !> The target is initialized, mainly by reading from the inp file.
-  subroutine target_init(gr, geo, stin, td, w0, target, oct)
+  subroutine target_init(gr, geo, stin, td, w0, target, oct, ep)
     type(grid_t),     intent(in)    :: gr
     type(geometry_t), intent(in)    :: geo
     type(states_t),   intent(inout) :: stin 
@@ -149,6 +151,7 @@ module opt_control_target_m
     FLOAT,            intent(in)    :: w0
     type(target_t),   intent(inout) :: target
     type(oct_t),      intent(in)    :: oct
+    type(epot_t),     intent(inout) :: ep
 
     integer             :: ierr, ip, ist, jst, jj, iatom, ib, idim, inst, inik, &
                            id, ik, no_states, no_constraint, no_ptpair, cstr_dim(MAX_DIM)
@@ -412,7 +415,7 @@ module opt_control_target_m
       if(parse_isdef('OCTTargetDensity').ne.0) then
         SAFE_ALLOCATE(target%rho(1:gr%mesh%np))
         target%rho = M_ZERO
-        call parse_string('OCTTargetDensity', "0", expression)
+        call parse_string(datasets_check('OCTTargetDensity'), "0", expression)
 
 
         if(trim(expression) .eq. 'OCTTargetDensityFromState') then
@@ -475,7 +478,7 @@ module opt_control_target_m
       if(parse_isdef('OCTLocalTarget') .ne. 0) then
         SAFE_ALLOCATE(target%rho(1:gr%mesh%np))
         target%rho = M_ZERO
-        call parse_string('OCTLocalTarget', "0", expression)
+        call parse_string(datasets_check('OCTLocalTarget'), "0", expression)
         call conv_to_C_string(expression)
         do ip = 1, gr%mesh%np
           call mesh_r(gr%mesh, ip, rr, coords = xx)
@@ -572,7 +575,7 @@ module opt_control_target_m
       !%Description
       !% If <tt>OCTTargetOperator = oct_tg_velocity</tt>, then one must supply the 
       !% target to optimize in terms of the ionic velocities. This is done by 
-      !% supplying a string trough the block <tt>OCTVelocityTarget</tt>.
+      !% supplying a string through the block <tt>OCTVelocityTarget</tt>.
       !% Each velocity component is supplied by <tt>"v[n_atom,vec_comp]"</tt>,
       !% while "n_atom" is the respective atom number, corresponding to the 
       !% <tt>Coordinates</tt> block and "vec_comp" is the corresponding
@@ -596,7 +599,7 @@ module opt_control_target_m
       !% <tt>OCTScheme = oct_algorithm_cg</tt> then you must supply 
       !% the target in terms of the ionic velocities AND the derivatives
       !% of the target with respect to the ionic velocity components.
-      !% The derivatives are supplied via strings trough the block
+      !% The derivatives are supplied via strings through the block
       !% <tt>OCTVelocityDerivatives</tt>.
       !% Each velocity component is supplied by <tt>"v[n_atom,vec_comp]"</tt>,
       !% while "n_atom" is the atom number, corresponding to the 
@@ -643,7 +646,7 @@ module opt_control_target_m
           message(2) = 'the variable "OCTMoveIons".'
           call messages_fatal(2)
        else
-          call parse_logical('OCTMoveIons', .false., target%move_ions)
+          call parse_logical(datasets_check('OCTMoveIons'), .false., target%move_ions)
        end if
        
        if(oct%algorithm .eq. oct_algorithm_cg) then
@@ -670,7 +673,7 @@ module opt_control_target_m
           do iatom=1, geo%natoms
              vl(:) = M_ZERO
              vl_grad(:,:) = M_ZERO
-             call species_get_local(geo%atom(iatom)%spec, gr%mesh, geo%atom(iatom)%x(1:gr%sb%dim), vl)
+             call epot_local_potential(ep, gr%der, gr%dgrid, geo, iatom, vl)
              call dderivatives_grad(gr%der, vl, vl_grad)
              forall(ist=1:gr%mesh%np, jst=1:gr%sb%dim)
                 target%grad_local_pot(iatom, ist, jst) = vl_grad(ist, jst)
@@ -678,22 +681,18 @@ module opt_control_target_m
           end do
           SAFE_DEALLOCATE_A(vl)
           SAFE_DEALLOCATE_A(vl_grad)
+
+          ! Note that the calculation of the gradient of the potential
+          ! is wrong at the borders of the box, since it assumes zero boundary
+          ! conditions. The best way to solve this problems is to define the 
+          ! target making use of the definition of the forces based on the gradient
+          ! of the density, rather than on the gradient of the potential.
           
-          ! fix gradient jump on boundary - PRELIMINARY
-          stencil_size = (real(gr%der%order+1)*gr%mesh%spacing(1))**2
-          do ist=1, gr%mesh%np
-             do jst=gr%mesh%np, gr%mesh%np_part
-                point_dist = M_ZERO
-                do ip=1, MAX_DIM
-                   point_dist = point_dist +(gr%mesh%x(ist,ip)-gr%mesh%x(jst,ip))**2
-                end do
-                if(point_dist < stencil_size) then
-                   target%grad_local_pot(1:geo%natoms, ist, 1:gr%sb%dim) = M_ZERO
-                   exit
-                end if
-             end do
-          end do
        end if
+
+       target%dt = td%dt
+       SAFE_ALLOCATE(target%td_fitness(0:td%max_iter))
+       target%td_fitness = M_ZERO
        
     case(oct_tg_current)
       message(1) =  'Info: Target is a current.'
@@ -732,12 +731,12 @@ module opt_control_target_m
       !% Maximizes the current of a quantum ring in one direction. The functional maximizes the z projection of the 
       !% outer product between the position \vec{r} and the current \vec{j}: 
       !% J1[j] = <tt>OCTCurrentWeight</tt>*\int (\vec{r} \times \vec{j}) \hat{z} dr. For <tt>OCTCurrentWeight</tt> .GT. 0. the
-      !% current flows in counter clockwise direction, while for <tt>OCTCurrentWeight</tt> .LT. 0 the current is clockwise.
+      !% current flows in counter-clockwise direction, while for <tt>OCTCurrentWeight</tt> .LT. 0 the current is clockwise.
       !%Option oct_curr_square_td 3
       !% The time dependent version of <tt>oct_curr_square</tt>. In fact, calculates the 
       !% square of current in time interval [<tt>OCTStartTimeCurrTg</tt>, 
       !% total time = <tt>TDMaximumIter</tt> * <tt>TDTimeStep</tt>]. 
-      !% Set <tt>TDPropagator </tt> = <tt>crank_nicholson</tt>  
+      !% Set <tt>TDPropagator</tt> = <tt>crank_nicholson</tt>  
       !%End 
 
       !%Variable OCTCurrentWeight
@@ -985,19 +984,20 @@ module opt_control_target_m
   !> Calculates, at a given point in time marked by the integer
   !! index, the integrand of the target functional:
   !! <Psi(t)|\hat{O}(t)|Psi(t)>.
-  subroutine target_tdcalc(target, hm, gr, geo, psi, time)
+  subroutine target_tdcalc(target, hm, gr, geo, psi, time, max_time)
     type(target_t),      intent(inout) :: target
     type(hamiltonian_t), intent(inout) :: hm
     type(grid_t),        intent(inout) :: gr
     type(geometry_t),    intent(inout) :: geo
     type(states_t),      intent(inout) :: psi
     integer,             intent(in)    :: time
+    integer,             intent(in)    :: max_time
 
     CMPLX, allocatable :: opsi(:, :)
     integer :: ist, ip
-    FLOAT :: acc(MAX_DIM)
+    FLOAT :: acc(MAX_DIM), dt
+    integer :: iatom, idim, ik
 
-    if(target_type(target)  .eq. oct_tg_velocity) return
     if(target_mode(target)  .ne. oct_targetmode_td) return
 
     PUSH_SUB(target_tdcalc)
@@ -1005,6 +1005,37 @@ module opt_control_target_m
     target%td_fitness(time) = M_ZERO
 
     select case(target%type)
+    case(oct_tg_velocity)
+
+      ! If the ions move, the target is computed in the propagation routine.
+      if(.not.target_move_ions(target)) then
+
+      SAFE_ALLOCATE(opsi(1:gr%mesh%np_part, 1:1))
+      opsi = M_z0
+      ! WARNING This does not work for spinors.
+      do iatom = 1, geo%natoms
+        geo%atom(iatom)%f(1:gr%sb%dim) = hm%ep%fii(1:gr%sb%dim, iatom)
+        do ik = 1, psi%d%nik
+          do ist = 1, psi%nst
+            do idim = 1, gr%sb%dim
+              opsi(1:gr%mesh%np, 1) = target%grad_local_pot(iatom, 1:gr%mesh%np, idim) * psi%zpsi(1:gr%mesh%np, 1, ist, ik)
+              geo%atom(iatom)%f(idim) = geo%atom(iatom)%f(idim) + psi%occ(ist, ik) * &
+                zmf_dotp(gr%mesh, psi%d%dim, opsi, psi%zpsi(:, :, ist, ik))
+            end do
+          end do
+        end do
+      end do
+      SAFE_DEALLOCATE_A(opsi)
+
+      end if
+
+      dt = target%dt
+      if( (time .eq. 0) .or. (time .eq. max_time) ) dt = target%dt * M_HALF
+      do iatom = 1, geo%natoms
+         geo%atom(iatom)%v(1:MAX_DIM) = geo%atom(iatom)%v(1:MAX_DIM) + &
+           geo%atom(iatom)%f(1:MAX_DIM) * dt / species_weight(geo%atom(iatom)%spec)
+      end do
+
     case(oct_tg_td_local)
 
       !!!! WARNING Here one should build the time-dependent target.
@@ -1069,13 +1100,13 @@ module opt_control_target_m
     case(oct_tg_td_local)
       call target_build_tdlocal(target, gr, time)
       forall(ik = 1:inh%d%nik, ist = inh%st_start:inh%st_end, idim = 1:inh%d%dim, ip = 1:gr%mesh%np)
-        inh%zpsi(ip, idim, ist, ik) = -target%rho(ip) * psi%zpsi(ip, idim, ist, ik)
+        inh%zpsi(ip, idim, ist, ik) = - psi%occ(ist, ik) * target%rho(ip) * psi%zpsi(ip, idim, ist, ik)
       end forall
       
     case(oct_tg_velocity)
       ! set -(dF/dn)*psi_j as inhomogenous term --> !!! D_KS(r,t) is not implemented yet !!!
       forall(ik = 1:inh%d%nik, ist = inh%st_start:inh%st_end, idim = 1:inh%d%dim, ip = 1:gr%mesh%np)
-         inh%zpsi(ip, idim, ist, ik) = -target%rho(ip) * psi%zpsi(ip, idim, ist, ik)
+         inh%zpsi(ip, idim, ist, ik) = - psi%occ(ist, ik) * target%rho(ip) * psi%zpsi(ip, idim, ist, ik)
       end forall
    
     case(oct_tg_current, oct_tg_density)
@@ -1129,7 +1160,6 @@ module opt_control_target_m
     FLOAT :: omega, aa, maxhh, ww, currfunc_tmp
     FLOAT, allocatable :: local_function(:)
     CMPLX, allocatable :: ddipole(:)
-    CMPLX, allocatable :: opsi(:, :)
     FLOAT :: f_re, dummy(3)
     character(len=4096) :: inp_string
 
@@ -1182,7 +1212,7 @@ module opt_control_target_m
       do jj = 1, target%hhg_nks
         aa = target%hhg_a(jj) * target%hhg_w0
         ww = target%hhg_k(jj) * target%hhg_w0
-        call spectrum_hsfunction_min(ww - aa, ww + aa, ww, omega, maxhh)
+        call spectrum_hsfunction_min(ww - aa, ww + aa, omega, maxhh)
         j1 = j1 + target%hhg_alpha(jj) * log(-maxhh)
       end do
       call spectrum_hsfunction_end()
@@ -1279,7 +1309,7 @@ module opt_control_target_m
           do ist = psi_in%st_start, psi_in%st_end
             do ip = 1, gr%mesh%np
               if(psi_in%rho(ip, 1) > CNST(1.0e-8)) then
-                chi_out%zpsi(ip, 1, ist, 1) = sqrt(target%rho(ip) / psi_in%rho(ip, 1)) * &
+                chi_out%zpsi(ip, 1, ist, 1) = psi_in%occ(ist, 1) * sqrt(target%rho(ip) / psi_in%rho(ip, 1)) * &
                   psi_in%zpsi(ip, 1, ist, 1)
               else
                 chi_out%zpsi(ip, 1, ist, 1) = M_ZERO !sqrt(target%rho(ip))
@@ -1301,7 +1331,7 @@ module opt_control_target_m
         do idim = 1, psi_in%d%dim
           do ist = psi_in%st_start, psi_in%st_end
             do ip = 1, gr%mesh%np
-              chi_out%zpsi(ip, idim, ist, ik) = target%rho(ip) * psi_in%zpsi(ip, idim, ist, ik)
+              chi_out%zpsi(ip, idim, ist, ik) = psi_in%occ(ist, ik) * target%rho(ip) * psi_in%zpsi(ip, idim, ist, ik)
             end do
           end do
         end do

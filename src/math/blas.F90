@@ -15,22 +15,26 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: blas.F90 8758 2012-01-11 10:44:15Z joseba $
+!! $Id: blas.F90 9588 2012-11-09 11:31:08Z joseba $
 
 #include "global.h"
 
 ! -----------------------------------------------------------------------
 !> This module contains interfaces for BLAS routines
 !! You should not use these routines directly. Please use the lalg_XXXX
-!! -----------------------------------------------------------------------
+! -----------------------------------------------------------------------
 module blas_m
+
   implicit none
+
+  public ! only interfaces in this module
 
   ! ---------------------------------------------------------------------
   ! BLAS level I
   ! ---------------------------------------------------------------------
 
   !> ----------------- swap ------------------
+  !! Interchanges two vectors.
   interface blas_swap
     subroutine sswap(n, dx, incx, dy, incy)
       integer,    intent(in)    :: n, incx, incy
@@ -51,9 +55,10 @@ module blas_m
       integer,    intent(in)    :: n, incx, incy
       complex(8), intent(inout) :: dx, dy !< dx(n), dy(n)
     end subroutine zswap
-  end interface
+  end interface blas_swap
 
   !> ----------------- scal ------------------
+  !! Scales a vector by a constant.
   interface blas_scal
     subroutine sscal(n, da, dx, incx)
       integer,    intent(in)    :: n, incx
@@ -90,9 +95,10 @@ module blas_m
       real(4),    intent(in)    :: da
       complex(4), intent(inout) :: dx !< dx(n)
     end subroutine sazscal
-  end interface
+  end interface blas_scal
 
   !> ----------------- axpy ------------------
+  !! Constant times a vector plus a vector.
   interface blas_axpy
     subroutine saxpy (n, da, dx, incx, dy, incy)
       integer,    intent(in)    :: n, incx, incy
@@ -131,9 +137,10 @@ module blas_m
       complex(4), intent(in)    :: dx     !< dx(n)
       complex(4), intent(inout) :: dy     !< dy(n)
     end subroutine sazaxpy
-  end interface
+  end interface blas_axpy
 
   !> ----------------- copy ------------------
+  !! Copies a vector, x, to a vector, y.
   interface blas_copy
     subroutine scopy(n, dx, incx, dy, incy)
       integer,    intent(in)  :: n, incx, incy
@@ -158,9 +165,10 @@ module blas_m
       complex(8), intent(in)  :: dx !< dx(n)
       complex(8), intent(out) :: dy !< dy(n)
     end subroutine zcopy
-  end interface
+  end interface blas_copy
 
   !> ----------------- dot  ------------------
+  !! Forms the dot product of two vectors.
   interface blas_dot
     real(4) function sdot(n, dx, incx, dy, incy)
       integer,    intent(in) :: n, incx, incy
@@ -181,7 +189,7 @@ module blas_m
       integer,    intent(in) :: n, incx, incy
       complex(8), intent(in) :: dx, dy !< dx(n), dy(n)
     end function zdotc
-  end interface
+  end interface blas_dot
 
   interface blas_dotu
     complex(4) function cdotu(n, dx, incx, dy, incy)
@@ -193,9 +201,14 @@ module blas_m
       integer,    intent(in) :: n, incx, incy
       complex(8), intent(in) :: dx, dy !< dx(n), dy(n)
     end function zdotu
-  end interface
+  end interface blas_dotu
 
   !> ----------------- nrm2 ------------------
+  !! Returns the euclidean norm of a vector via the function
+  !! name, so that
+  !! \f[
+  !! SNRM2 := sqrt( x'*x )
+  !! \f]
   interface blas_nrm2
     real(4) function snrm2(n, dx, incx)
       integer,    intent(in) :: n, incx
@@ -216,7 +229,7 @@ module blas_m
       integer,    intent(in) :: n, incx
       complex(8), intent(in) :: dx !< dx(n)
     end function dznrm2
-  end interface
+  end interface blas_nrm2
 
 
   ! ------------------------------------------------------------------
@@ -224,6 +237,14 @@ module blas_m
   ! ------------------------------------------------------------------
 
   !> ----------------- symv ------------------
+  !! performs the matrix-vector  operation
+  !!
+  !! \f[
+  !!     y := \alpha A x + \beta y
+  !! \f]
+  !!
+  !!  where \f$\alpha\f$ and \f$\beta\f$ are scalars, x and y are n
+  !!  element vectors and A is an \f$n\times n\f$ symmetric matrix.
   interface blas_symv
     subroutine ssymv(uplo, n, alpha, a, lda, x, incx, beta, y, incy)
       character(1), intent(in)    :: uplo
@@ -260,9 +281,21 @@ module blas_m
       complex(8),   intent(in)    :: x !< x(:)
       complex(8),   intent(inout) :: y !< y(:)
     end subroutine zsymv
-  end interface
+  end interface blas_symv
   
   !> ----------------- gemv ------------------
+  !! SGEMV  performs one of the matrix-vector operations
+  !!
+  !! \f[
+  !!     y := \alpha A x + \beta y,   
+  !! \f]
+  !! or 
+  !! \f[
+  !!     y := \alpha A^Tx + \beta y
+  !! \f]
+  !!  
+  !!  where \f$\alpha\f$ and \f$\beta\f$ are scalars, x and y are
+  !!  vectors and A is an \f$m\times n\f$ matrix.
   interface blas_gemv
     subroutine sgemv(trans, m, n, alpha, a, lda, x, incx, beta, y, incy)
       character(1), intent(in)    :: trans
@@ -299,7 +332,7 @@ module blas_m
       complex(8),   intent(in)    :: x !< x(:)
       complex(8),   intent(inout) :: y !< y(:)
     end subroutine zgemv
-  end interface
+  end interface blas_gemv
 
 
   ! ------------------------------------------------------------------
@@ -307,6 +340,21 @@ module blas_m
   ! ------------------------------------------------------------------
 
   !> ----------------- gemm ------------------
+  !! performs one of the matrix-matrix operations
+  !!
+  !! \f[
+  !!     C := \alpha op( A ) op( B ) + \beta C,
+  !! \f]
+  !!
+  !!  where  op(X) is one of
+  !!
+  !! \f[
+  !!     op( X ) = X   \mbox{ or }   op( X ) = X^T,
+  !! \f]
+  !!
+  !!  \f$ \alpha \f$ and \f$ \beta \f$ are scalars, and A, B and C are
+  !!  matrices, with op(A) an \f$ m \times k \f$ matrix, op(B) a \f$ k
+  !!  \times n \f$ matrix and C an \f$ m \times n \f$m matrix.
   interface blas_gemm
     subroutine sgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
       character(1), intent(in)    :: transa, transb
@@ -343,9 +391,22 @@ module blas_m
       complex(8),   intent(in)    :: b !< b(ldb,kb)    kb=k if transa='N' or 'n'; m otherwise
       complex(8),   intent(inout) :: c !< c(ldc,n)
     end subroutine zgemm
-  end interface
+  end interface blas_gemm
 
-  !> ----------------- trmm ------------------
+  !> ----------------- trmm ------------------ 
+  !! Performs one of the matrix-matrix operations
+  !!
+  !! \f[
+  !!     B := \alpha op( A )B,  \mbox{ or }  B := \alpha B op( A ),
+  !! \f]
+  !!
+  !!  where \f$\alpha\f$ is a scalar, B is an \f$m\times n\f$matrix, A
+  !!  is a unit, or non-unit, upper or lower triangular matrix and op(
+  !!  A ) is one of
+  !!
+  !! \f[
+  !!     op( A ) = A   \mbox{ or }   op( A ) = A^T.
+  !! \f]
   interface blas_trmm
     subroutine strmm(side, uplo, transa, diag, m, n, alpha, a, lda, b, ldb)
       character(1), intent(in)    :: side, uplo, transa, diag
@@ -374,9 +435,23 @@ module blas_m
       complex(8),   intent(in)    :: a, alpha
       complex(8),   intent(inout) :: b
     end subroutine ztrmm
-  end interface
+  end interface blas_trmm
 
   !> ----------------- symm, hemm ------------------
+  !! performs one of the matrix-matrix operations
+  !!
+  !! \f[
+  !!     C := \alpha A B + \beta C,
+  !! \f]
+  !!
+  !!  or
+  !!
+  !! \f[
+  !!     C := \alpha  B A + \beta C
+  !! \f]
+  !!
+  !!  where \f$\alpha\f$ and \f$\beta\f$ are scalars, A is a symmetric
+  !!  matrix and B and C are \f$m\times n\f$ matrices.
   interface blas_symm
     subroutine ssymm(side, uplo, m, n, alpha, a, lda, b, ldb, beta, c, ldc)
       character(1), intent(in)    :: side, uplo
@@ -405,9 +480,24 @@ module blas_m
       complex(8),   intent(in)    :: alpha, beta, a, b
       complex(8),   intent(inout) :: c
     end subroutine zsymm
-  end interface
+  end interface blas_symm
 
   !> ----------------- syrk, herk ------------------
+  !! performs one of the symmetric rank k operations
+  !!
+  !! \f[
+  !!     C := \alpha A A^T + \beta C,
+  !!
+  !! \f]
+  !! or 
+  !! \f[
+  !!     C := \alpha A^T A + \beta*C
+  !! \f]
+  !!
+  !!  where \f$\alpha\f$ and \f$\beta\f$ are scalars, C is an
+  !!  \f$n\times n\f$ symmetric matrix and A is an \f$n\times k\f$
+  !!  matrix in the first case and a \f$k\times n\f$ matrix in the
+  !!  second case.
   interface blas_herk
     subroutine ssyrk(uplo, trans, n, k, alpha, a, lda, beta, c, ldc)
       implicit none
@@ -446,9 +536,28 @@ module blas_m
       complex(8),   intent(in)    :: a
       complex(8),   intent(inout) :: c
     end subroutine zherk
-  end interface
+  end interface blas_herk
 
   !> -----------------------trsm-------------------------
+  !! Solves one of the matrix equations
+  !!
+  !! \f[
+  !!     op( A )X = \alpha B, 
+  !! \f]
+  !! or 
+  !! \f[
+  !! X op( A ) = \alpha B,
+  !! \f]
+  !!
+  !!  where \f$\alpha\f$ is a scalar, X and B are \f$m\times n\f$
+  !!  matrices, A is a unit, or non-unit, upper or lower triangular
+  !!  matrix and op(A) is one of
+  !!
+  !! \f[
+  !!     op( A ) = A   \mbox{ or }   op( A ) = A^T
+  !! \f]
+  !!
+  !!  The matrix X is overwritten on B.
   interface blas_trsm
     subroutine strsm(side, uplo, transa, diag, m, n, alpha, a, lda, b, ldb)
       character(1), intent(in)    :: side
@@ -505,8 +614,7 @@ module blas_m
       complex(8),   intent(inout) :: b
       integer,      intent(in)    :: ldb
     end subroutine ztrsm
-
-  end interface
+  end interface blas_trsm
 
 end module blas_m
 

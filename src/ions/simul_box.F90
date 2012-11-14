@@ -15,11 +15,12 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: simul_box.F90 9285 2012-08-30 17:38:23Z xavier $
+!! $Id: simul_box.F90 9599 2012-11-12 22:35:04Z dstrubbe $
 
 #include "global.h"
 
 module simul_box_m
+  use blas_m
   use c_pointer_m
   use datasets_m
   use geometry_m
@@ -191,7 +192,7 @@ contains
 
     ! we need k-points for periodic systems or for open boundaries
     only_gamma_kpoint = sb%periodic_dim == 0 .and. .not. present(transport_mode)
-    call kpoints_init(sb%kpoints, sb%symm, sb%dim, sb%rlattice, sb%klattice, geo, only_gamma_kpoint)
+    call kpoints_init(sb%kpoints, sb%symm, sb%dim, sb%rlattice, sb%klattice, only_gamma_kpoint)
 
     ! With open boundaries we have a different situation than in a periodic system.
     ! We set them here to zero to mimic a Gamma-point-only calculation.
@@ -275,7 +276,7 @@ contains
       !% point of the region, and the following ones set
       !% the radii where resolution changes (measured from the
       !% central point).
-      !% NOTE: currently, only one area can be set up, and only works in 3D.
+      !% NOTE: currently, only one area can be set up, and only works in 3D, and in serial.
       !%End
 
       if(parse_block(datasets_check('MultiResolutionArea'), blk) == 0) then
@@ -415,7 +416,7 @@ contains
       case(SPHERE, CYLINDER)
         call parse_float(datasets_check('Radius'), def_rsize, sb%rsize, units_inp%length)
         if(sb%rsize < M_ZERO) call input_error('radius')
-        if(def_rsize>M_ZERO) call messages_check_def(def_rsize, sb%rsize, 'radius')
+        if(def_rsize>M_ZERO) call messages_check_def(sb%rsize, .false., def_rsize, 'radius', units_out%length)
       case(MINIMUM)
 
         if(geo%reduced_coordinates) then
@@ -446,7 +447,7 @@ contains
         call parse_float(datasets_check('xlength'), default, sb%xsize, units_inp%length)
         sb%lsize(1) = sb%xsize
         if(def_rsize > M_ZERO .and. sb%periodic_dim == 0) &
-          call messages_check_def(def_rsize, sb%xsize, 'xlength')
+          call messages_check_def(sb%xsize, .false., def_rsize, 'xlength', units_out%length)
       end if
 
       sb%lsize = M_ZERO
@@ -489,7 +490,7 @@ contains
 
         do idir = 1, sb%dim
           if(def_rsize > M_ZERO .and. sb%periodic_dim < idir) &
-            call messages_check_def(def_rsize, sb%lsize(idir), 'Lsize')
+            call messages_check_def(sb%lsize(idir), .false., def_rsize, 'Lsize', units_out%length)
         end do
       end if
 
@@ -790,8 +791,8 @@ contains
 
   !--------------------------------------------------------------
   subroutine reciprocal_lattice(rv, kv, volume, dim)
-    FLOAT,   intent(in)  :: rv(1:MAX_DIM, 1:MAX_DIM)
-    FLOAT,   intent(out) :: kv(1:MAX_DIM, 1:MAX_DIM)
+    FLOAT,   intent(in)  :: rv(:,:) !< (1:MAX_DIM, 1:MAX_DIM)
+    FLOAT,   intent(out) :: kv(:,:) !< (1:MAX_DIM, 1:MAX_DIM)
     FLOAT,   intent(out) :: volume
     integer, intent(in)  :: dim
 
@@ -800,7 +801,7 @@ contains
 
     PUSH_SUB(reciprocal_lattice)
 
-    kv(1:MAX_DIM, 1:MAX_DIM) = M_ZERO
+    kv(:,:) = M_ZERO
 
     select case(dim)
     case(3)
@@ -976,7 +977,7 @@ contains
 
     real(8), parameter :: DELTA = CNST(1e-12)
     FLOAT :: rr, re, im, dist2, radius
-    real(8) :: llimit(MAX_DIM), ulimit(MAX_DIM)
+    real(8) :: llimit(MAX_DIM), ulimit(MAX_DIM), offset_latt(MAX_DIM)
     FLOAT, allocatable :: xx(:, :)
     integer :: ip, idir, iatom, ilist
     integer, allocatable :: nlist(:)
@@ -989,12 +990,14 @@ contains
     ! no push_sub because this function is called very frequently
     SAFE_ALLOCATE(xx(1:sb%dim, 1:npoints))
 
-    forall(idir = 1:sb%dim, ip = 1:npoints)  xx(idir, ip) = point(idir, ip) - sb%box_offset(idir)
-
-    !convert to the orthogonal space
-    forall(ip = 1:npoints)
-      xx(1:sb%dim, ip) = matmul(xx(1:sb%dim, ip), sb%klattice_primitive(1:sb%dim, 1:sb%dim))
-    end forall
+    !convert from lattice to Cartesian
+    offset_latt(1:sb%dim) = matmul(sb%box_offset(1:sb%dim), sb%klattice_primitive(1:sb%dim, 1:sb%dim))
+    forall(ip = 1:npoints) xx(1:sb%dim, ip) = offset_latt(1:sb%dim)
+    if(npoints == 1) then
+      xx(1:sb%dim, 1) = matmul(point(1:sb%dim, 1), sb%klattice_primitive(1:sb%dim, 1:sb%dim)) - sb%box_offset(1:sb%dim)
+    else
+      call lalg_gemm(sb%dim, npoints, sb%dim, M_ONE, sb%klattice_primitive, point, -M_ONE, xx)
+    endif
 
     select case(sb%box_shape)
     case(SPHERE)

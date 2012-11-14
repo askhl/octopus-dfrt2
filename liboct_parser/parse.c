@@ -16,7 +16,7 @@
  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  02111-1307, USA.
 
- $Id: parse.c 6061 2009-11-14 21:19:23Z xavier $
+ $Id: parse.c 9603 2012-11-13 00:17:13Z dstrubbe $
 */
 
 #include <stdio.h>
@@ -354,7 +354,7 @@ static int parse_block_work(sym_block *blk, int l, int col, parse_result *r)
   assert(col>=0);
 
   if(col >= blk->lines[l].n){
-    fprintf(stderr, "%s\n", "Error: Value not defined in block.");
+    fprintf(stderr, "%s\n", "Input error: not enough columns found when parsing block.");
     exit(1);
   }
   

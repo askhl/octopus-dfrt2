@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: xc_oep.F90 8808 2012-01-25 16:30:52Z joseba $
+!! $Id: xc_oep.F90 9544 2012-10-31 19:00:37Z dstrubbe $
 
 #include "global.h"
 
@@ -112,8 +112,8 @@ contains
     !%Option oep_slater 2
     !% Slater approximation.
     !%Option oep_kli 3
-    !% Krieger-Li-Iafrate (KLI) approximation
-    !% (JB Krieger, Y Li, GJ Iafrate, <i>Phys. Rev. Lett. A</i> <b>146</b>, 256 (1990).
+    !% Krieger-Li-Iafrate (KLI) approximation. Ref:
+    !% JB Krieger, Y Li, GJ Iafrate, <i>Phys. Rev. A</i> <b>146</b>, 256 (1990).
     !%Option oep_full 5
     !% (Experimental) Full solution of OEP equation using the Sternheimer approach.
     !%End

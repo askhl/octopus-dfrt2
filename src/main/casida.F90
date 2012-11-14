@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: casida.F90 8827 2012-01-31 06:26:20Z dstrubbe $
+!! $Id: casida.F90 9615 2012-11-13 18:50:43Z dstrubbe $
 
 #include "global.h"
 
@@ -389,7 +389,7 @@ contains
     call messages_info(1)
 
     if(cas%n_pairs < 1) then
-      message(1) = "Error: Maybe there are no unoccupied states?"
+      message(1) = "No Casida pairs -- maybe there are no unoccupied states?"
       call messages_fatal(1)
     end if
 
@@ -559,6 +559,7 @@ contains
   contains
 
     ! ---------------------------------------------------------
+    !> Despite the name, this routine does eps_diff also. 
     subroutine solve_petersilka
       integer :: ia, iunit, idir
       FLOAT   :: ff
@@ -597,7 +598,6 @@ contains
 
         if(mpi_grp_is_root(mpi_world)) call loct_progress_bar(ia, cas%n_pairs)
       end do
-
 
       SAFE_ALLOCATE(xx(1:cas%n_pairs))
       SAFE_ALLOCATE(deltav(1:mesh%np))
@@ -676,7 +676,7 @@ contains
 
       ! sum all matrix elements
       if(cas%parallel_in_eh_pairs) then
-        call comm_allreduce(cas%mpi_grp%comm, cas%mat, dim = (/cas%n_pairs, cas%n_pairs/))
+        call comm_allreduce(cas%mpi_grp%comm, cas%mat)
       end if
       !if(mpi_grp_is_root(cas%mpi_grp)) print *, "mat =", cas%mat
 

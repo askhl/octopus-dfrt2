@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: species.F90 9095 2012-06-02 02:39:35Z xavier $
+!! $Id: species.F90 9415 2012-09-14 17:29:09Z dstrubbe $
 
 #include "global.h"
 
@@ -81,20 +81,21 @@ module species_m
 
   integer, public, parameter :: LABEL_LEN=15
 
-  integer, public, parameter :: &
-    SPEC_USDEF  = 123,          & !< user-defined function
-    SPEC_POINT  = 2,            & !< point charge: jellium sphere of radius 0.5 a.u.
-    SPEC_JELLI  = 3,            & !< jellium sphere.
-    SPEC_JELLI_SLAB     = 4,    & !< jellium slab.
-    SPEC_FULL_DELTA     = 127,  & !< full-potential atom
-    SPEC_FULL_GAUSSIAN  = 124,  & !< full-potential atom
-    SPEC_CHARGE_DENSITY = 125,  &
-    SPEC_FROM_FILE = 126,       &
-    SPEC_PS_PSF = PS_TYPE_PSF,  & !< SIESTA pseudopotential
-    SPEC_PS_HGH = PS_TYPE_HGH,  & !< HGH pseudopotential
-    SPEC_PS_CPI = PS_TYPE_CPI,  & !< FHI pseudopotential (cpi format)
-    SPEC_PS_FHI = PS_TYPE_FHI,  & !< FHI pseudopotential (ABINIT format)
-    SPEC_PS_UPF = PS_TYPE_UPF     !< UPF pseudopotential
+  integer, public, parameter ::  &
+    SPEC_POINT          = 2,     & !< point charge: jellium sphere of radius 0.5 a.u.
+    SPEC_JELLI          = 3,     & !< jellium sphere.
+    SPEC_JELLI_SLAB     = 4,     & !< jellium slab.
+    SPEC_PS_PSF = PS_TYPE_PSF,   & !< SIESTA pseudopotential
+    SPEC_PS_HGH = PS_TYPE_HGH,   & !< HGH pseudopotential
+    SPEC_PS_CPI = PS_TYPE_CPI,   & !< FHI pseudopotential (cpi format)
+    SPEC_PS_FHI = PS_TYPE_FHI,   & !< FHI pseudopotential (ABINIT format)
+    SPEC_PS_UPF = PS_TYPE_UPF,   & !< UPF pseudopotential
+    SPEC_PSPIO          = 110,   & !< pseudopotential parsed by pspio library
+    SPEC_USDEF          = 123,   & !< user-defined function
+    SPEC_FULL_GAUSSIAN  = 124,   & !< full-potential atom
+    SPEC_CHARGE_DENSITY = 125,   &
+    SPEC_FROM_FILE      = 126,   &
+    SPEC_FULL_DELTA     = 127      !< full-potential atom
 
   type species_t
     private
@@ -283,6 +284,14 @@ contains
     !% ignored, as the maximum <i>l</i>-component of the pseudopotential to
     !% consider in the calculation and the <i>l</i>-component to consider as
     !% local are indicated in the pseudopotential file are cannot be changed.
+    !%Option spec_pspio  110
+    !% (experimental) PSPIO library: the pseudopotential will be read from a file,
+    !% either in the working directory or in the <tt>OCTOPUS-HOME/share/PP/UPF</tt> 
+    !% directory, using the PSPIO library
+    !% Column 4 is the atomic number. Columns 5 and 6 are 
+    !% ignored, as the maximum <i>l</i>-component of the pseudopotential to
+    !% consider in the calculation and the <i>l</i>-component to consider as
+    !% local are indicated in the pseudopotential file are cannot be changed.
     !%Option spec_full_delta   127
     !% Full atomic potential represented by a delta charge
     !% distribution. The atom will be displaced to the nearest grid
@@ -399,6 +408,14 @@ contains
       ! allocate structure
       SAFE_ALLOCATE(spec%ps) 
       call ps_init(spec%ps, spec%label, spec%type, spec%Z, spec%lmax, spec%lloc, ispin)
+      spec%z_val = spec%ps%z_val
+      spec%nlcc = (spec%ps%icore /= 'nc  ' )
+      spec%niwfs = ps_niwfs(spec%ps)
+
+    case(SPEC_PSPIO)
+      ! allocate structure
+      SAFE_ALLOCATE(spec%ps) 
+      call ps_pspio_init(spec%ps, spec%Z, spec%lmax, spec%lloc, ispin, spec%filename)
       spec%z_val = spec%ps%z_val
       spec%nlcc = (spec%ps%icore /= 'nc  ' )
       spec%niwfs = ps_niwfs(spec%ps)
@@ -525,25 +542,26 @@ contains
         orbital_radius = max(orbital_radius, species_get_iwf_radius(this, iorb, is = 1))
       end do
 
-      write(message(1), '(3a)') "Info: Pseudopotential for ", trim(this%label), ". Radii for localized parts:"
-      write(message(2), '(a,f5.1, 3a)') "     local part     = ", &
-        units_from_atomic(units_out%length, local_radius), " [", trim(units_abbrev(units_out%length)), "] "
-      write(message(3), '(a,f5.1,3a)')  "     non-local part = ", &
-        units_from_atomic(units_out%length, this%ps%rc_max), " [", trim(units_abbrev(units_out%length)), "] "
-      write(message(4), '(a,f5.1,3a)')  "     orbitals       = ", &
-        units_from_atomic(units_out%length, orbital_radius), " [", trim(units_abbrev(units_out%length)), "] "
-      call messages_info(4)
+      call messages_write('Info: Pseudopotential for '//trim(this%label), new_line = .true.)
+      call messages_write('  Radii for localized parts:', new_line = .true.)
+      call messages_write('    local part     = ')
+      call messages_write(local_radius, fmt = 'f5.1', units = units_out%length, new_line = .true.)
+      call messages_write('    non-local part = ')
+      call messages_write(this%ps%rc_max, fmt = 'f5.1', units = units_out%length, new_line = .true.)
+      call messages_write('    orbitals       = ')
+      call messages_write(orbital_radius, fmt = 'f5.1', units = units_out%length, new_line = .true.)
+      call messages_info()
 
       if(max(local_radius, this%ps%rc_max) > CNST(6.0)) then
-        message(1) = "One of the radii of your pseudopotential's localized parts seems"
-        message(2) = "unusually large; check that your pseudopotential is correct."
-        call messages_warning(2)
+        call messages_write("One of the radii of your pseudopotential's localized parts seems", new_line = .true.)
+        call messages_write("unusually large; check that your pseudopotential is correct.")
+        call messages_warning()
       end if
 
       if(orbital_radius > CNST(20.0)) then
-        message(1) = "The radius of the atomic orbitals given by your pseudopotential seems"
-        message(2) = "unusually large; check that your pseudopotential is correct."
-        call messages_warning(2)
+        call messages_write("The radius of the atomic orbitals given by your pseudopotential seems", new_line = .true.)
+        call messages_write("unusually large; check that your pseudopotential is correct.")
+        call messages_warning()
       end if
 
       if(in_debug_mode) then
@@ -794,7 +812,8 @@ contains
          ( spec%type == SPEC_PS_HGH) .or. &
          ( spec%type == SPEC_PS_CPI) .or. &
          ( spec%type == SPEC_PS_FHI) .or. &
-         ( spec%type == SPEC_PS_UPF)
+         ( spec%type == SPEC_PS_UPF) .or. &
+         ( spec%type == SPEC_PSPIO)
  
   end function species_is_ps
 
@@ -901,14 +920,12 @@ contains
     integer,           intent(in) :: j
     integer,           intent(in) :: is
 
-    integer :: i, l, m
+    integer :: i
     FLOAT, parameter :: threshold = CNST(0.001)
 
     PUSH_SUB(species_get_iwf_radius)
 
     i = spec%iwf_i(j, is)
-    l = spec%iwf_l(j, is)
-    m = spec%iwf_m(j, is)
 
     if(species_is_ps(spec)) then
       radius = spline_cutoff_radius(spec%ps%ur(i, is), threshold)
@@ -917,7 +934,6 @@ contains
     end if
 
     POP_SUB(species_get_iwf_radius)
-
   end function species_get_iwf_radius
   ! ---------------------------------------------------------
 
@@ -1144,6 +1160,16 @@ contains
         spec%def_rsize = units_to_atomic(units_inp%length, spec%def_rsize)
         read_data = 8
       end if
+
+    case(SPEC_PSPIO) ! a pseudopotential file to be handled by the pspio library
+
+      !for the moment we will read lmax and lloc, even if they are not necessary,
+      !and we will not get any data from the default values
+      call parse_block_float (blk, row, 3, spec%z)
+      call parse_block_string(blk, row, 4, spec%filename)
+      call parse_block_integer(blk, row, 5, spec%lmax)
+      call parse_block_integer(blk, row, 6, spec%lloc)
+      read_data = 8
 
     case default
       call input_error('Species')

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: geom_opt.F90 9250 2012-08-23 14:45:24Z xavier $
+!! $Id: geom_opt.F90 9337 2012-09-05 19:42:23Z dstrubbe $
 
 #include "global.h"
 
@@ -86,7 +86,7 @@ contains
     type(hamiltonian_t), target, intent(inout) :: hm
     logical,                     intent(inout) :: fromscratch
 
-    integer :: iatom, idir, ierr
+    integer :: ierr
     REAL_DOUBLE, allocatable :: coords(:)
     REAL_DOUBLE :: energy
 
@@ -328,6 +328,8 @@ contains
 
 
   ! ---------------------------------------------------------
+  ! Note: you might think it would be better to change the arguments with '(size)' below to '(:)'.
+  ! However, if you do that, then you will (portably) get a segmentation fault.
   subroutine calc_point(size, coords, objective, getgrad, df)
     integer,     intent(in)    :: size
     REAL_DOUBLE, intent(in)    :: coords(size)
@@ -335,7 +337,7 @@ contains
     integer,     intent(in)    :: getgrad
     REAL_DOUBLE, intent(inout) :: df(size)
     
-    integer :: iatom, idir
+    integer :: iatom
 
     PUSH_SUB(calc_point)
 
@@ -407,7 +409,6 @@ contains
     REAL_DOUBLE, intent(in) :: energy, maxdx, maxdf
     REAL_DOUBLE, intent(in) :: coords(size)
 
-    integer :: iatom, idir
     character(len=256) :: c_geom_iter, title
 
     PUSH_SUB(write_iter_info)
@@ -440,18 +441,18 @@ contains
 
   subroutine to_coords(gopt, coords)
     type(geom_opt_t), intent(in)  :: gopt
-    REAL_DOUBLE,            intent(out) :: coords(:)
+    REAL_DOUBLE,      intent(out) :: coords(:)
 
     integer :: iatom, idir, icoord
 
     PUSH_SUB(to_coords)
 
     icoord = 1
-    do iatom = 1, g_opt%geo%natoms
-      if(g_opt%fixed_atom == iatom) cycle
-      do idir = 1, g_opt%dim
-        coords(icoord) = g_opt%geo%atom(iatom)%x(idir)
-        if(g_opt%fixed_atom /= 0) coords(icoord) = coords(icoord) - g_opt%geo%atom(g_opt%fixed_atom)%x(idir)
+    do iatom = 1, gopt%geo%natoms
+      if(gopt%fixed_atom == iatom) cycle
+      do idir = 1, gopt%dim
+        coords(icoord) = gopt%geo%atom(iatom)%x(idir)
+        if(gopt%fixed_atom /= 0) coords(icoord) = coords(icoord) - gopt%geo%atom(gopt%fixed_atom)%x(idir)
         icoord = icoord + 1
       end do
     end do
@@ -463,18 +464,18 @@ contains
 
   subroutine to_grad(gopt, grad)
     type(geom_opt_t), intent(in)  :: gopt
-    REAL_DOUBLE,            intent(out) :: grad(:)
+    REAL_DOUBLE,      intent(out) :: grad(:)
 
     integer :: iatom, idir, icoord
 
     PUSH_SUB(to_grad)
 
     icoord = 1
-    do iatom = 1, g_opt%geo%natoms
-      if(g_opt%fixed_atom == iatom) cycle
-      do idir = 1, g_opt%dim
-        grad(icoord) = -g_opt%geo%atom(iatom)%f(idir)
-        if(g_opt%fixed_atom /= 0) grad(icoord) = grad(icoord) + g_opt%geo%atom(g_opt%fixed_atom)%f(idir)
+    do iatom = 1, gopt%geo%natoms
+      if(gopt%fixed_atom == iatom) cycle
+      do idir = 1, gopt%dim
+        grad(icoord) = -gopt%geo%atom(iatom)%f(idir)
+        if(gopt%fixed_atom /= 0) grad(icoord) = grad(icoord) + gopt%geo%atom(gopt%fixed_atom)%f(idir)
         icoord = icoord + 1
       end do
     end do
@@ -486,19 +487,19 @@ contains
 
   subroutine from_coords(gopt, coords)
     type(geom_opt_t), intent(inout) :: gopt
-    REAL_DOUBLE,            intent(in)    :: coords(:)
+    REAL_DOUBLE,      intent(in)    :: coords(:)
 
     integer :: iatom, idir, icoord
 
     PUSH_SUB(from_coords)
 
     icoord = 1
-    do iatom = 1, g_opt%geo%natoms
-      if(g_opt%fixed_atom == iatom) cycle      
-      do idir = 1, g_opt%dim
-        g_opt%geo%atom(iatom)%x(idir) = coords(icoord)
-        if(g_opt%fixed_atom /= 0) then
-          g_opt%geo%atom(iatom)%x(idir) = g_opt%geo%atom(iatom)%x(idir) + g_opt%geo%atom(g_opt%fixed_atom)%x(idir)
+    do iatom = 1, gopt%geo%natoms
+      if(gopt%fixed_atom == iatom) cycle      
+      do idir = 1, gopt%dim
+        gopt%geo%atom(iatom)%x(idir) = coords(icoord)
+        if(gopt%fixed_atom /= 0) then
+          gopt%geo%atom(iatom)%x(idir) = gopt%geo%atom(iatom)%x(idir) + gopt%geo%atom(gopt%fixed_atom)%x(idir)
         end if
         icoord = icoord + 1
       end do

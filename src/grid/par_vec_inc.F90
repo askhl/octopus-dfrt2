@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: par_vec_inc.F90 7692 2011-04-11 19:27:38Z dstrubbe $
+!! $Id: par_vec_inc.F90 9550 2012-11-05 19:24:25Z dstrubbe $
 
 !> Generally:
 !! Xvec_gather and Xvec_scatter only consider inner points.
@@ -246,7 +246,7 @@ end subroutine X(vec_allgather)
 !--------------------------------------------------------
 
 !> This function collects points from the array src in nodes and puts
-!! them in the arrat dst in the node with MPI rank root, the points to
+!! them in the array dst in the node with MPI rank root, the points to
 !! collect are given by a list of global indices (of size nn).
 subroutine X(vec_selective_gather)(this, nn, list, root, src, dst)
   type(pv_t),       intent(in)    :: this    !< The par_vec_t object.

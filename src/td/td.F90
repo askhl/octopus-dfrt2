@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td.F90 9329 2012-09-05 16:15:01Z dstrubbe $
+!! $Id: td.F90 9605 2012-11-13 01:08:45Z dstrubbe $
 
 #include "global.h"
 
@@ -165,7 +165,7 @@ contains
     if(ion_dynamics_ions_move(td%ions)) then
       if(td%iter > 0) then
         call td_read_coordinates()
-        call hamiltonian_epot_generate(hm, gr, geo, st)
+        call hamiltonian_epot_generate(hm, gr, geo, st, time = td%iter*td%dt)
       end if
 
       call forces_calculate(gr, geo, hm%ep, st, td%iter*td%dt)
@@ -204,7 +204,7 @@ contains
        if (fromScratch) then
           call PES_init_write(td%PESv,gr%mesh,st)
        else
-          call PES_restart_read(td%PESv,gr%mesh,st)
+          call PES_restart_read(td%PESv, st)
        endif
     endif
 
@@ -332,7 +332,7 @@ contains
 
       !Photoelectron stuff 
       if(td%PESv%calc_rc .or. td%PESv%calc_mask ) &
-           call PES_calc(td%PESv, gr%mesh, st, ii, td%dt, hm%ab_pot,hm,geo,iter)
+           call PES_calc(td%PESv, gr%mesh, st, ii, td%dt, iter)
 
       call td_write_iter(write_handler, gr, st, hm, geo, hm%ep%kick, td%dt, iter)
 
@@ -403,7 +403,7 @@ contains
         call td_write_data(write_handler, gr, st, hm, sys%ks%xc, sys%outp, geo, iter, td%dt)
 	!Photoelectron output and restart dump
         call PES_output(td%PESv, gr%mesh, st, iter, sys%outp, td%dt,gr,geo)
-        call PES_restart_write(td%PESv, gr%mesh, st)
+        call PES_restart_write(td%PESv, st)
         if( (ion_dynamics_ions_move(td%ions)) .and. td%recalculate_gs) then
           call messages_print_stress(stdout, 'Recalculating the ground state.')
           fromScratch = .false.
@@ -432,6 +432,7 @@ contains
 
     ! ---------------------------------------------------------
     subroutine init_wfs()
+
       integer :: i, is, ierr, ist, jst, freeze_orbitals
       character(len=50) :: filename
       FLOAT :: x
@@ -440,6 +441,7 @@ contains
       CMPLX, allocatable :: rotation_matrix(:, :)
 
       PUSH_SUB(td_run.init_wfs)
+
       if(.not.fromscratch) then
         call restart_read(trim(tmpdir)//'td', st, gr, ierr, iter=td%iter)
         if(ierr.ne.0) then
@@ -447,10 +449,16 @@ contains
           call messages_warning(1)
 
           fromScratch = .true.
+          td%iter = 0
         end if
         ! extract the interface wave function
         if(st%open_boundaries) call restart_get_ob_intf(st, gr)
       end if
+
+      if(td%iter >= td%max_iter) then
+        message(1) = "All requested iterations have already been done. Use FromScratch = yes if you want to redo them."
+        call messages_info(1)
+      endif
 
       if(.not. fromscratch .and. td%dynamics == CP) then
         call cpmd_restart_read(td%cp_propagator, gr, st, ierr)
@@ -706,7 +714,7 @@ contains
 
       call gauge_field_set_vec_pot(hm%ep%gfield, vecpot)
       call gauge_field_set_vec_pot_vel(hm%ep%gfield, vecpot_vel)
-      call hamiltonian_update(hm, gr%mesh)
+      call hamiltonian_update(hm, gr%mesh, time = td%iter*td%dt)
 
       call io_close(iunit)
       POP_SUB(td_run.td_read_gauge_field)

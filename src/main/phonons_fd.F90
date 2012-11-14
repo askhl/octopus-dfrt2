@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: phonons_fd.F90 9160 2012-06-23 20:38:20Z xavier $
+!! $Id: phonons_fd.F90 9337 2012-09-05 19:42:23Z dstrubbe $
 
 #include "global.h"
 
@@ -89,7 +89,7 @@ contains
     vib%disp = units_to_atomic(units_inp%length, vib%disp)
 
     ! calculate dynamical matrix
-    call get_dyn_matrix(sys%gr, sys%geo, sys%mc, sys%st, sys%ks, hm, sys%outp, vib)
+    call get_dyn_matrix(sys%gr, sys%geo, sys%st, sys%ks, hm, sys%outp, vib)
 
     call vibrations_output(vib)
     
@@ -122,10 +122,9 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine get_dyn_matrix(gr, geo, mc, st, ks, hm, outp, vib)
+  subroutine get_dyn_matrix(gr, geo, st, ks, hm, outp, vib)
     type(grid_t), target, intent(inout) :: gr
     type(geometry_t),     intent(inout) :: geo
-    type(multicomm_t),    intent(in)    :: mc
     type(states_t),       intent(inout) :: st
     type(v_ks_t),         intent(inout) :: ks
     type(hamiltonian_t),  intent(inout) :: hm

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mix.F90 7610 2011-03-25 03:41:01Z xavier $
+!! $Id: mix.F90 9346 2012-09-06 00:01:45Z dstrubbe $
 
 #include "global.h"
 
@@ -277,7 +277,7 @@ contains
     if(smix%type_of_mixing == MIX_LINEAR) then
       smix%alpha = newmixing
     else
-    !  message(1) = "Error: Mixing can only be adjusted in linear mixing scheme."
+    !  message(1) = "Mixing can only be adjusted in linear mixing scheme."
     !  call messages_fatal(1)
     endif
     

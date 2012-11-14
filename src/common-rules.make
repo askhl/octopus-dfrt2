@@ -71,11 +71,10 @@ octopus_LIBS = \
 	$(top_builddir)/src/basic/libbasic.a
 
 core_LIBS = \
-	$(octopus_LIBS)                               \
 	@LIBS_SCALAPACK@ @LIBS_BLACS@                 \
 	@LIBS_LAPACK@ @LIBS_BLAS@                     \
 	$(top_builddir)/liboct_parser/liboct_parser.a \
-	@GSL_LIBS@ @GD_LIBS@ @LIBS_LIBXC@ @FCEXTRALIBS@
+	@GSL_LIBS@ @LIBS_LIBXC@ @FCEXTRALIBS@
 
 external_LIBS = \
 	$(top_builddir)/external_libs/qshep/libqshep.a            \
@@ -104,11 +103,19 @@ if COMPILE_NEWUOA
 endif
 
 # Since ETSF_IO depends on netCDF, it must be first in the list
-all_LIBS = $(core_LIBS) @LIBS_NFFT@ @LIBS_PFFT@ @LIBS_FFT@ @LIBS_SPARSKIT@ \
-  @LIBS_ETSF_IO@ @LIBS_NETCDF@ $(external_LIBS) \
-  @LIBS_LIBFM@ @LIBS_MPI@ @LIBS_ZOLTAN@ @LIBS_BERKELEYGW@ @LIBS_ARPACK@ \
-  @LIBS_PARPACK@
+#<<<<<<< .mine
+#!all_LIBS = $(core_LIBS) @LIBS_NFFT@ @LIBS_PFFT@ @LIBS_FFT@ @LIBS_SPARSKIT@ \
+#!  @LIBS_ETSF_IO@ @LIBS_NETCDF@ $(external_LIBS) \
+#!  @LIBS_LIBFM@ @LIBS_MPI@ @LIBS_ZOLTAN@ @LIBS_BERKELEYGW@ @LIBS_ARPACK@ \
+#!  @LIBS_PARPACK@
+#=======
+outside_LIBS = @LIBS_PSPIO@ @LIBS_NFFT@ @LIBS_PFFT@ @LIBS_FFT@ @LIBS_SPARSKIT@ \
+  @LIBS_ETSF_IO@ @LIBS_NETCDF@ @LIBS_LIBFM@ @LIBS_MPI@ \
+  @LIBS_ZOLTAN@ @LIBS_BERKELEYGW@ @LIBS_ARPACK@ @LIBS_PARPACK@ @GD_LIBS@
+#>>>>>>> .r9624
 
+other_LIBS = $(core_LIBS) $(external_LIBS) $(outside_LIBS)
+all_LIBS = $(octopus_LIBS) $(other_LIBS)
 
 # ---------------------------------------------------------------
 # How to compile F90 files.
@@ -128,7 +135,7 @@ SUFFIXES = _oct.f90 .F90 .o .S .s
 	@FCCPP@ @CPPFLAGS@ $(AM_CPPFLAGS) -I. $< > $*_oct.f90
 	$(top_srcdir)/build/preprocess.pl $*_oct.f90 \
 	  "@DEBUG@" "@F90_ACCEPTS_LINE_NUMBERS@" "@F90_FORALL@"
-	@FC@ @FCFLAGS@ @FCFLAGS_PFFT@ @FCFLAGS_NETCDF@ @FCFLAGS_ETSF_IO@ @FCFLAGS_BERKELEYGW@ @FCFLAGS_LIBXC@ $(AM_FCFLAGS) -c @FCFLAGS_f90@ -o $@ $*_oct.f90
+	@FC@ @FCFLAGS@ @FCFLAGS_PSPIO@ @FCFLAGS_PFFT@ @FCFLAGS_NETCDF@ @FCFLAGS_ETSF_IO@ @FCFLAGS_BERKELEYGW@ @FCFLAGS_LIBXC@ $(AM_FCFLAGS) -c @FCFLAGS_f90@ -o $@ $*_oct.f90
 	@rm -f $*_oct.f90
 
 # This rule is basically to create a _oct.f90 file by hand for

@@ -246,7 +246,7 @@ contains
 
         if (this%ionic%pure_dir .and. iatom /= this%atom1 .and. idir /= this%dir) cycle
 
-        call X(ionic_perturbation)(this, gr, geo, hm, ik, f_in_copy(:, 1), tmp, iatom, idir)
+        call X(ionic_perturbation)(gr, geo, hm, ik, f_in_copy(:, 1), tmp, iatom, idir)
         
         call lalg_axpy(gr%mesh%np, this%ionic%mix1(iatom, idir), tmp, f_out(:, 1))
 
@@ -261,8 +261,7 @@ contains
 end subroutine X(pert_apply)
 
   ! --------------------------------------------------------------------------
-subroutine X(ionic_perturbation)(this, gr, geo, hm, ik, f_in, f_out, iatom, idir)
-  type(pert_t),         intent(in)    :: this
+subroutine X(ionic_perturbation)(gr, geo, hm, ik, f_in, f_out, iatom, idir)
   type(grid_t),         intent(inout) :: gr
   type(geometry_t),     intent(in)    :: geo
   type(hamiltonian_t),  intent(inout) :: hm
@@ -387,7 +386,7 @@ contains
 
     do idim = 1, hm%d%dim
       do ip = 1, gr%mesh%np
-        rdelta = sum(gr%mesh%x(ip, 1:MAX_DIM)**2)*ddelta(this%dir, this%dir2)
+        rdelta = sum(gr%mesh%x(ip, 1:gr%mesh%sb%dim)**2)*ddelta(this%dir, this%dir2)
         f_out(ip, idim) = M_FOURTH*(rdelta - gr%mesh%x(ip, this%dir)*gr%mesh%x(ip, this%dir2))*f_in_copy(ip, idim)
       end do
     end do
@@ -403,7 +402,7 @@ contains
       SAFE_ALLOCATE(  dnl(1:gr%mesh%np, 1:hm%d%dim, 1:gr%mesh%sb%dim))
       SAFE_ALLOCATE(   xf(1:gr%mesh%np, 1:hm%d%dim))
 
-      f_in2  = R_TOTYPE(M_ZERO)
+      f_in2 = R_TOTYPE(M_ZERO)
       atoms: do iatom = 1, geo%natoms
 
         ! This calculates f_in2 = (B x r) f_in_copy
@@ -492,7 +491,7 @@ contains
                .and. iatom /= this%atom1 .and. idir /= this%dir &
                .and. iatom /= this%atom2 .and. jdir /= this%dir2) cycle
 
-          call X(ionic_perturbation_order_2)(this, gr, geo, hm, ik, f_in_copy(:, 1), tmp, iatom, idir, jdir)
+          call X(ionic_perturbation_order_2)(gr, geo, hm, ik, f_in_copy(:, 1), tmp, iatom, idir, jdir)
           
           call lalg_axpy(gr%mesh%np, this%ionic%mix1(iatom, idir)*this%ionic%mix2(iatom, jdir), tmp, f_out(:, 1))
           
@@ -548,8 +547,7 @@ end subroutine X(pert_apply_order_2)
 
 
 ! --------------------------------------------------------------------------
-subroutine X(ionic_perturbation_order_2) (this, gr, geo, hm, ik, f_in, f_out, iatom, idir, jdir)
-  type(pert_t),        intent(in)    :: this
+subroutine X(ionic_perturbation_order_2) (gr, geo, hm, ik, f_in, f_out, iatom, idir, jdir)
   type(grid_t),        intent(inout) :: gr
   type(geometry_t),    intent(in)    :: geo
   type(hamiltonian_t), intent(inout) :: hm
@@ -609,8 +607,7 @@ subroutine X(ionic_perturbation_order_2) (this, gr, geo, hm, ik, f_in, f_out, ia
 end subroutine X(ionic_perturbation_order_2)
 
 ! --------------------------------------------------------------------------
-subroutine X(ionic_pert_matrix_elements_2)(this, gr, geo, hm, ik, st, psi, vib, factor, matrix)
-  type(pert_t),        intent(in)    :: this
+subroutine X(ionic_pert_matrix_elements_2)(gr, geo, hm, ik, st, psi, vib, factor, matrix)
   type(grid_t),        intent(inout) :: gr
   type(geometry_t),    intent(in)    :: geo
   type(hamiltonian_t), intent(inout) :: hm

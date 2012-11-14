@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_init.F90 8944 2012-03-29 10:38:23Z mjv500 $
+!! $Id: mesh_init.F90 9592 2012-11-09 22:16:18Z dstrubbe $
 
 #include "global.h"
 
@@ -654,11 +654,11 @@ contains
   subroutine do_partition()
 #ifdef HAVE_MPI
     integer :: i, j, ipart, jpart, ip, ix, iy, iz
-    integer, allocatable :: part(:), nnb(:), gindex(:), gedges(:)
+    integer, allocatable ::  nnb(:), gindex(:), gedges(:)
     logical, allocatable :: nb(:, :)
     integer              :: idx(1:MAX_DIM), jx(1:MAX_DIM)
-    integer              :: graph_comm, iedge, reorder
-    logical              :: use_topo
+    integer              :: graph_comm, iedge
+    logical              :: use_topo, reorder
     type(partition_t)    :: partition
     integer              :: ierr
 
@@ -668,7 +668,7 @@ contains
 
     mesh%mpi_grp = mpi_grp
 
-    SAFE_ALLOCATE(part(1:mesh%np_part_global))
+    SAFE_ALLOCATE(mesh%vp%part(1:mesh%np_part_global))
 
     !%Variable MeshPartitionFromScratch
     !%Type logical
@@ -681,12 +681,12 @@ contains
     call parse_logical(datasets_check('MeshPartitionFromScratch'), .false., from_scratch)
 
     ierr = -1
-    if(.not. from_scratch) call mesh_partition_read(mesh, part, ierr)
+    if(.not. from_scratch) call mesh_partition_read(mesh, mesh%vp%part, ierr)
     
     if(ierr /= 0) then
       
       if(.not. present(parent)) then
-        call mesh_partition(mesh, stencil, part)
+        call mesh_partition(mesh, stencil, mesh%vp%part)
       else
         ! if there is a parent grid, use its partition
         do ip = 1, mesh%np_global
@@ -694,22 +694,24 @@ contains
           iy = 2*mesh%idx%lxyz(ip, 2)
           iz = 2*mesh%idx%lxyz(ip, 3)
           i = parent%idx%lxyz_inv(ix, iy, iz)
-          part(ip) = parent%vp%part(i)
+          mesh%vp%part(ip) = parent%vp%part(i)
         end do
       end if
       
-      call mesh_partition_boundaries(mesh, stencil, part)
+      call mesh_partition_boundaries(mesh, stencil, mesh%vp%part)
       
-      call mesh_partition_write(mesh, part)
+      call mesh_partition_write(mesh, mesh%vp%part)
 
     end if
 
     call partition_init(partition, mesh)
-    partition%point_to_part = part
-    call partition_build(partition, mesh, stencil)
+    if (partition%library == GA .or. partition%box_shape == HYPERCUBE)  then
+      partition%point_to_part = mesh%vp%part
+    end if
+    call partition_build(partition, mesh, stencil, mesh%vp%part)
     call partition_write_info(partition)      
     call partition_end(partition)
-    call mesh_partition_messages_debug(mesh, part)
+    call mesh_partition_messages_debug(mesh)
 
     !%Variable MeshUseTopology
     !%Type logical
@@ -731,12 +733,12 @@ contains
       nb = .false.
 
       do ip = 1, mesh%np_global
-        ipart = part(ip)
+        ipart = mesh%vp%part(ip)
         call index_to_coords(mesh%idx, mesh%sb%dim, ip, idx)
         do j = 1, stencil%size
           jx(1:MAX_DIM) = idx(1:MAX_DIM) + stencil%points(1:MAX_DIM, j)
           if(all(jx(1:MAX_DIM) >= mesh%idx%nr(1, 1:MAX_DIM)) .and. all(jx(1:MAX_DIM) <= mesh%idx%nr(2, 1:MAX_DIM))) then
-            jpart = part(index_from_coords(mesh%idx, mesh%sb%dim, jx))
+            jpart = mesh%vp%part(index_from_coords(mesh%idx, mesh%sb%dim, jx))
             if(ipart /= jpart ) nb(ipart, jpart) = .true.
           end if
         end do
@@ -761,7 +763,7 @@ contains
 
       ASSERT(iedge == count(nb))
 
-      reorder = 1
+      reorder = .true.
       call MPI_Graph_create(mpi_grp%comm, mpi_grp%size, gindex(1), gedges(1), reorder, graph_comm, mpi_err)
 
       SAFE_DEALLOCATE_A(nb)
@@ -777,9 +779,8 @@ contains
     ! we have a new communicator
     call mpi_grp_init(mesh%mpi_grp, graph_comm)
 
-    call vec_init(graph_comm, 0, part, mesh%np_global, mesh%np_part_global, mesh%idx, stencil,&
+    call vec_init(graph_comm, 0, mesh%np_global, mesh%np_part_global, mesh%idx, stencil,&
          mesh%sb%dim, mesh%sb%periodic_dim, mesh%vp)
-    SAFE_DEALLOCATE_A(part)
 
     SAFE_ALLOCATE(nnb(1:mesh%vp%npart))
     nnb = 0

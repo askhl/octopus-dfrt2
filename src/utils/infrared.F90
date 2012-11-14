@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: infrared.F90 8938 2012-03-28 01:21:55Z xavier $
+!! $Id: infrared.F90 9361 2012-09-06 22:38:34Z dstrubbe $
 
 #include "global.h"
 
@@ -32,24 +32,21 @@
     use profiling_m
     use simul_box_m
     use space_m
-    use spectrum_m
     use unit_m
     use unit_system_m
     use varinfo_m
 
     implicit none
 
-    integer :: iunit, ierr, ii, jj, kk, iter, read_iter, max_iter, ini_iter, end_iter, ntime, nvaf, nvel, ivel
+    integer :: iunit, ierr, ii, jj, iter, read_iter, max_iter, ini_iter, end_iter
     FLOAT :: start_time, end_time
-    FLOAT, allocatable :: vaf(:), time(:), dipole(:,:), velocities(:, :), ftvaf(:)
+    FLOAT, allocatable :: time(:), dipole(:,:)
     CMPLX, allocatable :: ftdipole(:,:)
     type(geometry_t)  :: geo 
     type(space_t)     :: space
     type(simul_box_t) :: sb
-    type(spec_t) :: spectrum
-    type(batch_t) :: vafb, ftvafb
-    FLOAT :: ww, av, irtotal
-    FLOAT :: dw, max_energy, curtime
+    FLOAT :: ww, irtotal
+    FLOAT :: dw, max_energy
     integer :: ifreq, idir
     integer, parameter :: max_freq = 10000
 

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: loct.F90 8829 2012-01-31 17:28:45Z joseba $
+!! $Id: loct.F90 9481 2012-10-04 23:22:03Z dstrubbe $
 
 #include "global.h"
 
@@ -93,37 +93,37 @@ module loct_m
       integer, intent(in) :: errno
       character(len=*), intent(out)  :: res
     end subroutine oct_strerror
-  end interface
+  end interface loct_strerror
 
   interface loct_clock
     function oct_clock()
       real(8) :: oct_clock
     end function oct_clock
-  end interface
+  end interface loct_clock
 
   interface loct_gettimeofday
     subroutine oct_gettimeofday(sec, usec)
       integer, intent(out) :: sec, usec
     end subroutine oct_gettimeofday
-  end interface
+  end interface loct_gettimeofday
 
   interface loct_nanosleep
     subroutine oct_nanosleep(sec, usec)
       integer, intent(in) :: sec, usec
     end subroutine oct_nanosleep
-  end interface
+  end interface loct_nanosleep
 
   interface loct_sysname
     subroutine oct_sysname(name)
       character(len=*), intent(out) :: name
     end subroutine oct_sysname
-  end interface
+  end interface loct_sysname
 
   interface loct_getcwd
     subroutine oct_getcwd(name)
       character(len=*), intent(out) :: name
     end subroutine oct_getcwd
-  end interface
+  end interface loct_getcwd
 
 
   ! ---------------------------------------------------------
@@ -132,26 +132,26 @@ module loct_m
     subroutine oct_mkdir(name)
       character(len=*), intent(in) :: name
     end subroutine oct_mkdir
-  end interface
+  end interface loct_mkdir
 
   interface loct_stat
     subroutine oct_stat(ierr, name)
       integer,          intent(out) :: ierr
       character(len=*), intent(in)  :: name
     end subroutine oct_stat
-  end interface
+  end interface loct_stat
 
   interface loct_rm
     subroutine oct_rm(name)
       character(len=*), intent(in) :: name
     end subroutine oct_rm
-  end interface
+  end interface loct_rm
 
   interface loct_number_of_lines
     integer function number_of_lines(filename)
       character(len=*), intent(in) :: filename
     end function number_of_lines
-  end interface
+  end interface loct_number_of_lines
 
 
   ! ---------------------------------------------------------
@@ -161,22 +161,22 @@ module loct_m
       character(len=*), intent(in)  :: var
       character(len=*), intent(out) :: value
     end subroutine oct_getenv
-  end interface
+  end interface loct_getenv
 
   interface loct_progress_bar
     subroutine oct_progress_bar(a, max)
       integer, intent(in) :: a, max
     end subroutine oct_progress_bar
-  end interface
+  end interface loct_progress_bar
 
   interface loct_printRecipe
     subroutine oct_printRecipe(dir, filename)
       character(len=*), intent(in)  :: dir
       character(len=*), intent(out) :: filename
     end subroutine oct_printRecipe
-  end interface
+  end interface loct_printRecipe
 
-  interface 
+  interface
     subroutine loct_exit_failure()
     end subroutine loct_exit_failure
   end interface
@@ -190,7 +190,7 @@ module loct_m
       type(c_ptr) :: oct_gdimage_create_from
       character(len=*), intent(in) :: filename
     end function oct_gdimage_create_from
-  end interface
+  end interface loct_gdimage_create_from
 
   interface loct_gdimage_sx
     function oct_gdimage_sx(im)
@@ -198,7 +198,7 @@ module loct_m
       integer :: oct_gdimage_sx
       type(c_ptr), intent(in) :: im
     end function oct_gdimage_sx
-  end interface
+  end interface loct_gdimage_sx
 
   interface loct_gdimage_sy
     function oct_gdimage_sy(im)
@@ -206,7 +206,7 @@ module loct_m
       integer :: oct_gdimage_sy
       type(c_ptr), intent(in) :: im
     end function oct_gdimage_sy
-  end interface
+  end interface loct_gdimage_sy
 
   interface loct_gdimage_get_pixel_rgb
     subroutine oct_gdimage_get_pixel_rgb(im, x, y, r, g, b)
@@ -215,13 +215,13 @@ module loct_m
       integer,   intent(in)  :: x, y
       integer,   intent(out) :: r, g, b
     end subroutine oct_gdimage_get_pixel_rgb
-  end interface
+  end interface loct_gdimage_get_pixel_rgb
 #endif
 
  interface
    integer(SIZEOF_VOIDP) function get_memory_usage()
    end function get_memory_usage
-  end interface
+ end interface
 
 contains
 

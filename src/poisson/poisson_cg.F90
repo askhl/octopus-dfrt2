@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson_cg.F90 8073 2011-07-14 23:12:20Z nitsche $
+!! $Id: poisson_cg.F90 9339 2012-09-05 22:01:37Z dstrubbe $
 
 #include "global.h"
 
@@ -46,8 +46,7 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine poisson_cg_init(mesh, thr, itr)
-    type(mesh_t), intent(in) :: mesh
+  subroutine poisson_cg_init(thr, itr)
     integer,      intent(in) :: itr
     FLOAT,        intent(in) :: thr
 

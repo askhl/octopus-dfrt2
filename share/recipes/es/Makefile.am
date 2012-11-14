@@ -17,8 +17,9 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: Makefile.am 2771 2007-03-20 18:29:43Z lorenzen $
+## $Id: Makefile.am 9530 2012-10-26 08:13:21Z joseba $
 
 tm2dir = $(pkgdatadir)/recipes/es
 
-dist_tm2_DATA = pulpo_a_feira.txt
+dist_tm2_DATA = pulpo_a_feira.txt \
+		pulpo_asado.txt

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: ground_state.F90 9261 2012-08-26 19:51:06Z xavier $
+!! $Id: ground_state.F90 9469 2012-09-26 08:16:32Z helbig $
 
 #include "global.h"
 
@@ -140,7 +140,7 @@ contains
 
     ! self-consistency for occupation numbers in RDMFT
     if(sys%ks%theory_level == RDMFT) then 
-      call scf_occ(sys%gr, sys%geo, hm, sys%st,sys)
+      call scf_occ(sys%gr, hm, sys%st, sys)
     endif
 
     if(sys%st%d%pack_states) call states_pack(sys%st)

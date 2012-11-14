@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc.F90 9290 2012-08-31 13:56:41Z xavier $
+!! $Id: states_calc.F90 9355 2012-09-06 17:43:31Z dstrubbe $
 
 #include "global.h"
 
@@ -200,14 +200,14 @@ contains
   end subroutine states_orthogonalize_cproduct
 
   ! ---------------------------------------------------------
-  subroutine reorder_states_by_args(st, mesh, args, idim, ik)
+  subroutine reorder_states_by_args(st, mesh, args, ik)
     ! Reorder the states in st so that the order corresponds to
     ! the indices given in args (args could come from an argsort)
 
     type(states_t),       intent(inout) :: st
     type(mesh_t),         intent(in)    :: mesh
     integer, allocatable, intent(in)    :: args(:)
-    integer,              intent(in)    :: idim, ik
+    integer,              intent(in)    :: ik
 
     integer :: ist, jst, kst
     CMPLX,   allocatable :: buf(:,:),buf1(:,:)
@@ -308,7 +308,7 @@ contains
       end do
     
       do idim =1, st%d%dim
-         call reorder_states_by_args(st, mesh, index, idim, ik)
+        call reorder_states_by_args(st, mesh, index, ik)
       end do
     end do
     

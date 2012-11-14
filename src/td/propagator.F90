@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: propagator.F90 9290 2012-08-31 13:56:41Z xavier $
+!! $Id: propagator.F90 9539 2012-10-29 17:20:10Z joseba $
 
 #include "global.h"
 
@@ -92,10 +92,10 @@ module propagator_m
   type propagator_t
     integer             :: method           !< Which evolution method to use.
     type(exponential_t) :: te               !< How to apply the propagator \f$ e^{-i H \Delta t} \f$.
+    !> Storage of the KS potential of previous iterations.
     FLOAT, pointer      :: v_old(:, :, :) => null()
-                                            !< Storage of the KS potential of previous iterations.
+    !> Auxiliary function to store the Magnus potentials.
     FLOAT, pointer      :: vmagnus(:, :, :) => null() 
-                                            !< Auxiliary function to store the Magnus potentials.
     type(ob_terms_t)    :: ob               !< For open boundaries: leads, memory
     integer             :: scf_propagation_steps 
     logical             :: first
@@ -331,7 +331,7 @@ contains
     ! Allocate memory to store the old KS potentials
     SAFE_ALLOCATE(tr%v_old(1:gr%mesh%np, 1:st%d%nspin, 0:3))
     tr%v_old(:, :, :) = M_ZERO
-    call exponential_init(tr%te, gr%der) ! initialize propagator
+    call exponential_init(tr%te) ! initialize propagator
 
     call messages_obsolete_variable('TDSelfConsistentSteps', 'TDStepsWithSelfConsistency')
 
@@ -452,7 +452,7 @@ contains
     type(geometry_t),     optional,  intent(inout) :: geo
     integer,              optional,  intent(out)   :: scsteps
 
-    integer :: is, iter, ik, ist, idim
+    integer :: is, iter, ik, ist
     FLOAT   :: d, d_max
     logical :: self_consistent
     CMPLX, allocatable :: zpsi1(:, :, :, :)
@@ -845,6 +845,7 @@ contains
     ! ---------------------------------------------------------
     !> Crank-Nicholson propagator, linear solver from SPARSKIT.
     subroutine td_crank_nicholson_sparskit
+
 #ifdef HAVE_SPARSKIT
       FLOAT, allocatable :: vhxc_t1(:,:), vhxc_t2(:,:)
       CMPLX, allocatable :: zpsi_rhs_pred(:,:,:,:), zpsi_rhs_corr(:,:,:,:)
@@ -943,6 +944,7 @@ contains
 
       POP_SUB(propagator_dt.td_crank_nicholson_sparskit)
 #endif
+
     end subroutine td_crank_nicholson_sparskit
     ! ---------------------------------------------------------
 
@@ -950,6 +952,7 @@ contains
     ! ---------------------------------------------------------
     !> Crank-Nicholson propagator, QMR linear solver.
     subroutine td_crank_nicholson
+
       CMPLX, allocatable :: zpsi_rhs(:,:), zpsi(:), rhs(:), inhpsi(:)
       integer :: ik, ist, idim, ip, isize, np_part, np, iter
       FLOAT :: dres
@@ -1027,6 +1030,7 @@ contains
       SAFE_DEALLOCATE_A(zpsi)
       SAFE_DEALLOCATE_A(rhs)
       POP_SUB(propagator_dt.td_crank_nicholson)
+
     end subroutine td_crank_nicholson
     ! ---------------------------------------------------------
 
@@ -1097,9 +1101,9 @@ contains
       
       select case(tr%ob%mem_type)
       case(SAVE_CPU_TIME)
-        call cn_src_mem_dt(tr%ob, st, ks, hm, gr, max_iter, dt, time, nt)
+        call cn_src_mem_dt(tr%ob, st, hm, gr, max_iter, dt, time, nt)
       case(SAVE_RAM_USAGE)
-        call cn_src_mem_sp_dt(tr%ob, st, ks, hm, gr, max_iter, dt, time, nt)
+        call cn_src_mem_sp_dt(tr%ob, st, hm, gr, max_iter, dt, time, nt)
       end select
 
       POP_SUB(propagator_dt.td_crank_nicholson_src_mem)

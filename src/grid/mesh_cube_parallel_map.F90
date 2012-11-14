@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_cube_parallel_map.F90 9312 2012-09-04 21:32:23Z dstrubbe $
+!! $Id: mesh_cube_parallel_map.F90 9496 2012-10-11 15:08:25Z joseba $
 
 #include "global.h"
 
@@ -74,18 +74,21 @@ contains
     type(cube_t),                   intent(in)  :: cube
 
     integer :: im, ip, nn, ixyz(3), lxyz(3), ii
-    integer, allocatable :: cube_part(:), part(:,:,:)
+    integer, allocatable :: cube_part(:)
     integer, pointer :: mf_order(:), cf_order(:)
+    type(dimensions_t), allocatable :: part(:)
 
+    integer :: last_found_proc
     PUSH_SUB(mesh_cube_parallel_map_init)
 
     !Get the cube partition on the mesh
-    SAFE_ALLOCATE(part(cube%rs_n_global(1), cube%rs_n_global(2), cube%rs_n_global(3)))
+    SAFE_ALLOCATE(part(1:cube%mpi_grp%size))
     call cube_partition(cube, part)
 
-    SAFE_ALLOCATE(cube_part(mesh%np_global))
+    SAFE_ALLOCATE(cube_part(1:mesh%np_global))
     
     ixyz = 0
+    last_found_proc = 1
     do im = 1, mesh%cube_map%nmap
       ip = mesh%cube_map%map(MCM_POINT, im)
       nn = mesh%cube_map%map(MCM_COUNT, im)
@@ -93,7 +96,7 @@ contains
       call index_to_coords(mesh%idx, mesh%sb%dim, ip, ixyz)
       ixyz = ixyz + cube%center
 
-      forall(ii = 0:nn - 1) cube_part(ip + ii) = part(ixyz(1), ixyz(2), ixyz(3) + ii)
+      forall(ii = 0:nn - 1) cube_part(ip + ii) = cube_point_to_process(ixyz(1), ixyz(2), ixyz(3) + ii, part, last_found_proc)
     end do
 
     SAFE_DEALLOCATE_A(part)
@@ -103,8 +106,8 @@ contains
                                  mesh%mpi_grp, mesh%vp%part, cube%mpi_grp, cube_part, &
                                  this%m2c_nsend, this%m2c_nrec, mf_order, cf_order)
 
-    SAFE_ALLOCATE(this%m2c_mf_order(this%m2c_nsend))
-    SAFE_ALLOCATE(this%m2c_cf_order(this%m2c_nrec, 3))    
+    SAFE_ALLOCATE(this%m2c_mf_order(1:this%m2c_nsend))
+    SAFE_ALLOCATE(this%m2c_cf_order(1:this%m2c_nrec, 1:3))    
     do ip = 1, this%m2c_nsend
 #ifdef HAVE_MPI
       this%m2c_mf_order(ip) = vec_global2local(mesh%vp, mf_order(ip), mesh%vp%partno)
@@ -136,8 +139,8 @@ contains
                                  cube%mpi_grp, cube_part, mesh%mpi_grp, mesh%vp%part, &
                                  this%c2m_nsend, this%c2m_nrec, cf_order, mf_order)
 
-    SAFE_ALLOCATE(this%c2m_cf_order(this%c2m_nsend, 3))
-    SAFE_ALLOCATE(this%c2m_mf_order(this%c2m_nrec))
+    SAFE_ALLOCATE(this%c2m_cf_order(1:this%c2m_nsend, 1:3))
+    SAFE_ALLOCATE(this%c2m_mf_order(1:this%c2m_nrec))
     do ip = 1, this%c2m_nrec
 #ifdef HAVE_MPI
       this%c2m_mf_order(ip) = vec_global2local(mesh%vp, mf_order(ip), mesh%vp%partno)

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: unocc.F90 9160 2012-06-23 20:38:20Z xavier $
+!! $Id: unocc.F90 9584 2012-11-09 00:50:24Z dstrubbe $
 
 #include "global.h"
 
@@ -86,7 +86,6 @@ contains
     !%End
     call parse_integer(datasets_check('UnoccMaximumIter'), 50, max_iter)
     if(max_iter < 0) max_iter = huge(max_iter)
-    call messages_obsolete_variable('MaximumIter', 'UnoccMaximumIter')
 
     occupied_states = sys%st%nst
     call init_(sys%gr%mesh, sys%st)
@@ -119,6 +118,8 @@ contains
         nst_calculated = occupied_states
       end if
       call lcao_run(sys, hm, st_start = nst_calculated + 1)
+    else
+      call v_ks_calc(sys%ks, hm, sys%st, sys%geo, calc_eigenval = .false.)
     end if
     
     SAFE_DEALLOCATE_A(states_read)
@@ -146,6 +147,11 @@ contains
       message(1) = 'Unsuccessful write of "'//trim(tmpdir)//GS_DIR//'"'
       call messages_fatal(1)
     end if
+
+    if(.not. converged) then
+      write(message(1),'(a)') 'Some of the unoccupied states are not fully converged!'
+      call messages_warning(1)
+    endif
 
     ! write output file
     if(mpi_grp_is_root(mpi_world)) then

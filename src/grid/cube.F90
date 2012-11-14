@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube.F90 9207 2012-07-19 15:14:52Z umberto $
+!! $Id: cube.F90 9541 2012-10-30 16:48:24Z joseba $
 
 #include "global.h"
 
@@ -32,12 +32,15 @@ module cube_m
   use parser_m
   use profiling_m
   use simul_box_m
+  use varinfo_m
 
   implicit none
   private
   public ::             &
     cube_t,             &
-    cube_init,          &
+    dimensions_t,       &
+    cube_init,          & 
+    cube_point_to_process, &
     cube_partition,     &
     cube_global2local,  &
     cube_end
@@ -59,7 +62,22 @@ module cube_m
     integer, pointer :: local(:,:)  !< local to global map used when gathering a function
 
     type(fft_t), pointer :: fft !< the fft object
+    logical :: pes !< Saves if it is going to use Photo Electron Spectrum
   end type cube_t
+
+  !> It is intended to be used within a vector.
+  !!
+  !! Each index of the vector corresponds to an MPI process.  A
+  !! mapping between x,y,z index and process is saved, in a compact
+  !! way.
+  type dimensions_t
+    integer :: start_x !< First index X, which this process has 
+    integer :: start_y !< First index Y, which this process has 
+    integer :: start_z !< First index Z, which this process has 
+    integer :: end_x   !< Last  index X, which this process has 
+    integer :: end_y   !< Last  index Y, which this process has 
+    integer :: end_z   !< Last  index Z, which this process has 
+  end type dimensions_t
 
 contains
 
@@ -79,6 +97,7 @@ contains
     integer :: mpi_comm, tmp_n(3), fft_type_, optimize_parity(3), default_lib, fft_library_
     integer :: effdim_fft
     logical :: optimize(3)
+    integer :: photoelectron_flags
     type(mpi_grp_t) :: mpi_grp_
 
     PUSH_SUB(cube_init)
@@ -176,8 +195,19 @@ contains
 
     call mpi_grp_init(cube%mpi_grp, mpi_comm)
 
-    call cube_do_mapping(cube)
-
+    !Initialize mapping only if PES is going to be used    
+    
+    ! variable definition appears in src/td/pes.F90
+    call parse_integer(datasets_check('PhotoElectronSpectrum'), 0, photoelectron_flags)
+    if(.not.varinfo_valid_option('PhotoElectronSpectrum', photoelectron_flags, is_flag = .true.)) then
+      call input_error('PhotoElectronSpectrum')
+    end if
+    if (photoelectron_flags /= 0) then
+      cube%pes = .true.
+      call cube_do_mapping(cube)
+    else
+      cube%pes = .false.
+    end if
     if (cube%parallel_in_domains) call cube_partition_messages_debug(cube)
 
     POP_SUB(cube_init)
@@ -194,10 +224,11 @@ contains
       SAFE_DEALLOCATE_P(cube%fft)
     end if
 
-    SAFE_DEALLOCATE_P(cube%np_local)
-    SAFE_DEALLOCATE_P(cube%xlocal)
-    SAFE_DEALLOCATE_P(cube%local)
-
+    if (cube%pes) then
+      SAFE_DEALLOCATE_P(cube%np_local)
+      SAFE_DEALLOCATE_P(cube%xlocal)
+      SAFE_DEALLOCATE_P(cube%local)
+    end if
     POP_SUB(cube_end)
   end subroutine cube_end
 
@@ -239,7 +270,7 @@ contains
     tmp_local(6) = cube%rs_n(3)
 
     if (cube%parallel_in_domains) then
-      SAFE_ALLOCATE(local_sizes(6*cube%mpi_grp%size))
+      SAFE_ALLOCATE(local_sizes(1:6*cube%mpi_grp%size))
       call profiling_in(prof_gt,"CUBE_GAT")
 #ifdef HAVE_MPI
       call MPI_Allgather(tmp_local, 6, MPI_INTEGER, local_sizes, 6, MPI_INTEGER,&
@@ -247,15 +278,15 @@ contains
 #endif
       call profiling_out(prof_gt)
     else
-      SAFE_ALLOCATE(local_sizes(6))
+      SAFE_ALLOCATE(local_sizes(1:6))
       local_sizes = tmp_local
     end if
 
     call profiling_in(prof_map,"CUBE_MAP")
 
-    SAFE_ALLOCATE(cube%xlocal(cube%mpi_grp%size))
-    SAFE_ALLOCATE(cube%np_local(cube%mpi_grp%size))
-    SAFE_ALLOCATE(cube%local(cube%rs_n_global(1)*cube%rs_n_global(2)*cube%rs_n_global(3), 3))
+    SAFE_ALLOCATE(cube%xlocal(1:cube%mpi_grp%size))
+    SAFE_ALLOCATE(cube%np_local(1:cube%mpi_grp%size))
+    SAFE_ALLOCATE(cube%local(1:cube%rs_n_global(1)*cube%rs_n_global(2)*cube%rs_n_global(3), 3))
 
     index = 1
     do process = 1, cube%mpi_grp%size
@@ -290,12 +321,66 @@ contains
     POP_SUB(cube_do_mapping)
   end subroutine cube_do_mapping
 
+  !!> Given a x, y, z point of the cube, it returns the corresponding process
+  !!
+  !! lasf_found is used to speed-up the search
+  integer pure function cube_point_to_process(xx, yy, zz, part, last_found) result(process)
+    integer, intent(in)   :: xx
+    integer, intent(in)   :: yy
+    integer, intent(in)   :: zz
+    type(dimensions_t), intent(in) :: part(:)
+    integer, intent(in) :: last_found
+    
+    integer :: ix, iy, iz, proc
+    logical :: found
+
+    ! No PUSH/POP because it is a PURE function
+    
+    do proc = last_found, mpi_world%size
+      !Compare X index
+      if ( xx >= part(proc)%start_x .and. xx < part(proc)%end_x ) then
+        !Compare Y index
+        if ( yy >= part(proc)%start_y .and. yy < part(proc)%end_y ) then
+          !Compare Z index
+          if ( zz >= part(proc)%start_z .and. zz < part(proc)%end_z ) then
+            process = proc
+            found = .true.
+            exit
+          end if
+        end if
+      end if
+    end do
+    
+    if (.not. found) then
+      do proc = 1, last_found-1
+        !Compare X index
+        if ( xx >= part(proc)%start_x .and. xx < part(proc)%end_x ) then
+          !Compare Y index
+          if ( yy >= part(proc)%start_y .and. yy < part(proc)%end_y ) then
+            !Compare Z index
+            if ( zz >= part(proc)%start_z .and. zz < part(proc)%end_z ) then
+              process = proc
+              found = .true.
+              exit
+            end if
+          end if
+        end if
+      end do
+    end if
+      
+    ! An error message should be raised, if this point is reached
+    if (.not. found) then
+      process = -1
+    end if
+
+  end function cube_point_to_process
+
   ! ---------------------------------------------------------
   subroutine cube_partition(cube, part)
-    type(cube_t), intent(in)  :: cube
-    integer,      intent(out) :: part(:,:,:)
+    type(cube_t),            intent(in)  :: cube
+    type(dimensions_t), intent(out) :: part(:)
 
-    integer :: tmp_local(6), position, process, ix, iy, iz
+    integer :: tmp_local(6), position, process
     integer, allocatable :: local_sizes(:)
 
     PUSH_SUB(cube_partition)
@@ -309,26 +394,26 @@ contains
     tmp_local(6) = cube%rs_n(3)
 
     if (cube%parallel_in_domains) then
-      SAFE_ALLOCATE(local_sizes(6*cube%mpi_grp%size))
+      SAFE_ALLOCATE(local_sizes(1:6*cube%mpi_grp%size))
 #ifdef HAVE_MPI
       call MPI_Allgather(tmp_local, 6, MPI_INTEGER, local_sizes, 6, MPI_INTEGER,&
                          cube%mpi_grp%comm, mpi_err)
 #endif
     else
-      SAFE_ALLOCATE(local_sizes(6))
+      SAFE_ALLOCATE(local_sizes(1:6))
       local_sizes = tmp_local
     end if
 
     do process = 1, cube%mpi_grp%size
       position = ((process-1)*6)+1
-
-      do iz = local_sizes(position+2), local_sizes(position+2)+local_sizes(position+5)-1
-        do iy = local_sizes(position+1), local_sizes(position+1)+local_sizes(position+4)-1
-          do ix = local_sizes(position), local_sizes(position)+local_sizes(position+3)-1
-            part(ix, iy, iz) = process
-          end do
-        end do
-      end do
+      
+      part(process)%start_x = local_sizes(position)
+      part(process)%start_y = local_sizes(position+1) 
+      part(process)%start_z = local_sizes(position+2) 
+      part(process)%end_x   = local_sizes(position)+local_sizes(position+3)
+      part(process)%end_y   = local_sizes(position+1)+local_sizes(position+4)
+      part(process)%end_z   = local_sizes(position+2)+local_sizes(position+5)
+      
     end do
 
     POP_SUB(cube_partition)
@@ -342,12 +427,14 @@ contains
     integer          :: npart
     integer          :: iunit          ! For debug output to files.
     character(len=3) :: filenum
-    integer, allocatable :: part(:,:,:)
-
+    type(dimensions_t), allocatable :: part(:)
+    integer :: last_found_proc
+    
     PUSH_SUB(cube_partition_messages_debug)
 
+    last_found_proc = 1
     if(in_debug_mode) then
-      SAFE_ALLOCATE(part(cube%rs_n_global(1), cube%rs_n_global(2), cube%rs_n_global(3)))
+      SAFE_ALLOCATE(part(1:cube%mpi_grp%size))
       call cube_partition(cube, part)
   
       if(mpi_grp_is_root(mpi_world)) then
@@ -364,7 +451,10 @@ contains
           do kk = 1, cube%rs_n_global(3)
             do jj = 1, cube%rs_n_global(2)
               do ii = 1, cube%rs_n_global(1)
-                if(part(ii, jj, kk) .eq. nn) write(iunit, '(3i8)') ii, jj, kk
+                if(cube_point_to_process(ii, jj, kk, part, last_found_proc) == nn) then
+                  write(iunit, '(3i8)') ii, jj, kk
+                  last_found_proc = nn
+                end if
               end do
             end do
           end do

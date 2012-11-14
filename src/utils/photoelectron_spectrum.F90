@@ -29,7 +29,6 @@ program photoelectron_spectrum
   use parser_m
   use pes_m  
   use profiling_m
-  use simul_box_m
   use string_m
   use unit_m
   use unit_system_m
@@ -38,12 +37,12 @@ program photoelectron_spectrum
 
   implicit none
 
-  integer              :: argc, ierr, mode, interp
+  integer              :: ierr, mode, interp
 
   integer              :: dim, ll(MAX_DIM), ii, dir
   FLOAT                :: Emax, Emin,Estep, uEstep,uEspan(2), pol(3)
   FLOAT                :: uThstep,uThspan(2),uPhstep,uPhspan(2) 
-  FLOAT                :: ThBatch(3),PhBatch(3), center(3)
+  FLOAT                :: center(3)
   FLOAT, pointer       :: lk(:),RR(:)
   FLOAT, allocatable   :: PESK(:,:,:)
   logical              :: interpol

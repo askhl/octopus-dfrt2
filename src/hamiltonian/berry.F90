@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: berry.F90 8807 2012-01-25 15:13:38Z joseba $
+!! $Id: berry.F90 9540 2012-10-30 12:23:20Z joseba $
 
 #include "global.h"
 
@@ -195,8 +195,8 @@ contains
   FLOAT function berry_energy_correction(st, mesh, E_field, vberry) result(delta)
     type(states_t), intent(in) :: st
     type(mesh_t),   intent(in) :: mesh
-    FLOAT,          intent(in) :: E_field(:)  ! mesh%sb%periodic_dim
-    FLOAT,          intent(in) :: vberry(:,:) ! mesh%np, st%d%nspin
+    FLOAT,          intent(in) :: E_field(:)  !< mesh\%sb\%periodic_dim
+    FLOAT,          intent(in) :: vberry(:,:) !< mesh\%np, st\%d\%nspin
 
     integer :: ispin, idir
 

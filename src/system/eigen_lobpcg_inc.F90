@@ -36,7 +36,7 @@
     integer,                intent(inout) :: niter
     integer,                intent(in)    :: ik
     integer,                intent(inout) :: converged
-    FLOAT,                  intent(out)   :: diff(1:st%nst)
+    FLOAT,                  intent(out)   :: diff(:) !< (1:st%nst)
     integer,                intent(in)    :: block_size
 
     integer            :: ib, psi_start, psi_end, constr_start, constr_end, bs
@@ -78,11 +78,11 @@
       if(constr_end >= constr_start) then
         call X(lobpcg)(gr, st, hm, psi_start, psi_end, st%X(psi)(:, :, psi_start:psi_end, ik), &
            constr_start, constr_end, &
-           ik, pre, tol, n_matvec, conv, diff, iblock, &
+           ik, pre, tol, n_matvec, conv, diff, &
            constr = st%X(psi)(:, :, constr_start:constr_end, ik))
       else
         call X(lobpcg)(gr, st, hm, psi_start, psi_end, st%X(psi)(:, :, psi_start:psi_end, ik), &
-           constr_start, constr_end, ik, pre, tol, n_matvec, conv, diff, iblock)
+           constr_start, constr_end, ik, pre, tol, n_matvec, conv, diff)
       end if
 
       niter         = niter + n_matvec
@@ -122,7 +122,7 @@
 !! There is also a wiki page at
 !! http://www.tddft.org/programs/octopus/wiki/index.php/Developers:LOBPCG
 subroutine X(lobpcg)(gr, st, hm, st_start, st_end, psi, constr_start, constr_end,  &
-  ik, pre, tol, niter, converged, diff, ib, constr)
+  ik, pre, tol, niter, converged, diff, constr)
   type(grid_t),           intent(in)    :: gr
   type(states_t),         intent(inout) :: st
   type(hamiltonian_t),    intent(in)    :: hm
@@ -136,18 +136,17 @@ subroutine X(lobpcg)(gr, st, hm, st_start, st_end, psi, constr_start, constr_end
   FLOAT,                  intent(in)    :: tol
   integer,                intent(inout) :: niter
   integer,                intent(out)   :: converged
-  FLOAT,                  intent(inout) :: diff(1:st%nst)
-  integer,                intent(in)    :: ib
+  FLOAT,                  intent(inout) :: diff(:) !< (1:st%nst)
   R_TYPE, optional,       intent(in)    :: constr(gr%mesh%np_part, st%d%dim, constr_start:constr_end)
 
-  integer :: nps   ! Number of points per state.
-  integer :: nst   ! Number of eigenstates (i.e. the blocksize).
-  integer :: lnst  ! Number of local eigenstates.
+  integer :: nps   !< Number of points per state.
+  integer :: nst   !< Number of eigenstates (i.e. the blocksize).
+  integer :: lnst  !< Number of local eigenstates.
 
   integer :: ist, i, j, iter, blks, maxiter, nconstr
 
-  integer, target      :: nuc                 ! Index set of unconverged eigenpairs.
-  integer, pointer     :: uc(:), lnuc, luc(:) ! Index set of local unconverged eigenpairs.
+  integer, target      :: nuc                 !< Index set of unconverged eigenpairs.
+  integer, pointer     :: uc(:), lnuc, luc(:) !< Index set of local unconverged eigenpairs.
   integer, allocatable :: all_ev(:), all_constr(:)
 
 #ifdef HAVE_MPI
@@ -162,18 +161,18 @@ subroutine X(lobpcg)(gr, st, hm, st_start, st_end, psi, constr_start, constr_end
   type(iihash_t)    :: all_ev_inv
 
   R_TYPE, pointer             :: ritz_psi(:, :), ritz_res(:, :), ritz_dir(:, :)
-  R_TYPE, allocatable         :: tmp(:, :, :)     ! Temporary storage of wavefunction size.
-  R_TYPE, allocatable         :: nuc_tmp(:, :)    ! Temporary storage of Gram block size.
-  R_TYPE, allocatable         :: res(:, :, :)     ! Residuals.
-  R_TYPE, allocatable         :: h_res(:, :, :)   ! H res.
-  R_TYPE, allocatable         :: dir(:, :, :)     ! Conjugate directions.
-  R_TYPE, allocatable         :: h_dir(:, :, :)   ! H dir.
-  R_TYPE, allocatable         :: h_psi(:, :, :)   ! H |psi>.
-  FLOAT,  allocatable          :: eval(:)         ! The eigenvalues of the current block.
-  R_TYPE, allocatable         :: gram_h(:, :)     ! Gram matrix for Hamiltonian.
-  R_TYPE, allocatable         :: gram_i(:, :)     ! Gram matrix for unit matrix.
-  R_TYPE, allocatable         :: gram_block(:, :) ! Space to construct the Gram matrix blocks.
-  R_TYPE, allocatable, target :: ritz_vec(:, :)   ! Ritz-vectors.
+  R_TYPE, allocatable         :: tmp(:, :, :)     !< Temporary storage of wavefunction size.
+  R_TYPE, allocatable         :: nuc_tmp(:, :)    !< Temporary storage of Gram block size.
+  R_TYPE, allocatable         :: res(:, :, :)     !< Residuals.
+  R_TYPE, allocatable         :: h_res(:, :, :)   !< H res.
+  R_TYPE, allocatable         :: dir(:, :, :)     !< Conjugate directions.
+  R_TYPE, allocatable         :: h_dir(:, :, :)   !< H dir.
+  R_TYPE, allocatable         :: h_psi(:, :, :)   !< H |psi>.
+  FLOAT,  allocatable          :: eval(:)         !< The eigenvalues of the current block.
+  R_TYPE, allocatable         :: gram_h(:, :)     !< Gram matrix for Hamiltonian.
+  R_TYPE, allocatable         :: gram_i(:, :)     !< Gram matrix for unit matrix.
+  R_TYPE, allocatable         :: gram_block(:, :) !< Space to construct the Gram matrix blocks.
+  R_TYPE, allocatable, target :: ritz_vec(:, :)   !< Ritz-vectors.
   type(batch_t) :: psib, hpsib
   logical :: there_are_constraints
   
@@ -656,7 +655,7 @@ contains
   subroutine X(lobpcg_orth)(v_start, v_end, vs, chol_failure)
     integer,        intent(in)    :: v_start
     integer,        intent(in)    :: v_end
-    R_TYPE,         intent(inout) :: vs(gr%mesh%np_part, st%d%dim, v_start:v_end)
+    R_TYPE,         intent(inout) :: vs(:, :, v_start:) !< (gr%mesh%np_part, st%d%dim, v_start:v_end)
     logical,        intent(out)   :: chol_failure
 
     integer             :: i
@@ -666,7 +665,7 @@ contains
 
     chol_failure = .false.
     SAFE_ALLOCATE(vv(1:nuc, 1:nuc))
-    call states_blockt_mul(gr%mesh, st, v_start, v_end, v_start, v_end, vs, vs, vv, xpsi1=UC, xpsi2=UC, symm=.true.)
+    call states_blockt_mul(gr%mesh, st, v_start, v_start, vs, vs, vv, xpsi1=UC, xpsi2=UC, symm=.true.)
     call profiling_in(C_PROFILING_LOBPCG_CHOL)
     call lalg_cholesky(nuc, vv, bof=chol_failure)
     call profiling_out(C_PROFILING_LOBPCG_CHOL)
@@ -696,7 +695,7 @@ contains
   subroutine X(lobpcg_apply_constraints)(vs_start, vs_end, vs, nidx, idx)
     integer, intent(in)    :: vs_start
     integer, intent(in)    :: vs_end
-    R_TYPE,  intent(inout) :: vs(gr%mesh%np_part, st%d%dim, vs_start:vs_end)
+    R_TYPE,  intent(inout) :: vs(:, :, vs_start:) !< (gr%mesh%np_part, st%d%dim, vs_start:vs_end)
     integer, intent(in)    :: nidx
     integer, intent(in)    :: idx(:)
     
@@ -711,13 +710,13 @@ contains
     SAFE_ALLOCATE(tmp2(1:nconstr, 1:nidx))
     SAFE_ALLOCATE(tmp3(1:nconstr, 1:nidx))
 
-    call states_blockt_mul(gr%mesh, st, constr_start, constr_end, constr_start, constr_end, &
+    call states_blockt_mul(gr%mesh, st, constr_start, constr_start, &
       constr, constr, tmp1, xpsi1=all_constr, xpsi2=all_constr)
     det = lalg_inverter(nconstr, tmp1, invert=.true.)
-    call states_blockt_mul(gr%mesh, st, constr_start, constr_end, vs_start, vs_end, &
+    call states_blockt_mul(gr%mesh, st, constr_start, vs_start, &
       constr, vs, tmp2, xpsi1=all_constr, xpsi2=idx(1:nidx))
     call lalg_gemm(nconstr, nidx, nconstr, R_TOTYPE(M_ONE), tmp1, tmp2, R_TOTYPE(M_ZERO), tmp3)
-    call states_block_matr_mul_add(gr%mesh, st, -R_TOTYPE(M_ONE), constr_start, constr_end, vs_start, vs_end, &
+    call states_block_matr_mul_add(gr%mesh, st, -R_TOTYPE(M_ONE), constr_start, vs_start, &
       constr, tmp3, R_TOTYPE(M_ONE), vs, xpsi=all_constr, xres=idx(1:nidx))
 
     SAFE_DEALLOCATE_A(tmp1)
@@ -731,8 +730,8 @@ contains
 
   ! ---------------------------------------------------------
   subroutine X(blockt_mul)(psi1, psi2, res, xpsi1, xpsi2, symm)
-    R_TYPE,            intent(in)  :: psi1(gr%mesh%np_part, st%d%dim, st_start:st_end)
-    R_TYPE,            intent(in)  :: psi2(gr%mesh%np_part, st%d%dim, st_start:st_end)
+    R_TYPE,            intent(in)  :: psi1(:, :, st_start:) !< (gr%mesh%np_part, st%d%dim, st_start:st_end)
+    R_TYPE,            intent(in)  :: psi2(:, :, st_start:) !< (gr%mesh%np_part, st%d%dim, st_start:st_end)
     R_TYPE,            intent(out) :: res(:, :)
     integer,           intent(in)  :: xpsi1(:)
     integer,           intent(in)  :: xpsi2(:)
@@ -740,7 +739,7 @@ contains
 
     PUSH_SUB(X(lobpcg).X(blockt_mul))
 
-    call states_blockt_mul(gr%mesh, st, st_start, st_end, st_start, st_end, &
+    call states_blockt_mul(gr%mesh, st, st_start, st_start, &
       psi1, psi2, res, xpsi1=xpsi1, xpsi2=xpsi2, symm=symm)
 
     POP_SUB(X(lobpcg).X(blockt_mul))
@@ -750,16 +749,16 @@ contains
   ! ---------------------------------------------------------
   subroutine X(block_matr_mul_add)(alpha, psi, matr, beta, res, xpsi, xres)
     R_TYPE,  intent(in)    :: alpha
-    R_TYPE,  intent(in)    :: psi(gr%mesh%np_part, st%d%dim, st_start:st_end)
+    R_TYPE,  intent(in)    :: psi(:, :, st_start:) !< (gr%mesh%np_part, st%d%dim, st_start:st_end)
     R_TYPE,  intent(in)    :: matr(:, :)
     R_TYPE,  intent(in)    :: beta
-    R_TYPE,  intent(inout) :: res(gr%mesh%np_part, st%d%dim, st_start:st_end)
+    R_TYPE,  intent(inout) :: res(:, :, st_start:) !< (gr%mesh%np_part, st%d%dim, st_start:st_end)
     integer, intent(in)    :: xpsi(:)
     integer, intent(in)    :: xres(:)
 
     PUSH_SUB(X(lobpcg).X(block_matr_mul_add))
 
-    call states_block_matr_mul_add(gr%mesh, st, alpha, st_start, st_end, st_start, st_end, &
+    call states_block_matr_mul_add(gr%mesh, st, alpha, st_start, st_start, &
       psi, matr, beta, res, xpsi=xpsi, xres=xres)
 
     POP_SUB(X(lobpcg).X(block_matr_mul_add))
@@ -768,16 +767,16 @@ contains
 
   ! ---------------------------------------------------------
   subroutine X(block_matr_mul)(psi, matr, res, xpsi, xres)
-    R_TYPE,  intent(in)  :: psi(gr%mesh%np_part, st%d%dim, st_start:st_end)
+    R_TYPE,  intent(in)  :: psi(:, :, st_start:) !< (gr%mesh%np_part, st%d%dim, st_start:st_end)
     R_TYPE,  intent(in)  :: matr(:, :)
-    R_TYPE,  intent(out) :: res(gr%mesh%np_part, st%d%dim, st_start:st_end)
+    R_TYPE,  intent(out) :: res(:, :, st_start:) !< (gr%mesh%np_part, st%d%dim, st_start:st_end)
     integer, intent(in)  :: xpsi(:)
     integer, intent(in)  :: xres(:)
 
     PUSH_SUB(X(lobpcg).X(block_matr_mul))
 
-    call states_block_matr_mul(gr%mesh, st, st_start, st_end, st_start, st_end, &
-      psi, matr, res, xpsi=xpsi, xres=xres)
+    call states_block_matr_mul_add(gr%mesh, st, R_TOTYPE(M_ONE), st_start, st_start, &
+      psi, matr, R_TOTYPE(M_ZERO), res, xpsi=xpsi, xres=xres)
 
     POP_SUB(X(lobpcg).X(block_matr_mul))
   end subroutine X(block_matr_mul)

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: lalg_adv_lapack_inc.F90 8908 2012-03-09 01:12:23Z dstrubbe $
+!! $Id: lalg_adv_lapack_inc.F90 9586 2012-11-09 03:38:05Z dstrubbe $
 
 #if defined(SINGLE_PRECISION)
 #  define DLAPACK(x) s ## x
@@ -45,8 +45,8 @@ end function sfmin
 !! matrix.
 subroutine dcholesky(n, a, bof, err_code)
   integer,           intent(in)    :: n
-  FLOAT,             intent(inout) :: a(:, :)
-  logical, optional, intent(inout) :: bof      ! Bomb on failure.
+  FLOAT,             intent(inout) :: a(:,:)   !< (n,n)
+  logical, optional, intent(inout) :: bof      !< Bomb on failure.
   integer, optional, intent(out)   :: err_code
 
   integer :: info
@@ -55,12 +55,14 @@ subroutine dcholesky(n, a, bof, err_code)
   call profiling_in(cholesky_prof, "CHOLESKY")
   PUSH_SUB(dcholesky)
 
+  ASSERT(n > 0)
+
   bof_ = .true.
   if(present(bof)) then
     bof_ = bof
   end if
 
-  call lapack_potrf('U', n, a(1, 1), LD(a), info)
+  call lapack_potrf('U', n, a(1, 1), lead_dim(a), info)
   if(info.ne.0) then
     if(bof_) then
       write(message(1), '(3a,i5)') 'In dcholesky, LAPACK ', TOSTRING(DLAPACK(potrf)), ' returned error message ', info
@@ -90,8 +92,8 @@ end subroutine dcholesky
 !! matrix.
 subroutine zcholesky(n, a, bof, err_code)
   integer,           intent(in)    :: n
-  CMPLX,             intent(inout) :: a(:, :)
-  logical, optional, intent(inout) :: bof     ! Bomb on failure.
+  CMPLX,             intent(inout) :: a(:,:)  !< (n,n)
+  logical, optional, intent(inout) :: bof     !< Bomb on failure.
   integer, optional, intent(out)   :: err_code
 
   integer :: info
@@ -99,12 +101,14 @@ subroutine zcholesky(n, a, bof, err_code)
   call profiling_in(cholesky_prof, "CHOLESKY")
   PUSH_SUB(zcholesky)
 
+  ASSERT(n > 0)
+
   bof_ = .true.
   if(present(bof)) then
     bof_ = bof
   end if
 
-  call lapack_potrf('U', n, a(1, 1), LD(a), info)
+  call lapack_potrf('U', n, a(1, 1), lead_dim(a), info)
 
   if(info.ne.0) then
     if(bof_) then
@@ -136,10 +140,10 @@ end subroutine zcholesky
 !! Here A and B are assumed to be symmetric and B is also positive definite.
 subroutine dgeneigensolve(n, a, b, e, bof, err_code)
   integer,           intent(in)    :: n
-  FLOAT,             intent(inout) :: a(n,n)
-  FLOAT,             intent(inout) :: b(n,n)
-  FLOAT,             intent(out)   :: e(n)
-  logical, optional, intent(inout) :: bof      ! Bomb on failure.
+  FLOAT,             intent(inout) :: a(:,:)   !< (n,n)
+  FLOAT,             intent(inout) :: b(:,:)   !< (n,n)
+  FLOAT,             intent(out)   :: e(:)     !< (n)
+  logical, optional, intent(inout) :: bof      !< Bomb on failure.
   integer, optional, intent(out)   :: err_code
 
   integer :: info, lwork, ii, jj
@@ -148,6 +152,8 @@ subroutine dgeneigensolve(n, a, b, e, bof, err_code)
 
   call profiling_in(eigensolver_prof, "DENSE_EIGENSOLVER")
   PUSH_SUB(dgeneigensolve)
+
+  ASSERT(n > 0)
 
   bof_ = .true.
   if(present(bof)) then
@@ -161,7 +167,7 @@ subroutine dgeneigensolve(n, a, b, e, bof, err_code)
 
   lwork = 5*n
   SAFE_ALLOCATE(work(1:lwork))
-  call lapack_sygv(1, 'V', 'U', n, a(1, 1), n, b(1, 1), n, e(1), work(1), lwork, info)
+  call lapack_sygv(1, 'V', 'U', n, a(1, 1), lead_dim(a), b(1, 1), lead_dim(b), e(1), work(1), lwork, info)
   SAFE_DEALLOCATE_A(work)
 
   ! b was destroyed, so we rebuild it
@@ -204,10 +210,10 @@ end subroutine dgeneigensolve
 !! Here A and B are assumed to be Hermitian and B is also positive definite.
 subroutine zgeneigensolve(n, a, b, e, bof, err_code)
   integer,           intent(in)    :: n
-  CMPLX,             intent(inout) :: a(n,n)
-  CMPLX,             intent(inout) :: b(n,n)
-  FLOAT,             intent(out)   :: e(n)
-  logical, optional, intent(inout) :: bof      ! Bomb on failure.
+  CMPLX,             intent(inout) :: a(:,:)   !< (n,n)
+  CMPLX,             intent(inout) :: b(:,:)   !< (n,n)
+  FLOAT,             intent(out)   :: e(:)     !< (n)
+  logical, optional, intent(inout) :: bof      !< Bomb on failure.
   integer, optional, intent(out)   :: err_code
 
   integer            :: info, lwork, ii, jj
@@ -217,6 +223,8 @@ subroutine zgeneigensolve(n, a, b, e, bof, err_code)
 
   call profiling_in(eigensolver_prof, "DENSE_EIGENSOLVER")
   PUSH_SUB(zgeneigensolve)
+
+  ASSERT(n > 0)
 
   bof_ = .true.
   if(present(bof)) then
@@ -231,7 +239,7 @@ subroutine zgeneigensolve(n, a, b, e, bof, err_code)
   lwork = 5*n
   SAFE_ALLOCATE(work(1:lwork))
   SAFE_ALLOCATE(rwork(1:max(1, 3*n-2)))
-  call lapack_hegv(1, 'V', 'U', n, a(1, 1), n, b(1, 1), n, e(1), work(1), lwork, rwork(1), info)
+  call lapack_hegv(1, 'V', 'U', n, a(1, 1), lead_dim(a), b(1, 1), lead_dim(b), e(1), work(1), lwork, rwork(1), info)
   SAFE_DEALLOCATE_A(work)
   SAFE_DEALLOCATE_A(rwork)
 
@@ -273,17 +281,19 @@ end subroutine zgeneigensolve
 !! (non hermitian) eigenproblem, of the form  A*x=(lambda)*x
 subroutine zeigensolve_nonh(n, a, e, err_code, side)
   integer,           intent(in)      :: n
-  CMPLX,             intent(inout)   :: a(n,n)
-  CMPLX,             intent(out)     :: e(n)
+  CMPLX,             intent(inout)   :: a(:, :)   !< (n,n)
+  CMPLX,             intent(out)     :: e(:)     !< (n)
   integer, optional, intent(out)     :: err_code
-  character(1), optional, intent(in) :: side ! which eigenvectors ('L' or 'R')
+  character(1), optional, intent(in) :: side     !< which eigenvectors ('L' or 'R')
 
   integer            :: info, lwork
   FLOAT, allocatable :: rwork(:)
-  CMPLX, allocatable :: work(:), vl(:, :) ,vr(:, :)
+  CMPLX, allocatable :: work(:), vl(:, :), vr(:, :)
   character(1)       :: side_
 
   PUSH_SUB(zeigensolve_nonh)
+
+  ASSERT(n > 0)
 
   if (present(side)) then
     side_ = side
@@ -298,9 +308,10 @@ subroutine zeigensolve_nonh(n, a, e, err_code, side)
   ! is below the matrix dimension.
   SAFE_ALLOCATE(work(n))
   SAFE_ALLOCATE(vl(1, 1))
-  SAFE_ALLOCATE(vr(1, 1))
+  SAFE_ALLOCATE(vr(1:n, 1:n)) ! even in query mode, the size of vr is checked, so we allocate it
   SAFE_ALLOCATE(rwork(1))
-  call lapack_geev('N', 'V', n, a(1, 1), n, e(1), vl(1, 1), 1, vr(1, 1), n, work(1), lwork, rwork(1), info)
+  call lapack_geev('N', 'V', n, a(1, 1), lead_dim(a), e(1), vl(1, 1), lead_dim(vl), vr(1, 1), lead_dim(vr), &
+    work(1), lwork, rwork(1), info)
 
   lwork = int(work(1))
   SAFE_DEALLOCATE_A(work)
@@ -313,13 +324,15 @@ subroutine zeigensolve_nonh(n, a, e, err_code, side)
   if (side_.eq.'L'.or.side_.eq.'l') then
       SAFE_ALLOCATE(vl(1:n, 1:n))
       SAFE_ALLOCATE(vr(1, 1))
-      call lapack_geev('V', 'N', n, a(1, 1), n, e(1), vl(1, 1), n, vr(1,1), 1, work(1), lwork, rwork(1), info)
-      a(:, :) = vl(:, :)
+      call lapack_geev('V', 'N', n, a(1, 1), lead_dim(a), e(1), vl(1, 1), lead_dim(vl), vr(1,1), lead_dim(vr), &
+        work(1), lwork, rwork(1), info)
+      a(1:n, 1:n) = vl(1:n, 1:n)
   else
       SAFE_ALLOCATE(vl(1, 1))
       SAFE_ALLOCATE(vr(1:n, 1:n))
-      call lapack_geev('N', 'V', n, a(1, 1), n, e(1), vl(1, 1), 1, vr(1,1), n, work(1), lwork, rwork(1), info)
-      a(:, :) = vr(:, :)
+      call lapack_geev('N', 'V', n, a(1, 1), lead_dim(a), e(1), vl(1, 1), lead_dim(vl), vr(1,1), lead_dim(vr), &
+        work(1), lwork, rwork(1), info)
+      a(1:n, 1:n) = vr(1:n, 1:n)
   end if
   SAFE_DEALLOCATE_A(work)
   SAFE_DEALLOCATE_A(rwork)
@@ -343,16 +356,18 @@ end subroutine zeigensolve_nonh
 !! generalized (non hermitian) eigenproblem, of the form  A*x=(lambda)*x
 subroutine deigensolve_nonh(n, a, e, err_code, side)
   integer,           intent(in)      :: n
-  FLOAT,             intent(inout)   :: a(n,n)
-  FLOAT,             intent(out)     :: e(n)
+  FLOAT,             intent(inout)   :: a(:,:)   !< (n,n)
+  FLOAT,             intent(out)     :: e(:)     !< (n)
   integer, optional, intent(out)     :: err_code
-  character(1), optional, intent(in) :: side ! which eigenvectors ('L' or 'R')
+  character(1), optional, intent(in) :: side     !< which eigenvectors ('L' or 'R')
 
   integer            :: info, lwork
-  FLOAT, allocatable :: rwork(:), work(:), vl(:, :) ,vr(:, :)
+  FLOAT, allocatable :: rwork(:), work(:), vl(:, :), vr(:, :)
   character(1)       :: side_
 
   PUSH_SUB(deigensolve_nonh)
+
+  ASSERT(n > 0)
 
   if (present(side)) then
     side_ = side
@@ -367,9 +382,10 @@ subroutine deigensolve_nonh(n, a, e, err_code, side)
   ! is below the matrix dimension.
   SAFE_ALLOCATE(work(n))
   SAFE_ALLOCATE(vl(1, 1))
-  SAFE_ALLOCATE(vr(1, 1))
+  SAFE_ALLOCATE(vr(1:n, 1:n)) ! even in query mode, the size of vr is checked, so we allocate it
   SAFE_ALLOCATE(rwork(1))
-  call lapack_geev('N', 'V', n, a(1, 1), n, e(1), vl(1, 1), 1, vr(1, 1), n, work(1), lwork, rwork(1), info)
+  call lapack_geev('N', 'V', n, a(1, 1), n, e(1), vl(1, 1), lead_dim(vl), vr(1, 1), lead_dim(vr), &
+     work(1), lwork, rwork(1), info)
 
   lwork = int(work(1))
   SAFE_DEALLOCATE_A(work)
@@ -382,13 +398,15 @@ subroutine deigensolve_nonh(n, a, e, err_code, side)
   if (side_.eq.'L'.or.side_.eq.'l') then
       SAFE_ALLOCATE(vl(1:n, 1:n))
       SAFE_ALLOCATE(vr(1, 1))
-      call lapack_geev('V', 'N', n, a(1, 1), n, e(1), vl(1, 1), n, vr(1,1), 1, work(1), lwork, rwork(1), info)
-      a(:, :) = vl(:, :)
+      call lapack_geev('V', 'N', n, a(1, 1), lead_dim(a), e(1), vl(1, 1), lead_dim(vl), vr(1,1), lead_dim(vr), &
+        work(1), lwork, rwork(1), info)
+      a(1:n, 1:n) = vl(1:n, 1:n)
   else
       SAFE_ALLOCATE(vl(1, 1))
       SAFE_ALLOCATE(vr(1:n, 1:n))
-      call lapack_geev('N', 'V', n, a(1, 1), n, e(1), vl(1, 1), 1, vr(1,1), n, work(1), lwork, rwork(1), info)
-      a(:, :) = vr(:, :)
+      call lapack_geev('N', 'V', n, a(1, 1), lead_dim(a), e(1), vl(1, 1), lead_dim(vl), vr(1,1), lead_dim(vr), &
+        work(1), lwork, rwork(1), info)
+      a(1:n, 1:n) = vr(1:n, 1:n)
   end if
   SAFE_DEALLOCATE_A(work)
   SAFE_DEALLOCATE_A(rwork)
@@ -412,11 +430,11 @@ end subroutine deigensolve_nonh
 !! Here A and B are assumed to be symmetric and B is also positive definite.
 subroutine dlowest_geneigensolve(k, n, a, b, e, v, bof, err_code)
   integer,           intent(in)    :: k, n
-  FLOAT,             intent(in)    :: a(:, :)
-  FLOAT,             intent(in)    :: b(:, :)
-  FLOAT,             intent(out)   :: e(:)
-  FLOAT,             intent(out)   :: v(:, :)
-  logical, optional, intent(inout) :: bof      ! Bomb on failure.
+  FLOAT,             intent(in)    :: a(:,:)   !< (n, n)
+  FLOAT,             intent(in)    :: b(:,:)   !< (n, n)
+  FLOAT,             intent(out)   :: e(:)     !< (n)
+  FLOAT,             intent(out)   :: v(:,:)   !< (n, n)
+  logical, optional, intent(inout) :: bof      !< Bomb on failure.
   integer, optional, intent(out)   :: err_code
 
   interface
@@ -438,6 +456,8 @@ subroutine dlowest_geneigensolve(k, n, a, b, e, v, bof, err_code)
   
   PUSH_SUB(dlowest_geneigensolve)
 
+  ASSERT(n > 0)
+
   bof_ = .true.
   if(present(bof)) then
     bof_ = bof
@@ -447,15 +467,15 @@ subroutine dlowest_geneigensolve(k, n, a, b, e, v, bof, err_code)
 
   ! Work size query.
   SAFE_ALLOCATE(work(1))
-  call DLAPACK(sygvx)(1, 'V', 'I', 'U', n, a(1, 1), LD(a), b(1, 1), LD(b), M_ZERO, M_ZERO, &
-    1, k, abstol, m, e(1), v(1, 1), LD(v), work(1), -1, iwork(1), ifail(1), info)
+  call DLAPACK(sygvx)(1, 'V', 'I', 'U', n, a(1, 1), lead_dim(a), b(1, 1), lead_dim(b), M_ZERO, M_ZERO, &
+    1, k, abstol, m, e(1), v(1, 1), lead_dim(v), work(1), -1, iwork(1), ifail(1), info)
   lwork = int(work(1))
   SAFE_DEALLOCATE_A(work)
 
   SAFE_ALLOCATE(work(1:lwork))
 
-  call DLAPACK(sygvx)(1, 'V', 'I', 'U', n, a(1, 1), LD(a), b(1, 1), LD(b), M_ZERO, M_ZERO, &
-    1, k, abstol, m, e(1), v(1, 1), LD(v), work(1), lwork, iwork(1), ifail(1), info)
+  call DLAPACK(sygvx)(1, 'V', 'I', 'U', n, a(1, 1), lead_dim(a), b(1, 1), lead_dim(b), M_ZERO, M_ZERO, &
+    1, k, abstol, m, e(1), v(1, 1), lead_dim(v), work(1), lwork, iwork(1), ifail(1), info)
 
   SAFE_DEALLOCATE_A(work)
 
@@ -487,11 +507,11 @@ end subroutine dlowest_geneigensolve
 !! Here A and B are assumed to be Hermitian and B is also positive definite.
 subroutine zlowest_geneigensolve(k, n, a, b, e, v, bof, err_code)
   integer,           intent(in)    :: k, n
-  CMPLX,             intent(in)    :: a(:, :)
-  CMPLX,             intent(in)    :: b(:, :)
-  FLOAT,             intent(out)   :: e(:)
-  CMPLX,             intent(out)   :: v(:, :)
-  logical, optional, intent(inout) :: bof      ! Bomb on failure.
+  CMPLX,             intent(in)    :: a(:,:)   !< (n,n)
+  CMPLX,             intent(in)    :: b(:,:)   !< (n,n)
+  FLOAT,             intent(out)   :: e(:)     !< (n)
+  CMPLX,             intent(out)   :: v(:,:)   !< (n)
+  logical, optional, intent(inout) :: bof      !< Bomb on failure.
   integer, optional, intent(out)   :: err_code
 
   interface
@@ -515,6 +535,8 @@ subroutine zlowest_geneigensolve(k, n, a, b, e, v, bof, err_code)
 
   PUSH_SUB(zlowest_geneigensolve)
 
+  ASSERT(n > 0)
+
   bof_ = .true.
   if(present(bof)) then
     bof_ = bof
@@ -524,14 +546,14 @@ subroutine zlowest_geneigensolve(k, n, a, b, e, v, bof, err_code)
 
   ! Work size query.
   SAFE_ALLOCATE(work(1))
-  call ZLAPACK(hegvx)(1, 'V', 'I', 'U', n, a(1, 1), LD(a), b(1, 1), LD(b), M_ZERO, M_ZERO, &
-    1, k, abstol, m, e(1), v(1, 1), LD(v), work(1), -1, rwork(1), iwork(1), ifail(1), info)
+  call ZLAPACK(hegvx)(1, 'V', 'I', 'U', n, a(1, 1), lead_dim(a), b(1, 1), lead_dim(b), M_ZERO, M_ZERO, &
+    1, k, abstol, m, e(1), v(1, 1), lead_dim(v), work(1), -1, rwork(1), iwork(1), ifail(1), info)
   lwork = int(real(work(1)))
   SAFE_DEALLOCATE_A(work)
 
   SAFE_ALLOCATE(work(1:lwork))
-  call ZLAPACK(hegvx)(1, 'V', 'I', 'U', n, a(1, 1), LD(a), b(1, 1), LD(b), M_ZERO, M_ZERO, &
-    1, k, abstol, m, e(1), v(1, 1), LD(v), work(1), lwork, rwork(1), iwork(1), ifail(1), info)
+  call ZLAPACK(hegvx)(1, 'V', 'I', 'U', n, a(1, 1), lead_dim(a), b(1, 1), lead_dim(b), M_ZERO, M_ZERO, &
+    1, k, abstol, m, e(1), v(1, 1), lead_dim(v), work(1), lwork, rwork(1), iwork(1), ifail(1), info)
   SAFE_DEALLOCATE_A(work)
 
   if(info.ne.0) then
@@ -560,8 +582,8 @@ end subroutine zlowest_geneigensolve
 !> Computes all eigenvalues and eigenvectors of a real symmetric square matrix A.
 subroutine deigensolve(n, a, e, bof, err_code)
   integer, intent(in)              :: n
-  FLOAT,   intent(inout)           :: a(n,n)
-  FLOAT,   intent(out)             :: e(n)
+  FLOAT,   intent(inout)           :: a(:,:)   !< (n,n)
+  FLOAT,   intent(out)             :: e(:)     !< (n)
   logical, optional, intent(inout) :: bof      !< Bomb on failure.
   integer, optional, intent(out)   :: err_code
 
@@ -577,9 +599,11 @@ subroutine deigensolve(n, a, e, bof, err_code)
     bof_ = bof
   end if
 
+  ASSERT(n > 0)
+
   lwork = 6*n
   SAFE_ALLOCATE(work(1:lwork))
-  call lapack_syev('V', 'U', n, a(1, 1), LD(a), e(1), work(1), lwork, info)
+  call lapack_syev('V', 'U', n, a(1, 1), lead_dim(a), e(1), work(1), lwork, info)
   SAFE_DEALLOCATE_A(work)
 
   if(info.ne.0) then
@@ -607,10 +631,10 @@ end subroutine deigensolve
 ! ---------------------------------------------------------
 !> Computes all eigenvalues and eigenvectors of a complex Hermitian square matrix A.
 subroutine zeigensolve(n, a, e, bof, err_code)
-  integer, intent(in)    :: n
-  CMPLX,   intent(inout) :: a(n,n)
-  FLOAT,   intent(out)   :: e(n)
-  logical, optional, intent(inout) :: bof      ! Bomb on failure.
+  integer,           intent(in)    :: n
+  CMPLX,             intent(inout) :: a(:, :)   !< (n,n)
+  FLOAT,             intent(out)   :: e(:)     !< (n)
+  logical, optional, intent(inout) :: bof      !< Bomb on failure.
   integer, optional, intent(out)   :: err_code
 
   integer            :: info, lwork
@@ -621,6 +645,8 @@ subroutine zeigensolve(n, a, e, bof, err_code)
   PUSH_SUB(zeigensolve)
   call profiling_in(eigensolver_prof, "DENSE_EIGENSOLVER")
 
+  ASSERT(n > 0)
+
   bof_ = .true.
   if(present(bof)) then
     bof_ = bof
@@ -629,7 +655,7 @@ subroutine zeigensolve(n, a, e, bof, err_code)
   lwork = 6*n
   SAFE_ALLOCATE(work(1:lwork))
   SAFE_ALLOCATE(rwork(1:max(1, 3*n-2)))
-  call lapack_heev('V','U', n, a(1, 1), LD(a), e(1), work(1), lwork, rwork(1), info)
+  call lapack_heev('V','U', n, a(1, 1), lead_dim(a), e(1), work(1), lwork, rwork(1), info)
   SAFE_DEALLOCATE_A(work)
   SAFE_DEALLOCATE_A(rwork)
 
@@ -662,9 +688,9 @@ end subroutine zeigensolve
 !! Here A is assumed to be symmetric.
 subroutine dlowest_eigensolve(k, n, a, e, v)
   integer, intent(in)  :: k, n
-  FLOAT,   intent(in)  :: a(n, n)
-  FLOAT,   intent(out) :: e(n)
-  FLOAT,   intent(out) :: v(n, k)
+  FLOAT,   intent(in)  :: a(:,:) !< (n, n)
+  FLOAT,   intent(out) :: e(:)   !< (n)
+  FLOAT,   intent(out) :: v(:,:) !< (n, k)
 
   interface
     subroutine DLAPACK(syevx)(jobz, range, uplo, n, a, lda, &
@@ -683,6 +709,8 @@ subroutine dlowest_eigensolve(k, n, a, e, v)
   FLOAT, allocatable :: work(:)
   
   PUSH_SUB(dlowest_eigensolve)
+
+  ASSERT(n > 0)
 
   abstol = 2*sfmin()
 
@@ -714,9 +742,9 @@ end subroutine dlowest_eigensolve
 !! Here A is assumed to be Hermitian.
 subroutine zlowest_eigensolve(k, n, a, e, v)
   integer, intent(in)  :: k, n
-  CMPLX,   intent(in)  :: a(n, n)
-  FLOAT,   intent(out) :: e(n)
-  CMPLX,   intent(out) :: v(n, k)
+  CMPLX,   intent(in)  :: a(:,:) !< (n, n)
+  FLOAT,   intent(out) :: e(:)   !< (n)
+  CMPLX,   intent(out) :: v(:,:) !< (n, k)
 
   interface
     subroutine ZLAPACK(heevx)(jobz, range, uplo, n, a, lda, &
@@ -736,6 +764,8 @@ subroutine zlowest_eigensolve(k, n, a, e, v)
   CMPLX, allocatable :: work(:)
    
   PUSH_SUB(zlowest_eigensolve)
+
+  ASSERT(n > 0)
 
   abstol = 2*sfmin()
 
@@ -765,7 +795,7 @@ end subroutine zlowest_eigensolve
 !> Invert a real symmetric square matrix a
 FLOAT function ddeterminant(n, a, invert) result(d)
   integer, intent(in)           :: n
-  FLOAT,   intent(inout)        :: a(n,n)
+  FLOAT,   intent(inout)        :: a(:,:) !< (n,n)
   logical, intent(in), optional :: invert
 
   interface
@@ -791,6 +821,8 @@ FLOAT function ddeterminant(n, a, invert) result(d)
   logical :: invert_
 
   ! No PUSH_SUB, called too often
+
+  ASSERT(n > 0)
 
   SAFE_ALLOCATE(work(1:n))
   SAFE_ALLOCATE(ipiv(1:n))
@@ -829,7 +861,7 @@ end function ddeterminant
 !> Invert a complex Hermitian square matrix a
 CMPLX function zdeterminant(n, a, invert) result(d)
   integer, intent(in)           :: n
-  CMPLX,   intent(inout)        :: a(n,n)
+  CMPLX,   intent(inout)        :: a(:,:) !< (n,n)
   logical, intent(in), optional :: invert
 
   interface
@@ -855,6 +887,8 @@ CMPLX function zdeterminant(n, a, invert) result(d)
   logical :: invert_
 
   PUSH_SUB(zdeterminant)
+
+  ASSERT(n > 0)
 
   SAFE_ALLOCATE(work(1:n))
   SAFE_ALLOCATE(ipiv(1:n))
@@ -893,7 +927,7 @@ end function zdeterminant
 subroutine dsym_inverter(uplo, n, a)
   character(1), intent(in)      :: uplo
   integer, intent(in)           :: n
-  FLOAT,   intent(inout)        :: a(n,n)
+  FLOAT,   intent(inout)        :: a(:,:) !< (n,n)
 
   interface
     subroutine DLAPACK(sytrf) (uplo, n, a, lda, ipiv, work, lwork, info)
@@ -921,16 +955,18 @@ subroutine dsym_inverter(uplo, n, a)
 
   PUSH_SUB(dsym_inverter)
 
+  ASSERT(n > 0)
+
   SAFE_ALLOCATE(work(1:n))
   SAFE_ALLOCATE(ipiv(1:n))
 
-  call DLAPACK(sytrf)(uplo, n, a(1, 1), LD(a), ipiv(1), work(1), n, info)
+  call DLAPACK(sytrf)(uplo, n, a(1, 1), lead_dim(a), ipiv(1), work(1), n, info)
   if(info < 0) then
     write(message(1), '(3a, i3)') 'In dsym_inverter, LAPACK ', TOSTRING(DLAPACK(sytrf)), ' returned info = ', info
     call messages_fatal(1)
   end if
 
-  call DLAPACK(sytri)(uplo, n, a(1, 1), LD(a), ipiv(1), work(1), info)
+  call DLAPACK(sytri)(uplo, n, a(1, 1), lead_dim(a), ipiv(1), work(1), info)
   if(info /= 0) then
     write(message(1), '(3a, i3)') 'In dsym_inverter, LAPACK ', TOSTRING(DLAPACK(sytri)), ' returned info = ', info
     call messages_fatal(1)
@@ -946,7 +982,7 @@ end subroutine dsym_inverter
 subroutine zsym_inverter(uplo, n, a)
   character(1), intent(in)      :: uplo
   integer, intent(in)           :: n
-  CMPLX,   intent(inout)        :: a(n,n)
+  CMPLX,   intent(inout)        :: a(:,:) !< (n,n)
 
   interface
     subroutine ZLAPACK(sytrf) (uplo, n, a, lda, ipiv, work, lwork, info)
@@ -974,15 +1010,17 @@ subroutine zsym_inverter(uplo, n, a)
 
   PUSH_SUB(zsym_inverter)
 
+  ASSERT(n > 0)
+
   SAFE_ALLOCATE(work(1:n))
   SAFE_ALLOCATE(ipiv(1:n))
-  call ZLAPACK(sytrf)(uplo, n, a(1, 1), LD(a), ipiv(1), work(1), n, info)
+  call ZLAPACK(sytrf)(uplo, n, a(1, 1), lead_dim(a), ipiv(1), work(1), n, info)
   if(info < 0) then
     write(message(1), '(3a, i3)') 'In zsym_inverter, LAPACK ', TOSTRING(ZLAPACK(sytrf)), ' returned info = ', info
     call messages_fatal(1)
   end if
 
-  call ZLAPACK(sytri)(uplo, n, a(1, 1), LD(a), ipiv(1), work(1), info)
+  call ZLAPACK(sytri)(uplo, n, a(1, 1), lead_dim(a), ipiv(1), work(1), info)
   if(info /= 0) then
     write(message(1), '(3a, i3)') 'In zsym_inverter, LAPACK ', TOSTRING(ZLAPACK(zsytri)), ' returned info = ', info
     call messages_fatal(1)
@@ -998,8 +1036,9 @@ end subroutine zsym_inverter
 !!  where A is an N-by-N matrix and X and B are N-by-NRHS matrices.
 subroutine dlinsyssolve(n, nrhs, a, b, x)
   integer, intent(in)    :: n, nrhs
-  FLOAT,   intent(inout) :: a(n, n), b(n, nrhs)
-  FLOAT,   intent(out)   :: x(n, nrhs)
+  FLOAT,   intent(inout) :: a(:,:) !< (n, n)
+  FLOAT,   intent(inout) :: b(:,:) !< (n, nrhs)
+  FLOAT,   intent(out)   :: x(:,:) !< (n, nrhs)
 
   interface
     subroutine DLAPACK(gesvx) (fact, trans, n, nrhs, a, lda, af, ldaf, ipiv, equed, r, &
@@ -1023,6 +1062,8 @@ subroutine dlinsyssolve(n, nrhs, a, b, x)
   character(1) :: equed
 
   ! no PUSH_SUB, called too often
+
+  ASSERT(n > 0)
 
   SAFE_ALLOCATE(ipiv(1:n))
   SAFE_ALLOCATE(iwork(1:n))
@@ -1062,8 +1103,9 @@ end subroutine dlinsyssolve
 !!  where A is an N-by-N matrix and X and B are N-by-NRHS matrices.
 subroutine zlinsyssolve(n, nrhs, a, b, x)
   integer, intent(in)    :: n, nrhs
-  CMPLX,   intent(inout) :: a(n, n), b(n, nrhs)
-  CMPLX,   intent(out)   :: x(n, nrhs)
+  CMPLX,   intent(inout) :: a(:,:) !< (n, n)
+  CMPLX,   intent(inout) :: b(:,:) !< (n, nrhs)
+  CMPLX,   intent(out)   :: x(:,:) !< (n, nrhs)
 
   interface
     subroutine ZLAPACK(gesvx) (fact, trans, n, nrhs, a, lda, af, ldaf, ipiv, equed, r, &
@@ -1090,6 +1132,8 @@ subroutine zlinsyssolve(n, nrhs, a, b, x)
   character(1)         :: equed
 
   PUSH_SUB(zlinsyssolve)
+
+  ASSERT(n > 0)
 
   SAFE_ALLOCATE(ipiv(1:n))
   SAFE_ALLOCATE(rwork(1:2*n))
@@ -1126,9 +1170,9 @@ end subroutine zlinsyssolve
 !> computes the singular value decomposition of a complex NxN matrix a(:,:)
 subroutine zsingular_value_decomp(n, a, u, vt, sg_values)
   integer, intent(in)    :: n
-  CMPLX,   intent(inout) :: a(n, n)  
-  CMPLX,   intent(out)   :: u(n, n), vt(n, n)  
-  FLOAT,   intent(out)   :: sg_values(n)
+  CMPLX,   intent(inout) :: a(:,:)          !< (n,n)
+  CMPLX,   intent(out)   :: u(:,:), vt(:,:) !< (n,n)  
+  FLOAT,   intent(out)   :: sg_values(:)    !< (n)
 
   interface
     subroutine ZLAPACK(gesvd) ( jobu, jobvt, m, n, a, lda, s, u, ldu, &
@@ -1149,6 +1193,8 @@ subroutine zsingular_value_decomp(n, a, u, vt, sg_values)
   FLOAT, allocatable :: rwork(:)
 
   PUSH_SUB(zsingular_value_decomp)
+
+  ASSERT(n > 0)
 
   ! for now we treat only square matrices
   m = n 
@@ -1177,7 +1223,7 @@ end subroutine zsingular_value_decomp
 !> computes inverse of a complex NxN matrix a(:,:) using the SVD decomposition 
 subroutine zsvd_inverse(n, a, threshold)
   integer, intent(in)           :: n
-  CMPLX,   intent(inout)        :: a(n, n)    ! a will be replaced by its inverse
+  CMPLX,   intent(inout)        :: a(:,:)    !< (n,n); a will be replaced by its inverse
   FLOAT,   intent(in), optional :: threshold
 
   CMPLX, allocatable :: u(:,:), vt(:,:)
@@ -1185,6 +1231,8 @@ subroutine zsvd_inverse(n, a, threshold)
   CMPLX   :: tmp
   FLOAT   :: sg_inverse, threshold_
   integer :: j, k, l
+
+  ASSERT(n > 0)
 
   SAFE_ALLOCATE( u(1:n, 1:n))
   SAFE_ALLOCATE(vt(1:n, 1:n))
@@ -1227,7 +1275,7 @@ end subroutine zsvd_inverse
 !! unpacked storage).
 subroutine dinvert_upper_triangular(n, a)
   integer, intent(in)    :: n
-  FLOAT,   intent(inout) :: a(n, n)
+  FLOAT,   intent(inout) :: a(:,:) !< (n,n)
 
   integer :: info
 
@@ -1243,6 +1291,8 @@ subroutine dinvert_upper_triangular(n, a)
   end interface
   
   PUSH_SUB(dinvert_upper_triangular)
+
+  ASSERT(n > 0)
 
   call DLAPACK(trtri)('U', 'N', n, a(1, 1), n, info)
 
@@ -1261,7 +1311,7 @@ end subroutine dinvert_upper_triangular
 !! unpacked storage).
 subroutine zinvert_upper_triangular(n, a)
   integer, intent(in)    :: n
-  CMPLX,   intent(inout) :: a(n, n)
+  CMPLX,   intent(inout) :: a(:,:) !< (n,n)
 
   integer :: info
 
@@ -1277,6 +1327,8 @@ subroutine zinvert_upper_triangular(n, a)
   end interface
   
   PUSH_SUB(zinvert_upper_triangular)
+
+  ASSERT(n > 0)
 
   call ZLAPACK(trtri)('U', 'N', n, a(1, 1), n, info)
 
@@ -1294,7 +1346,7 @@ end subroutine zinvert_upper_triangular
 !! unpacked storage).
 subroutine dinvert_lower_triangular(n, a)
   integer, intent(in)    :: n
-  FLOAT,   intent(inout) :: a(n, n)
+  FLOAT,   intent(inout) :: a(:,:) !< (n,n)
 
   integer :: info
 
@@ -1310,6 +1362,8 @@ subroutine dinvert_lower_triangular(n, a)
   end interface
   
   PUSH_SUB(dinvert_lower_triangular)
+
+  ASSERT(n > 0)
 
   call DLAPACK(trtri)('L', 'N', n, a(1, 1), n, info)
 
@@ -1327,7 +1381,7 @@ end subroutine dinvert_lower_triangular
 !! unpacked storage).
 subroutine zinvert_lower_triangular(n, a)
   integer, intent(in)    :: n
-  CMPLX,   intent(inout) :: a(n, n)
+  CMPLX,   intent(inout) :: a(:,:) !< (n,n)
 
   integer :: info
 
@@ -1343,6 +1397,8 @@ subroutine zinvert_lower_triangular(n, a)
   end interface
   
   PUSH_SUB(zinvert_lower_triangular)
+
+  ASSERT(n > 0)
 
   call ZLAPACK(trtri)('L', 'N', n, a(1, 1), n, info)
 

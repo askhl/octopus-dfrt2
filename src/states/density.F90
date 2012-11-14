@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: density.F90 9140 2012-06-20 21:15:17Z umberto $
+!! $Id: density.F90 9432 2012-09-15 17:02:40Z dstrubbe $
 
 #include "global.h"
 
@@ -138,8 +138,8 @@ contains
     FLOAT, allocatable :: frho(:), weight(:)
     type(profile_t), save :: prof
     logical :: correct_size, calc_cmplx
-    integer            :: wgsize
 #ifdef HAVE_OPENCL
+    integer            :: wgsize
     type(opencl_mem_t) :: buff_weight
     type(cl_kernel)    :: kernel
 #endif
@@ -358,7 +358,6 @@ contains
 
   ! ---------------------------------------------------------
   !> Computes the density from the orbitals in st. 
-  ! ---------------------------------------------------------
   subroutine density_calc(st, gr, density, Imdensity)
     type(states_t),          intent(inout)  :: st
     type(grid_t),            intent(in)     :: gr
@@ -511,13 +510,13 @@ contains
     integer :: is, ip
     logical :: cmplxscl
     
+    PUSH_SUB(states_total_density)
+
     cmplxscl = .false.
     if(present(Imrho)) then
       ASSERT(associated(Imrho))
       cmplxscl = .true.
     end if
-
-    PUSH_SUB(states_total_density)
 
     if(.not. cmplxscl) then
       forall(ip = 1:mesh%np, is = 1:st%d%nspin)

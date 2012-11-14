@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: system.F90 9160 2012-06-23 20:38:20Z xavier $
+!! $Id: system.F90 9578 2012-11-08 20:09:23Z dstrubbe $
 
 #include "global.h"
 
@@ -101,7 +101,7 @@ contains
     call states_distribute_nodes(sys%st, sys%mc)
     call grid_init_stage_2(sys%gr, sys%mc, sys%geo)
     call output_init(sys%gr%sb, sys%st%nst, sys%outp)
-    call states_densities_init(sys%st, sys%gr, sys%geo, sys%mc)
+    call states_densities_init(sys%st, sys%gr, sys%geo)
     call states_exec_init(sys%st, sys%mc)
     call states_lead_densities_init(sys%st, sys%gr)
     call elf_init()
@@ -199,7 +199,7 @@ contains
   subroutine system_h_setup(sys, hm, calc_eigenval)
     type(system_t),      intent(inout) :: sys
     type(hamiltonian_t), intent(inout) :: hm
-    logical,   optional, intent(in)    :: calc_eigenval ! default is true
+    logical,   optional, intent(in)    :: calc_eigenval !< default is true
 
     integer, allocatable :: ind(:)
     integer :: ist, ik
@@ -237,7 +237,7 @@ contains
       SAFE_DEALLOCATE_A(copy_occ)
     endif
 
-    call states_fermi(sys%st, sys%gr%mesh)                              ! occupations
+    call states_fermi(sys%st, sys%gr%mesh) ! occupations
     call energy_calc_total(hm, sys%gr, sys%st)
 
     POP_SUB(system_h_setup)

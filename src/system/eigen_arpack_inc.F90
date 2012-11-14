@@ -42,11 +42,9 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   character(len=2) :: which
   	
 	!!!!WARNING: No support for spinors, yet. 
-
- 
   PUSH_SUB(eigen_arpack.eigen_solver_arpack)
 
-#if defined(HAVE_ARPACK)
+!#if defined(HAVE_ARPACK)
 
   !Enable debug info
   if(in_debug_mode) call arpack_debug(conf%debug_level)
@@ -287,10 +285,7 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   SAFE_DEALLOCATE_A(zd)  
 #endif
 
-
-#endif
    POP_SUB(eigen_arpack.eigen_solver_arpack)
-
 contains
 
   ! ---------------------------------------------------------
@@ -302,8 +297,8 @@ contains
     integer :: i, NP, NP_PART
     R_TYPE, allocatable :: psi(:, :), hpsi(:, :)
     
-   
-    
+    PUSH_SUB(X(eigen_solver_arpack).av)
+
     NP = gr%mesh%np
     NP_PART = gr%mesh%np_part
 
@@ -334,6 +329,7 @@ contains
     SAFE_DEALLOCATE_A(psi)
     SAFE_DEALLOCATE_A(hpsi)
 
+    POP_SUB(X(eigen_solver_arpack).av)
   end subroutine av
   
 

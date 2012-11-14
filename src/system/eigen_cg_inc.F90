@@ -28,7 +28,7 @@ subroutine X(eigensolver_cg2) (gr, st, hm, pre, tol, niter, converged, ik, diff)
   integer,                intent(inout) :: niter
   integer,                intent(inout) :: converged
   integer,                intent(in)    :: ik
-  FLOAT,        optional, intent(out)   :: diff(1:st%nst)
+  FLOAT,        optional, intent(out)   :: diff(:) !< (1:st%nst)
 
   R_TYPE, allocatable :: h_psi(:,:), g(:,:), g0(:,:),  cg(:,:), ppsi(:,:), psi(:, :)
   R_TYPE   :: es(2), a0, b0, gg, gg0, gg1, gamma, theta, norma
@@ -228,7 +228,6 @@ end subroutine X(eigensolver_cg2)
 ! ---------------------------------------------------------
 !> The algorithm is essentially taken from Jiang et al. Phys. Rev. B 68, 165337 (2003).
 subroutine X(eigensolver_cg2_new) (gr, st, hm, tol, niter, converged, ik, diff)
-  intrinsic :: present
   type(grid_t),        intent(in)    :: gr
   type(states_t),      intent(inout) :: st
   type(hamiltonian_t), intent(in)    :: hm
@@ -236,7 +235,7 @@ subroutine X(eigensolver_cg2_new) (gr, st, hm, tol, niter, converged, ik, diff)
   integer,             intent(inout) :: niter
   integer,             intent(inout) :: converged
   integer,             intent(in)    :: ik
-  FLOAT,     optional, intent(out)   :: diff(1:st%nst)
+  FLOAT,     optional, intent(out)   :: diff(:) !< (1:st%nst)
 
   integer :: nst, dim, ist, maxter, i, conv, ip, idim
   R_TYPE, allocatable :: psi(:,:), phi(:, :), hcgp(:, :), cg(:, :), sd(:, :), cgp(:, :)
@@ -309,7 +308,7 @@ subroutine X(eigensolver_cg2_new) (gr, st, hm, tol, niter, converged, ik, diff)
       res = X(states_residue)(gr%mesh, dim, phi, lambda, psi)
       if(present(diff)) diff(ist) = res
       if(res < tol) then
-        conv = conv + 1
+        if(conv == ist - 1) conv = ist
         exit band
       end if
 

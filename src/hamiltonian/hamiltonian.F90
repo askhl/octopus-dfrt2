@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian.F90 9290 2012-08-31 13:56:41Z xavier $
+!! $Id: hamiltonian.F90 9557 2012-11-06 18:17:31Z dstrubbe $
 
 #include "global.h"
 
@@ -222,7 +222,7 @@ contains
     hm%xc_family    = xc_family
     call states_dim_copy(hm%d, states_dim)
 
-    call hamiltonian_base_init(hm%hm_base, gr%mesh, hm%d%nspin)
+    call hamiltonian_base_init(hm%hm_base, hm%d%nspin)
     ASSERT(associated(gr%der%lapl))
     hm%hm_base%kinetic => gr%der%lapl
 
@@ -335,7 +335,7 @@ contains
     !% <math> \vec{B} = \vec{\nabla} \times \vec{A}</math>
     !%
     !% If <tt>CalculateSelfInducedMagneticField</tt> is set to yes, this <i>B</i> field is
-    !% calculated at the end of a <tt>gs</tt> calculation (nothing is done -- yet -- in the <tt>td </tt>case)
+    !% calculated at the end of a <tt>gs</tt> calculation (nothing is done -- yet -- in the <tt>td</tt>case)
     !% and printed out, if the <tt>Output</tt> variable contains the <tt>potential</tt> keyword (the prefix
     !% of the output files is <tt>Bind</tt>).
     !%End
@@ -369,7 +369,7 @@ contains
     !% sides there is a lead connected. No outgoing density is reflected within the leads,
     !% but some minor reflection will occur on the corners of the box.
     !% This is due to the setup of semi-infinite finite width leads connected to the sides.
-    !% Warning: This scheme works only with the special Cranck-Nicholson propagator and has
+    !% Warning: This scheme works only with the special Crack-Nicholson propagator and has
     !% quadratic scaling with time. It may be tuned with the parameter <tt>OpenBoundariesMaxMemCoeffs</tt>.
     !%End
     call parse_integer(datasets_check('AbsorbingBoundaries'), NOT_ABSORBING, hm%ab)

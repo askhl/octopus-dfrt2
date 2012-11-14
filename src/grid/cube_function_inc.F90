@@ -1,4 +1,5 @@
-!! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio, G. Bertsch, M. Oliveira, J. Alberdi, P. Garcia Risueño
+!! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio,
+!! G. Bertsch, M. Oliveira, J. Alberdi, P. Garcia Risueño
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -15,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube_function_inc.F90 9209 2012-07-19 15:30:31Z umberto $
+!! $Id: cube_function_inc.F90 9496 2012-10-11 15:08:25Z joseba $
 
 
 ! ---------------------------------------------------------
@@ -123,7 +124,7 @@ subroutine X(cube_function_allgather)(cube, cf, cf_local, transpose)
   call profiling_in(prof_allgather, "CF_ALLGATHER")
 
 
-  SAFE_ALLOCATE(cf_tmp(cube%rs_n_global(1)*cube%rs_n_global(2)*cube%rs_n_global(3)))
+  SAFE_ALLOCATE(cf_tmp(1:cube%rs_n_global(1)*cube%rs_n_global(2)*cube%rs_n_global(3)))
 
   call mpi_debug_in(cube%mpi_grp%comm, C_MPI_ALLGATHERV)
   ! Warning: in the next line we have to pass the full cf_local array, not just the first element.
@@ -386,8 +387,8 @@ subroutine X(mesh_to_cube_parallel)(mesh, mf, cube, cf, map)
   ASSERT(ubound(mf, dim = 1) == mesh%np .or. ubound(mf, dim = 1) == mesh%np_part)
 
   if (mesh%parallel_in_domains) then
-    SAFE_ALLOCATE(in(map%m2c_nsend))
-    SAFE_ALLOCATE(out(map%m2c_nrec))
+    SAFE_ALLOCATE(in(1:map%m2c_nsend))
+    SAFE_ALLOCATE(out(1:map%m2c_nrec))
 
     !Put the mesh function data in correct order for transfer
     do ip = 1, map%m2c_nsend
@@ -469,8 +470,8 @@ subroutine X(cube_to_mesh_parallel) (cube, cf, mesh, mf, map)
   ASSERT(ubound(mf, dim = 1) == mesh%np .or. ubound(mf, dim = 1) == mesh%np_part)
 
   if(mesh%parallel_in_domains) then
-    SAFE_ALLOCATE(in(map%c2m_nsend))
-    SAFE_ALLOCATE(out(map%c2m_nrec))
+    SAFE_ALLOCATE(in(1:map%c2m_nsend))
+    SAFE_ALLOCATE(out(1:map%c2m_nrec))
 
     !Put the cube function in the mesh in the correct order for transfer
     do ip = 1, map%c2m_nsend
@@ -493,7 +494,7 @@ subroutine X(cube_to_mesh_parallel) (cube, cf, mesh, mf, map)
 
   else
     !collect the data in all processes
-    SAFE_ALLOCATE(gcf(cube%rs_n_global(1), cube%rs_n_global(2), cube%rs_n_global(3)))
+    SAFE_ALLOCATE(gcf(1:cube%rs_n_global(1), 1:cube%rs_n_global(2), 1:cube%rs_n_global(3)))
 #ifdef HAVE_MPI
     call X(cube_function_allgather)(cube, gcf, cf%X(rs))
 #endif

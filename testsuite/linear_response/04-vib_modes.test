@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 04-vib_modes.test 9313 2012-09-04 21:43:23Z dstrubbe $
+# $Id: 04-vib_modes.test 9468 2012-09-25 16:37:12Z dstrubbe $
 
 Test       : LiH vibrational frequency
 Programs   : octopus; octopus_mpi
@@ -18,6 +18,8 @@ Precision : 0.002
 Input: 04-vib_modes.02-vib_modes.inp
 match ; Vibrational Frequency   ; LINE(vib_modes/normal_frequencies_lr, 1, 7) ; 1420.83506
 match ; Infrared Intensity      ; LINE(vib_modes/infrared, 2, 60)             ;    0.52791
+Precision : 0.0031
+# precision is actually as good as 0.00002, except for some versions of gfortran with -ffast-math
 match ; Dynamical Matrix Entry  ; LINE(vib_modes/dynamical_matrix_lr, 1, 21)  ; -3952.7359
 
 Input: 04-vib_modes.03-vib_modes_fd.inp

@@ -15,7 +15,7 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: configure.ac 9271 2012-08-27 22:04:31Z dstrubbe $
+## $Id: configure.ac 9413 2012-09-14 17:10:39Z micael $
 
 AC_PREREQ(2.59)
 AC_INIT([Octopus],[nocturnus],[octopus-devel@tddft.org],[octopus])
@@ -359,6 +359,9 @@ ACX_LIBFM
 
 dnl check for PFFT
 ACX_PFFT
+
+dnl check for PSPIO
+ACX_PSPIO
 
 dnl now I run configure for the internal libraries
 AC_CONFIG_SUBDIRS([external_libs/spglibs])

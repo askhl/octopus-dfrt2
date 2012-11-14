@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: complex.F90 9298 2012-09-01 15:49:41Z xavier $
+!! $Id: complex.F90 9390 2012-09-10 20:27:48Z dstrubbe $
 
 #define R_TCOMPLEX 1
 
@@ -38,8 +38,8 @@
 #define R_MUL       6
 
 #define X(x)        z ## x
-#define pX(x)        pz ## x
-#define aX(x,y)        x ## z ## y
+#define pX(x)       pz ## x
+#define aX(x,y)     x ## z ## y
 
 #if defined(DISABLE_DEBUG)
 #define TS(x)       x

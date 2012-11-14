@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson.F90 9151 2012-06-20 23:09:43Z umberto $
+!! $Id: poisson.F90 9539 2012-10-29 17:20:10Z joseba $
 
 #include "global.h"
 
@@ -196,6 +196,8 @@ contains
 #ifndef SINGLE_PRECISION
     if(der%mesh%sb%dim == 3 .and. der%mesh%sb%periodic_dim == 0) default_solver = POISSON_ISF
 #endif
+
+    if(der%mesh%sb%dim > 3) default_solver = POISSON_CG_CORRECTED
 
 #ifdef HAVE_CLAMDFFT
     ! this is disabled, since the difference between solvers are big
@@ -597,13 +599,19 @@ contains
 
   !-----------------------------------------------------------------
 
+  !> Calculates the Poisson equation.
+  !! Given the density returns the corresponding potential.
+  !!
+  !! Different solvers are available that could be choosen in the input file
+  !! with the "PoissonSolver" parameter
   subroutine dpoisson_solve(this, pot, rho, all_nodes)
     type(poisson_t),      intent(inout) :: this
     FLOAT,                intent(inout) :: pot(:)
     FLOAT,                intent(inout) :: rho(:)
-    logical, optional,    intent(in)    :: all_nodes !< Is the Poisson solver allowed to utilise
-                                                     !! all nodes or only the domain nodes for
-                                                     !! its calculations? (Defaults to .true.)
+    !> Is the Poisson solver allowed to utilise
+    !! all nodes or only the domain nodes for
+    !! its calculations? (Defaults to .true.)
+    logical, optional,    intent(in)    :: all_nodes 
     type(derivatives_t), pointer :: der
     integer :: counter
     integer :: nx_half, nx
@@ -613,7 +621,6 @@ contains
     FLOAT :: xl, yl, zl
 
     FLOAT, allocatable :: vh0(:,:,:), rh0(:,:,:)
-    integer :: icase = 1, icalc = 1
 
     FLOAT, allocatable :: rho_corrected(:), vh_correction(:)
 
@@ -716,7 +723,7 @@ contains
         rh0(conversion(1),conversion(2),conversion(3))=rho(counter)
       end do
 
-      call poisson_sete_solve(this%sete_solver, icase, rh0, vh0, nx, ny, nz, xl, yl, zl, icalc)
+      call poisson_sete_solve(this%sete_solver, rh0, vh0, nx, ny, nz)
 
       do counter = 1, der%mesh%np
 

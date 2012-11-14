@@ -182,6 +182,8 @@ void XC(gga_x_wpbeh_set_params)   (XC(func_type) *p, FLOAT omega);
 void XC(gga_x_hjs_set_params)     (XC(func_type) *p, FLOAT omega);
 void XC(hyb_gga_xc_hse_set_params)(XC(func_type) *p, FLOAT omega);
 void XC(gga_x_ityh_set_params)    (XC(func_type) *p, int func_id, FLOAT omega);
+void XC(gga_x_ssb_sw_set_params)  (XC(func_type) *p, FLOAT A, FLOAT B, FLOAT C, FLOAT D, FLOAT E);
+void XC(gga_x_kt_set_params)      (XC(func_type) *p, FLOAT gamma, FLOAT delta);
 
 FLOAT XC(hyb_exx_coef)(const XC(func_type) *p);
 
@@ -209,7 +211,6 @@ void XC(mgga_fxc)    (const XC(func_type) *p, int np,
 		      FLOAT *v2rhosigma, FLOAT *v2rholapl, FLOAT *v2rhotau, 
 		      FLOAT *v2sigmalapl, FLOAT *v2sigmatau, FLOAT *v2lapltau);
 
-void XC(mgga_set_handle_tau)(XC(func_type) *p, int handle_tau);
 void XC(mgga_x_tb09_set_params)(XC(func_type) *p, FLOAT c);
 
 /* Functionals that are defined as mixtures of others */

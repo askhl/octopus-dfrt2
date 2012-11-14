@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: linear_response_inc.F90 8606 2011-11-20 10:32:35Z xavier $
+!! $Id: linear_response_inc.F90 9548 2012-11-05 19:00:13Z dstrubbe $
 
 
 ! ---------------------------------------------------------
@@ -173,7 +173,7 @@ subroutine X(lr_build_dl_rho) (mesh, st, lr, nsigma)
   ! reduce
   if(st%parallel_in_states .or. st%d%kpt%parallel) then
     do isigma = 1, nsigma
-      call comm_allreduce(st%st_kpt_mpi_grp%comm, lr(isigma)%X(dl_rho), dim = (/mesh%np, st%d%nspin/))
+      call comm_allreduce(st%st_kpt_mpi_grp%comm, lr(isigma)%X(dl_rho))
     end do
   end if
 

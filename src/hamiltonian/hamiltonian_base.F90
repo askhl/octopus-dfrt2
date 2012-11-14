@@ -120,7 +120,7 @@ module hamiltonian_base_m
 #endif
   end type projection_t
 
-  integer, public ::                     &
+  integer, parameter, public ::          &
     TERM_ALL                 = HUGE(1),  &
     TERM_KINETIC             =   1,      &
     TERM_LOCAL_POTENTIAL     =   2,      & 
@@ -129,7 +129,7 @@ module hamiltonian_base_m
     TERM_LOCAL_EXTERNAL      =  16,      &
     TERM_MGGA                =  32
 
-  integer, public ::                       &
+  integer, parameter, public ::            &
     FIELD_POTENTIAL                = 1,    &
     FIELD_VECTOR_POTENTIAL         = 2,    &
     FIELD_UNIFORM_VECTOR_POTENTIAL = 4,    &
@@ -141,9 +141,8 @@ module hamiltonian_base_m
 contains
 
   ! ---------------------------------------------------------
-  subroutine hamiltonian_base_init(this, mesh, nspin)
+  subroutine hamiltonian_base_init(this, nspin)
     type(hamiltonian_base_t), intent(inout) :: this
-    type(mesh_t),             intent(in)    :: mesh
     integer,                  intent(in)    :: nspin
 
     PUSH_SUB(hamiltonian_base_init)
@@ -169,6 +168,12 @@ contains
 
     PUSH_SUB(hamiltonian_base_end)
 
+#ifdef HAVE_OPENCL
+    if(associated(this%potential) .and. opencl_is_enabled()) then
+      call opencl_release_buffer(this%potential_opencl)
+    end if
+#endif
+    
     SAFE_DEALLOCATE_P(this%potential)
     SAFE_DEALLOCATE_P(this%Impotential)!cmplxscl
     SAFE_DEALLOCATE_P(this%vector_potential)
@@ -614,9 +619,11 @@ contains
       ! now copy
       do imat = 1, this%nprojector_matrices
         pmat => this%projector_matrices(imat)
-
-        call opencl_write_buffer(this%buff_matrices, pmat%nprojs*pmat%npoints, pmat%projectors, offset = offsets(MATRIX, imat))
-        call opencl_write_buffer(this%buff_maps, pmat%npoints, pmat%map, offset = offsets(MAP, imat))
+        ! in parallel some spheres might not have points
+        if(pmat%npoints > 0) then
+          call opencl_write_buffer(this%buff_matrices, pmat%nprojs*pmat%npoints, pmat%projectors, offset = offsets(MATRIX, imat))
+          call opencl_write_buffer(this%buff_maps, pmat%npoints, pmat%map, offset = offsets(MAP, imat))
+        end if
         call opencl_write_buffer(this%buff_scals, pmat%nprojs, pmat%scal, offset = offsets(SCAL, imat))
       end do
 

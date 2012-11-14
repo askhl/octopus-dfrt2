@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: scf.F90 9307 2012-09-04 17:07:44Z dstrubbe $
+!! $Id: scf.F90 9545 2012-11-03 00:15:14Z dstrubbe $
 
 #include "global.h"
 
@@ -519,7 +519,7 @@ contains
         write(message(1),'(a)') 'Info: Starting SCF iteration.'
       else
         write(message(1),'(a)') 'Info: No SCF iterations will be done.'
-        finish = .true.
+        finish = .false.
       endif
       call messages_info(1)
     end if

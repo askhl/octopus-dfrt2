@@ -67,22 +67,21 @@ module kdotp_m
     type(pert_t) :: perturbation
     type(pert_t) :: perturbation2
 
-    FLOAT, pointer :: eff_mass_inv(:,:,:,:)  ! inverse effective-mass tensor
-                                                ! (ik, ist, idir1, idir2)
-    FLOAT, pointer :: velocity(:,:,:) ! group velocity vector (ik, ist, idir)
+    FLOAT, pointer :: eff_mass_inv(:,:,:,:)  !< inverse effective-mass tensor
+                                             !! (idir1, idir2, ist, ik)
+    FLOAT, pointer :: velocity(:,:,:) !< group velocity vector (idir, ist, ik)
 
-    type(lr_t), pointer :: lr(:,:) ! linear response for (sys%gr%sb%periodic_dim,1)
-                                   ! second index is dummy; should only be 1
-                                   ! for compatibility with em_resp routines
+    type(lr_t), pointer :: lr(:,:) !< linear response for (sys%gr%sb%periodic_dim,1)
+                                   !! second index is dummy; should only be 1
+                                   !! for compatibility with em_resp routines
 
-    type(lr_t), pointer :: lr2(:,:,:) ! second-order response for 
-                                      ! (sys%gr%sb%periodic_dim,sys%gr%sb%periodic_dim,1)
+    type(lr_t), pointer :: lr2(:,:,:) !< second-order response for 
+                                      !! (sys%gr%sb%periodic_dim,sys%gr%sb%periodic_dim,1)
 
-    logical :: ok                   ! is converged?
-    integer :: occ_solution_method  ! how to get occupied components of response
-    FLOAT   :: degen_thres          ! maximum energy difference to be considered
-                                    ! degenerate
-    FLOAT   :: eta                  ! imaginary freq. added to Sternheimer eqn.
+    logical :: ok                   !< is converged?
+    integer :: occ_solution_method  !< how to get occupied components of response
+    FLOAT   :: degen_thres          !< maximum energy difference to be considered degenerate
+    FLOAT   :: eta                  !< imaginary freq. added to Sternheimer eqn.
   end type kdotp_t
 
 contains
@@ -116,8 +115,8 @@ contains
        call messages_fatal(1)
     endif
 
-    SAFE_ALLOCATE(kdotp_vars%eff_mass_inv(1:sys%st%d%nik, 1:sys%st%nst, 1:pdim, 1:pdim))
-    SAFE_ALLOCATE(kdotp_vars%velocity(1:sys%st%d%nik, 1:sys%st%nst, 1:pdim))
+    SAFE_ALLOCATE(kdotp_vars%eff_mass_inv(1:pdim, 1:pdim, 1:sys%st%nst, 1:sys%st%d%nik))
+    SAFE_ALLOCATE(kdotp_vars%velocity(1:pdim, 1:sys%st%nst, 1:sys%st%d%nik))
     kdotp_vars%eff_mass_inv(:,:,:,:) = 0 
     kdotp_vars%velocity(:,:,:) = 0 
 
@@ -327,7 +326,6 @@ contains
 
       PUSH_SUB(kdotp_lr_run.parse_input)
 
-
       !%Variable KdotPOccupiedSolutionMethod
       !%Type integer
       !%Default sternheimer
@@ -452,7 +450,7 @@ contains
 
       do ist = 1, st%nst
         write(iunit,'(i5,f12.5,3f12.5)') ist, units_from_atomic(units_out%energy, st%eigenval(ist, ik)), &
-          velocity(ik, ist, 1:periodic_dim)
+          velocity(1:periodic_dim, ist, ik)
       enddo
     enddo
 
@@ -492,7 +490,7 @@ contains
         tmp = int2str(ist)
         write(iunit,'(a, a, a, f12.8, a, a)') 'State #', trim(tmp), ', Energy = ', &
           units_from_atomic(units_out%energy, st%eigenval(ist, ik)), ' ', units_abbrev(units_out%energy)
-        call output_tensor(iunit, kdotp_vars%eff_mass_inv(ik, ist, :, :), gr%sb%periodic_dim, unit_one)
+        call output_tensor(iunit, kdotp_vars%eff_mass_inv(:, :, ist, ik), gr%sb%periodic_dim, unit_one)
       enddo
       
       write(iunit,'(a)')
@@ -502,8 +500,8 @@ contains
         tmp = int2str(ist)
         write(iunit,'(a, a, a, f12.8, a, a)') 'State #', trim(tmp), ', Energy = ', &
           units_from_atomic(units_out%energy, st%eigenval(ist, ik)), ' ', units_abbrev(units_out%energy)
-        determinant = lalg_inverter(gr%sb%periodic_dim, kdotp_vars%eff_mass_inv(ik, ist, :, :), .true.)
-        call output_tensor(iunit, kdotp_vars%eff_mass_inv(ik, ist, :, :), gr%sb%periodic_dim, unit_one)
+        determinant = lalg_inverter(gr%sb%periodic_dim, kdotp_vars%eff_mass_inv(:, :, ist, ik), .true.)
+        call output_tensor(iunit, kdotp_vars%eff_mass_inv(:, :, ist, ik), gr%sb%periodic_dim, unit_one)
       enddo
 
       call io_close(iunit)

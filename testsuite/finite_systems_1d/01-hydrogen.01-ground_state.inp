@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 01-hydrogen.01-ground_state.inp 6937 2010-08-17 06:27:58Z dstrubbe $
+# $Id: 01-hydrogen.01-ground_state.inp 9622 2012-11-14 00:35:42Z dstrubbe $
 #
 # This test calculates a one-dimensional model for Hydrogen, considering
 # a soft-Coulomb nuclueus-electron interaction. It calculates the ground-state
@@ -37,3 +37,4 @@ TheoryLevel = independent_particles
 %
 
 NumberUnoccStates = 9
+EigenSolverTolerance = 1e-5

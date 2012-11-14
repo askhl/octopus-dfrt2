@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: write_iter.F90 8829 2012-01-31 17:28:45Z joseba $
+!! $Id: write_iter.F90 9479 2012-10-04 22:11:39Z dstrubbe $
 
 #include "global.h"
 
@@ -110,7 +110,8 @@ module write_iter_m
       integer   :: n
       real(4)   :: d(n)
     end subroutine write_iter_float_n
-  end interface
+  end interface write_iter_double
+
   interface write_iter_int
     subroutine write_iter_int_1(out, i, n)
       use c_pointer_m
@@ -124,7 +125,7 @@ module write_iter_m
       integer   :: n
       integer   :: i(n)
     end subroutine write_iter_int_n
-  end interface
+  end interface write_iter_int
 
 end module write_iter_m
 

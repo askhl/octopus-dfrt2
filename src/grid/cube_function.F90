@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube_function.F90 9182 2012-07-06 12:28:24Z umberto $
+!! $Id: cube_function.F90 9344 2012-09-05 23:23:19Z xavier $
 
 #include "global.h"
 
@@ -28,6 +28,7 @@ module cube_function_m
   use fft_m
   use global_m
   use index_m
+  use math_m
   use mesh_m
   use mesh_cube_map_m
   use mesh_cube_parallel_map_m

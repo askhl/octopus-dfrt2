@@ -37,6 +37,7 @@ module opencl_m
   use types_m
   use parser_m
   use profiling_m
+  use unit_system_m
 
   implicit none 
 
@@ -97,7 +98,6 @@ module opencl_m
   ! the kernels
   type(cl_kernel), public :: kernel_vpsi
   type(cl_kernel), public :: kernel_vpsi_spinors
-  type(cl_kernel), public :: set_zero_part
   type(cl_kernel), public :: kernel_daxpy
   type(cl_kernel), public :: kernel_zaxpy
   type(cl_kernel), public :: kernel_copy
@@ -125,19 +125,19 @@ module opencl_m
 
   interface opencl_create_buffer
     module procedure opencl_create_buffer_4
-  end interface
+  end interface opencl_create_buffer
 
   interface opencl_write_buffer
     module procedure iopencl_write_buffer_1, dopencl_write_buffer_1, zopencl_write_buffer_1
     module procedure iopencl_write_buffer_2, dopencl_write_buffer_2, zopencl_write_buffer_2
     module procedure iopencl_write_buffer_3, dopencl_write_buffer_3, zopencl_write_buffer_3
-  end interface
+  end interface opencl_write_buffer
 
   interface opencl_read_buffer
     module procedure iopencl_read_buffer_1, dopencl_read_buffer_1, zopencl_read_buffer_1
     module procedure iopencl_read_buffer_2, dopencl_read_buffer_2, zopencl_read_buffer_2
     module procedure iopencl_read_buffer_3, dopencl_read_buffer_3, zopencl_read_buffer_3
-  end interface
+  end interface opencl_read_buffer
 
   interface opencl_set_kernel_arg
     module procedure                 &
@@ -146,7 +146,7 @@ module opencl_m
       dopencl_set_kernel_arg_data,   &
       zopencl_set_kernel_arg_data,   &
       opencl_set_kernel_arg_local
-  end interface
+  end interface opencl_set_kernel_arg
 
 #endif
 
@@ -170,6 +170,9 @@ module opencl_m
   integer, public :: cl_status
 
   integer, parameter :: OPENCL_MAX_FILE_LENGTH = 10000
+
+  integer :: buffer_alloc_count
+  integer(8) :: allocated_mem
 
   contains
 
@@ -198,7 +201,9 @@ module opencl_m
 #endif
 
       PUSH_SUB(opencl_init)
-      
+
+      buffer_alloc_count = 0
+
       !%Variable DisableOpenCL
       !%Type logical
       !%Default yes
@@ -405,7 +410,6 @@ module opencl_m
       ! now initialize the kernels
       call opencl_build_program(prog, trim(conf%share)//'/opencl/set_zero.cl')
       call opencl_create_kernel(set_zero, prog, "set_zero")
-      call opencl_create_kernel(set_zero_part, prog, "set_zero_part")
       call opencl_release_program(prog)
       
       call opencl_build_program(prog, trim(conf%share)//'/opencl/vpsi.cl')
@@ -634,7 +638,6 @@ module opencl_m
         call opencl_release_kernel(kernel_vpsi)
         call opencl_release_kernel(kernel_vpsi_spinors)
         call opencl_release_kernel(set_zero)
-        call opencl_release_kernel(set_zero_part)
         call opencl_release_kernel(kernel_daxpy)
         call opencl_release_kernel(kernel_zaxpy)
         call opencl_release_kernel(kernel_copy)
@@ -659,6 +662,15 @@ module opencl_m
 
         if(ierr /= CL_SUCCESS) call opencl_print_error(ierr, "ReleaseCommandQueue")
         call clReleaseContext(opencl%context, cl_status)
+
+        if(buffer_alloc_count /= 0) then
+          call messages_write('OpenCL:')
+          call messages_write(real(allocated_mem, REAL_PRECISION), fmt = 'f12.1', units = unit_megabytes, align_left = .true.)
+          call messages_write(' in ')
+          call messages_write(buffer_alloc_count)
+          call messages_write(' buffers were not deallocated.')
+          call messages_warning()
+        end if
 #endif
       end if
 
@@ -698,13 +710,16 @@ module opencl_m
       PUSH_SUB(opencl_create_buffer_4)
 
       this%type = type
-      this%size = size      
+      this%size = size
       fsize = int(size, 8)*types_get_size(type)
 
       ASSERT(fsize >= 0)
 
       this%mem = clCreateBuffer(opencl%context, flags, fsize, ierr)
       if(ierr /= CL_SUCCESS) call opencl_print_error(ierr, "clCreateBuffer")
+
+      INCR(buffer_alloc_count, 1)
+      INCR(allocated_mem, fsize)
 
       POP_SUB(opencl_create_buffer_4)
     end subroutine opencl_create_buffer_4
@@ -716,12 +731,15 @@ module opencl_m
 
       integer :: ierr
 
-        PUSH_SUB(opencl_release_buffer)
-
-      this%size = 0
+      PUSH_SUB(opencl_release_buffer)
 
       call clReleaseMemObject(this%mem, ierr)
       if(ierr /= CL_SUCCESS) call opencl_print_error(ierr, "clReleaseMemObject")
+
+      INCR(buffer_alloc_count, -1)
+      INCR(allocated_mem, -int(this%size, 8)*types_get_size(this%type))
+
+      this%size = 0
 
       POP_SUB(opencl_release_buffer)
     end subroutine opencl_release_buffer
@@ -881,7 +899,7 @@ module opencl_m
         read(unit = iunit, rec = irec, iostat = ierr) string(irec:irec) 
         if (ierr /= 0) exit
         if(irec == OPENCL_MAX_FILE_LENGTH) then
-          call messages_write('Error: CL source file is too big: '//trim(filename)//'.')
+          call messages_write('CL source file is too big: '//trim(filename)//'.')
           call messages_new_line()
           call messages_write("       Increase 'OPENCL_MAX_FILE_LENGTH'.")
           call messages_fatal()
@@ -1054,7 +1072,7 @@ module opencl_m
         errcode = 'UNKNOWN ERROR CODE ('//trim(adjustl(errcode))//')'
       end select
 
-      message(1) = 'Error: OpenCL '//trim(name)//' '//trim(errcode)
+      message(1) = 'OpenCL '//trim(name)//' '//trim(errcode)
       call messages_fatal(1)
   
       POP_SUB(opencl_print_error)
@@ -1107,7 +1125,7 @@ module opencl_m
       end select
 #endif
 
-      message(1) = 'Error: clAmdBlas '//trim(name)//' '//trim(errcode)
+      message(1) = 'clAmdBlas '//trim(name)//' '//trim(errcode)
       call messages_fatal(1)
   
       POP_SUB(clblas_print_error)
@@ -1184,7 +1202,7 @@ module opencl_m
       end select
 #endif
 
-      message(1) = 'Error: clAmdFft '//trim(name)//' '//trim(errcode)
+      message(1) = 'clAmdFft '//trim(name)//' '//trim(errcode)
       call messages_fatal(1)
 
       POP_SUB(clfft_print_error)
@@ -1223,10 +1241,11 @@ module opencl_m
     
     ! ----------------------------------------------------
     
-    subroutine opencl_set_buffer_to_zero(buffer, type, nval)
+    subroutine opencl_set_buffer_to_zero(buffer, type, nval, offset)
       type(opencl_mem_t), intent(inout) :: buffer
       type(type_t),       intent(in)    :: type
       integer,            intent(in)    :: nval
+      integer, optional,  intent(in)    :: offset
 
       integer :: nval_real, bsize
       
@@ -1237,7 +1256,8 @@ module opencl_m
       nval_real = nval*types_get_size(type)/8
 
       call opencl_set_kernel_arg(set_zero, 0, nval_real)
-      call opencl_set_kernel_arg(set_zero, 1, buffer)
+      call opencl_set_kernel_arg(set_zero, 1, optional_default(offset, 0))
+      call opencl_set_kernel_arg(set_zero, 2, buffer)
 
       bsize = opencl_kernel_workgroup_size(set_zero)
 

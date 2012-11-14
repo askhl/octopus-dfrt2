@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: v_ks.F90 9320 2012-09-05 00:55:33Z xavier $
+!! $Id: v_ks.F90 9538 2012-10-29 14:42:00Z dstrubbe $
 
 #include "global.h"
  
@@ -186,13 +186,13 @@ contains
       call messages_experimental("Hartree theory level")
     case(HARTREE_FOCK)
       ! initialize XC modules
-      call xc_init(ks%xc, gr%mesh%sb%dim, nel, dd%spin_channels, dd%cdft, hartree_fock=.true.)
+      call xc_init(ks%xc, gr%mesh%sb%dim, nel, hartree_fock=.true.)
       ks%xc_family = ks%xc%family
       ks%sic_type = SIC_NONE
 
     case(KOHN_SHAM_DFT)
       ! initialize XC modules
-      call xc_init(ks%xc, gr%mesh%sb%dim, nel, dd%spin_channels, dd%cdft, hartree_fock=.false.)
+      call xc_init(ks%xc, gr%mesh%sb%dim, nel, hartree_fock=.false.)
       ks%xc_family = ks%xc%family
 
       ! check for SIC
@@ -273,7 +273,7 @@ contains
         !%Description
         !% (Experimental) This variable skips the application of the tail correction during the first calls of the
         !% subroutine that build the exchange-correlation potential (<tt>XCTailCorrectionDelay</tt> = number of calls skipped):
-        !%this can avoid problems caused by initial guess wavefunctions.
+        !% this can avoid problems caused by initial guess wavefunctions.
         !%End
         call parse_integer(datasets_check('XCTailCorrectionDelay'), 0, ks%tc_delay)
 
@@ -293,10 +293,10 @@ contains
         call xc_oep_init(ks%oep, ks%xc_family, gr, dd)
       endif
       if(iand(ks%xc_family, XC_FAMILY_KS_INVERSION) .ne. 0) then
-        call xc_ks_inversion_init(ks%ks_inversion, ks%xc_family, gr, geo, dd, mc)
+        call xc_ks_inversion_init(ks%ks_inversion, ks%xc_family, gr, geo, mc)
       endif
     case(RDMFT)
-      call xc_init(ks%xc, gr%mesh%sb%dim, nel, dd%spin_channels, dd%cdft, hartree_fock=.false.)
+      call xc_init(ks%xc, gr%mesh%sb%dim, nel, hartree_fock=.false.)
       ks%xc_family = ks%xc%family
     end select
 
@@ -559,7 +559,9 @@ contains
         ks%calc%total_density_alloc = .true.
 
         SAFE_ALLOCATE(ks%calc%total_density(1:ks%gr%fine%mesh%np))
-        if(cmplxscl) SAFE_ALLOCATE(ks%calc%Imtotal_density(1:ks%gr%fine%mesh%np))
+        if(cmplxscl) then
+          SAFE_ALLOCATE(ks%calc%Imtotal_density(1:ks%gr%fine%mesh%np))
+        endif
 
         forall(ip = 1:ks%gr%fine%mesh%np)
           ks%calc%total_density(ip) = sum(ks%calc%density(ip, 1:hm%d%spin_channels))
@@ -635,8 +637,7 @@ contains
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
               ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
           else
-            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, &
-              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, ks%calc%density, st%d%ispin, &
               ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, & 
               Imrho = ks%calc%Imdensity, Imex = energy%Imexchange, Imec = energy%Imcorrelation, &
               Imvxc = ks%calc%Imvxc, cmplxscl_th = hm%cmplxscl_th)
@@ -654,8 +655,7 @@ contains
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
               vxc = ks%calc%vxc)
           else
-            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, &
-              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
+            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, ks%calc%density, st%d%ispin, &
               vxc = ks%calc%vxc, Imrho = ks%calc%Imdensity, Imvxc = ks%calc%Imvxc,&
               cmplxscl_th = hm%cmplxscl_th )
           end if
@@ -679,11 +679,9 @@ contains
           if (cmplxscl) call messages_not_implemented('Complex Scaling with XC_FAMILY_KS_INVERSION')
         ! Also treat KS inversion separately (not part of libxc)
         if(present(time)) then
-           call xc_ks_inversion_calc(ks%ks_inversion, ks%gr, hm, st,  &
-             energy%exchange, energy%correlation, vxc = ks%calc%vxc, time=ks%calc%time)
+           call xc_ks_inversion_calc(ks%ks_inversion, ks%gr, hm, st, vxc = ks%calc%vxc, time=ks%calc%time)
         else
-           call xc_ks_inversion_calc(ks%ks_inversion, ks%gr, hm, st, &
-             energy%exchange, energy%correlation, vxc = ks%calc%vxc)
+           call xc_ks_inversion_calc(ks%ks_inversion, ks%gr, hm, st, vxc = ks%calc%vxc)
          end if
 
         endif
@@ -1001,7 +999,6 @@ contains
 
     ASSERT(associated(ks%hartree_solver))
 
-    
     if(.not. ks%gr%have_fine_mesh) then
       pot => hm%vhartree
       if (hm%cmplxscl) then 
@@ -1064,12 +1061,12 @@ contains
         call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, aux, hm%vhartree, INJECTION)
         aux = aimag(zpot)
         call dmultigrid_fine2coarse(ks%gr%fine%tt, ks%gr%fine%der, ks%gr%mesh, aux, hm%Imvhartree, INJECTION)
+        SAFE_DEALLOCATE_P(aux)
       end if
       ! some debugging output that I will keep here for the moment, XA
       !      call dio_function_output(1, "./", "vh_fine", ks%gr%fine%mesh, pot, unit_one, is)
       !      call dio_function_output(1, "./", "vh_coarse", ks%gr%mesh, hm%vhartree, unit_one, is)
       SAFE_DEALLOCATE_P(pot)
-      SAFE_DEALLOCATE_P(aux)
     end if
 
     if (ks%calc%calc_energy .and. poisson_get_solver(ks%hartree_solver) == POISSON_SETE) then !SEC

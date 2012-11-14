@@ -99,11 +99,10 @@ end function X(dsubmesh_to_mesh_dotp)
 
 !------------------------------------------------------------
 
-! The following functions takes a batch of functions defined in
-! submesh (ss) and adds all of them to each of the mesh functions in
-! other batch (mm).  Each one is multiplied by a factor given by the
-! array factor.
-
+!> The following functions takes a batch of functions defined in
+!! submesh (ss) and adds all of them to each of the mesh functions in
+!! other batch (mm).  Each one is multiplied by a factor given by the
+!! array 'factor'.
 subroutine X(submesh_batch_add_matrix)(this, factor, ss, mm)
   type(submesh_t),  intent(in)    :: this
   R_TYPE,           intent(in)    :: factor(:, :)
@@ -111,8 +110,10 @@ subroutine X(submesh_batch_add_matrix)(this, factor, ss, mm)
   type(batch_t),    intent(inout) :: mm
 
   integer :: ist, jst, idim, jdim, is
-
+  type(profile_t), save :: prof
+  
   PUSH_SUB(X(submesh_batch_add_matrix))
+  call profiling_in(prof, 'SUBMESH_ADD_MATRIX')
 
   !$omp parallel do private(ist, idim, jdim, jst, is)
   do ist =  1, mm%nst
@@ -135,17 +136,17 @@ subroutine X(submesh_batch_add_matrix)(this, factor, ss, mm)
   end do
   !$omp end parallel do
   
+  call profiling_out(prof)
   POP_SUB(X(submesh_batch_add_matrix))
 end subroutine X(submesh_batch_add_matrix)
 
 
 !------------------------------------------------------------ 
 
-! The following functions takes a batch of functions defined in
-! submesh (ss) and adds one of them to each of the mesh functions in
-! other batch (mm).  Each one is multiplied by a factor given by the
-! array factor.
-
+!> The following function takes a batch of functions defined in
+!! submesh (ss) and adds one of them to each of the mesh functions in
+!! other batch (mm).  Each one is multiplied by a factor given by the
+!! array factor.
 subroutine X(submesh_batch_add)(this, ss, mm)
   type(submesh_t),  intent(in)    :: this
   type(batch_t),    intent(in)    :: ss

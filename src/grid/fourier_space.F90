@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fourier_space.F90 9209 2012-07-19 15:30:31Z umberto $
+!! $Id: fourier_space.F90 9401 2012-09-12 12:55:48Z joseba $
 
 #include "global.h"
 
@@ -156,7 +156,7 @@ contains
     end select
 
     if(.not. deallocated) then
-      ASSERT(.not. associated(cf%fs, target=cube%fft%fs_data))
+      ASSERT(associated(cf%fs))
       SAFE_DEALLOCATE_P(cf%fs)
     end if
     

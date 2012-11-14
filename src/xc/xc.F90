@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: xc.F90 9320 2012-09-05 00:55:33Z xavier $
+!! $Id: xc.F90 9432 2012-09-15 17:02:40Z dstrubbe $
 
 #include "global.h"
 
@@ -61,15 +61,15 @@ module xc_m
 
 
   type xc_t
-    integer :: family                   ! the families present
+    integer :: family                   !< the families present
     integer :: kernel_family
-    type(xc_functl_t) :: functl(2,2)    ! (FUNC_X,:) => exchange,    (FUNC_C,:) => correlation
-                                        ! (:,1) => unpolarized, (:,2) => polarized
+    type(xc_functl_t) :: functl(2,2)    !< (FUNC_X,:) => exchange,    (FUNC_C,:) => correlation
+                                        !< (:,1) => unpolarized, (:,2) => polarized
 
     type(xc_functl_t) :: kernel(2,2)
 
-    FLOAT   :: exx_coef                 ! amount of EXX to add for the hybrids
-    integer :: mGGA_implementation      ! how to implement the MGGAs
+    FLOAT   :: exx_coef                 !< amount of EXX to add for the hybrids
+    integer :: mGGA_implementation      !< how to implement the MGGAs
 
     integer :: xc_density_correction
     logical :: xcd_optimize_cutoff
@@ -79,7 +79,7 @@ module xc_m
   end type xc_t
 
   FLOAT, parameter :: tiny      = CNST(1.0e-12)
-  FLOAT, parameter :: denom_eps = CNST(1.0e-20) ! added to denominators to avoid overflows...
+  FLOAT, parameter :: denom_eps = CNST(1.0e-20) !< added to denominators to avoid overflows...
 
   integer, parameter :: &
     LR_NONE = 0,        &
@@ -118,12 +118,10 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine xc_init(xcs, ndim, nel, spin_channels, cdft, hartree_fock)
+  subroutine xc_init(xcs, ndim, nel, hartree_fock)
     type(xc_t), intent(out) :: xcs
     integer,    intent(in)  :: ndim
     FLOAT,      intent(in)  :: nel
-    integer,    intent(in)  :: spin_channels
-    logical,    intent(in)  :: cdft
     logical,    intent(in)  :: hartree_fock
 
     integer :: isp, x_id, c_id, xk_id, ck_id
@@ -274,7 +272,7 @@ contains
       !%Option long_range_x 1
       !% The correction is applied to the exchange potential.
       !%End
-      call parse_integer('XCDensityCorrection', LR_NONE, xcs%xc_density_correction)
+      call parse_integer(datasets_check('XCDensityCorrection'), LR_NONE, xcs%xc_density_correction)
 
       if(xcs%xc_density_correction /= LR_NONE) then 
         call messages_experimental('XC density correction')
@@ -290,7 +288,7 @@ contains
         !% the cutoff must be given by the XCDensityCorrectionCutoff
         !% variable.
         !%End
-        call parse_logical('XCDensityCorrectionOptimize', .true., xcs%xcd_optimize_cutoff)
+        call parse_logical(datasets_check('XCDensityCorrectionOptimize'), .true., xcs%xcd_optimize_cutoff)
 
         !%Variable XCDensityCorrectionCutoff
         !%Type float
@@ -299,7 +297,7 @@ contains
         !%Description
         !% The value of the cutoff applied to the XC density. The default value is 0.
         !%End
-        call parse_float('XCDensityCorrectionCutoff', CNST(0.0), xcs%xcd_ncutoff)
+        call parse_float(datasets_check('XCDensityCorrectionCutoff'), CNST(0.0), xcs%xcd_ncutoff)
 
         !%Variable XCDensityCorrectionMinimum
         !%Type logical
@@ -312,7 +310,7 @@ contains
         !% for details). This is required for atoms or small
         !% molecules, but may cause numerical problems.
         !%End
-        call parse_logical('XCDensityCorrectionMinimum', .true., xcs%xcd_minimum)
+        call parse_logical(datasets_check('XCDensityCorrectionMinimum'), .true., xcs%xcd_minimum)
 
         !%Variable XCDensityCorrectionNormalize
         !%Type logical
@@ -323,7 +321,7 @@ contains
         !% normalized to reproduce the exact boundary conditions of
         !% the XC potential.
         !%End
-        call parse_logical('XCDensityCorrectionNormalize', .true., xcs%xcd_normalize)
+        call parse_logical(datasets_check('XCDensityCorrectionNormalize'), .true., xcs%xcd_normalize)
   
       end if
 

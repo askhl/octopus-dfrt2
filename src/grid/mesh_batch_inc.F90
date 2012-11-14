@@ -15,14 +15,14 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_batch_inc.F90 9313 2012-09-04 21:43:23Z dstrubbe $
+!! $Id: mesh_batch_inc.F90 9549 2012-11-05 19:16:21Z dstrubbe $
 
 subroutine X(mesh_batch_dotp_matrix)(mesh, aa, bb, dot, symm, reduce)
   type(mesh_t),      intent(in)    :: mesh
   type(batch_t),     intent(in)    :: aa
   type(batch_t),     intent(in)    :: bb
   R_TYPE,            intent(inout) :: dot(:, :)
-  logical, optional, intent(in)    :: symm         !for the moment it is ignored
+  logical, optional, intent(in)    :: symm         !< for the moment it is ignored
   logical, optional, intent(in)    :: reduce
 
   integer :: ist, jst, idim, sp, block_size, ep, ip, ldaa, ldbb, indb, jndb
@@ -50,6 +50,8 @@ subroutine X(mesh_batch_dotp_matrix)(mesh, aa, bb, dot, symm, reduce)
   ASSERT(batch_status(aa) == batch_status(bb))
 
   SAFE_ALLOCATE(dd(1:aa%nst, 1:bb%nst))
+  ! This has to be set to zero by hand since NaN * 0 = NaN.
+  dd(1:aa%nst, 1:bb%nst) = R_TOTYPE(CNST(0.0))
 
   select case(batch_status(aa))
   case(BATCH_NOT_PACKED)
@@ -60,15 +62,11 @@ subroutine X(mesh_batch_dotp_matrix)(mesh, aa, bb, dot, symm, reduce)
 
       ldaa = size(aa%X(psicont), dim = 1)
       ldbb = size(bb%X(psicont), dim = 1)
-      call blas_gemm('c', 'n', aa%nst, bb%nst, mesh%np, &
-        R_TOTYPE(mesh%volume_element), &
-        aa%X(psicont)(1, 1, 1), ldaa, &
-        bb%X(psicont)(1, 1, 1), ldbb, &
-        R_TOTYPE(M_ZERO), dd(1, 1), aa%nst)
+
+      call lalg_gemmt(aa%nst, bb%nst, mesh%np, R_TOTYPE(mesh%volume_element), &
+        aa%X(psicont), bb%X(psicont), R_TOTYPE(M_ZERO), dd)
 
     else
-
-      dd = R_TOTYPE(M_ZERO)
 
       block_size = hardware%X(block_size)
 
@@ -215,7 +213,7 @@ subroutine X(mesh_batch_dotp_matrix)(mesh, aa, bb, dot, symm, reduce)
 #ifdef HAVE_MPI
   if(mesh%parallel_in_domains .and. reduce_) then
     call profiling_in(profcomm, "DOTP_BATCH_REDUCE")
-    call comm_allreduce(mesh%mpi_grp%comm, dd, dim = (/aa%nst, bb%nst/))
+    call comm_allreduce(mesh%mpi_grp%comm, dd)
     call profiling_out(profcomm)
   end if
 #endif
@@ -263,16 +261,13 @@ subroutine X(mesh_batch_dotp_self)(mesh, aa, dot, reduce)
   use_blas = associated(aa%X(psicont)) .and. (.not. mesh%use_curvilinear)
 
   SAFE_ALLOCATE(dd(1:aa%nst, 1:aa%nst))
+  ! This has to be set to zero by hand since NaN * 0 = NaN.
+  dd(1:aa%nst, 1:aa%nst) = R_TOTYPE(CNST(0.0))
 
   call profiling_in(prof, "BATCH_DOTP_SELF")
 
   if(use_blas) then
     call profiling_in(profgemm, "BATCH_HERK")
-
-    ! For some reason this has to be set to zero by hand (a bug in
-    ! some Blas libraries?). Otherwise NaNs might contaminate the
-    ! result.
-    dd(1:aa%nst, 1:aa%nst) = R_TOTYPE(CNST(0.0))
 
     lda = size(aa%X(psicont), dim = 1)*aa%dim
 
@@ -285,8 +280,6 @@ subroutine X(mesh_batch_dotp_self)(mesh, aa, dot, reduce)
     end if
 
   else
-
-    dd = R_TOTYPE(M_ZERO)
 
     block_size = hardware%X(block_size)
 
@@ -335,7 +328,7 @@ subroutine X(mesh_batch_dotp_self)(mesh, aa, dot, reduce)
 
   if(mesh%parallel_in_domains .and. reduce_) then
     call profiling_in(profcomm, "BATCH_SELF_REDUCE")
-    call comm_allreduce(mesh%mpi_grp%comm, dd, dim = (/aa%nst, aa%nst/))
+    call comm_allreduce(mesh%mpi_grp%comm, dd)
     call profiling_out(profcomm)
   end if
 
@@ -386,11 +379,8 @@ subroutine X(mesh_batch_rotate)(mesh, aa, transf)
         call blas_copy(size, aa%states_linear(indb)%X(psi)(sp), 1, psicopy(1, ist), 1)
       end do
       
-      call blas_gemm('N', 'N', &
-        size, aa%nst, aa%nst, &
-        R_TOTYPE(M_ONE), psicopy(1, 1), block_size, &
-        transf(1, 1), aa%nst, &
-        R_TOTYPE(M_ZERO), psinew(1, 1), block_size)
+      call lalg_gemm(size, aa%nst, aa%nst, R_TOTYPE(M_ONE), psicopy, &
+        transf, R_TOTYPE(M_ZERO), psinew)
       
       do ist = 1, aa%nst
         indb = batch_linear_index(aa, (/ist, idim/))
@@ -574,6 +564,7 @@ subroutine X(mesh_batch_exchange_points)(mesh, aa, forward_map, backward_map)
 #ifdef HAVE_MPI
   integer :: ip, ipg, npart, ipart, ist, pos, nstl
   integer, allocatable :: send_count(:), recv_count(:), send_disp(:), recv_disp(:)
+  integer, allocatable :: send_count_nstl(:), recv_count_nstl(:), send_disp_nstl(:), recv_disp_nstl(:)
   R_TYPE, allocatable  :: send_buffer(:, :), recv_buffer(:, :)
 #endif
 
@@ -596,6 +587,10 @@ subroutine X(mesh_batch_exchange_points)(mesh, aa, forward_map, backward_map)
     SAFE_ALLOCATE(recv_count(1:npart))
     SAFE_ALLOCATE(send_disp(1:npart))
     SAFE_ALLOCATE(recv_disp(1:npart))
+    SAFE_ALLOCATE(send_count_nstl(1:npart))
+    SAFE_ALLOCATE(recv_count_nstl(1:npart))
+    SAFE_ALLOCATE(send_disp_nstl(1:npart))
+    SAFE_ALLOCATE(recv_disp_nstl(1:npart))
     SAFE_ALLOCATE(send_buffer(1:nstl, mesh%np))
 
     if(present(forward_map)) then
@@ -646,8 +641,12 @@ subroutine X(mesh_batch_exchange_points)(mesh, aa, forward_map, backward_map)
 
       SAFE_ALLOCATE(recv_buffer(1:nstl, mesh%np))
 
-      call MPI_Alltoallv(send_buffer(1, 1), send_count*nstl, send_disp*nstl, R_MPITYPE, &
-        recv_buffer(1, 1), recv_count*nstl, recv_disp*nstl, R_MPITYPE, mesh%mpi_grp%comm, mpi_err)
+      send_count_nstl = send_count * nstl
+      send_disp_nstl = send_disp * nstl
+      recv_count_nstl = recv_count * nstl
+      recv_disp_nstl = recv_disp * nstl
+      call MPI_Alltoallv(send_buffer(1, 1), send_count_nstl, send_disp_nstl, R_MPITYPE, &
+        recv_buffer(1, 1), recv_count_nstl, recv_disp_nstl, R_MPITYPE, mesh%mpi_grp%comm, mpi_err)
 
       SAFE_DEALLOCATE_A(send_buffer)
 
@@ -711,8 +710,12 @@ subroutine X(mesh_batch_exchange_points)(mesh, aa, forward_map, backward_map)
 
       SAFE_ALLOCATE(recv_buffer(1:nstl, mesh%np))
 
-      call MPI_Alltoallv(send_buffer(1, 1), send_count*nstl, send_disp*nstl, R_MPITYPE, &
-        recv_buffer(1, 1), recv_count*nstl, recv_disp*nstl, R_MPITYPE, mesh%mpi_grp%comm, mpi_err)
+      send_count_nstl = send_count * nstl
+      send_disp_nstl = send_disp * nstl
+      recv_count_nstl = recv_count * nstl
+      recv_disp_nstl = recv_disp * nstl
+      call MPI_Alltoallv(send_buffer(1, 1), send_count_nstl, send_disp_nstl, R_MPITYPE, &
+        recv_buffer(1, 1), recv_count_nstl, recv_disp_nstl, R_MPITYPE, mesh%mpi_grp%comm, mpi_err)
 
       SAFE_DEALLOCATE_A(send_buffer)
 
@@ -733,6 +736,10 @@ subroutine X(mesh_batch_exchange_points)(mesh, aa, forward_map, backward_map)
     SAFE_DEALLOCATE_A(recv_count)
     SAFE_DEALLOCATE_A(send_disp)
     SAFE_DEALLOCATE_A(recv_disp)
+    SAFE_DEALLOCATE_A(send_count_nstl)
+    SAFE_DEALLOCATE_A(recv_count_nstl)
+    SAFE_DEALLOCATE_A(send_disp_nstl)
+    SAFE_DEALLOCATE_A(recv_disp_nstl)
 #endif
   end if
 

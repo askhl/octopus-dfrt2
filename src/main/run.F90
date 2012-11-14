@@ -15,12 +15,11 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: run.F90 9229 2012-08-08 09:06:37Z helbig $
+!! $Id: run.F90 9521 2012-10-25 13:53:04Z acastro $
 
 #include "global.h"
 
 module run_m
-  use calc_mode_m
   use casida_m
   use datasets_m
   use em_resp_m
@@ -239,7 +238,7 @@ contains
       call hamiltonian_init(hm, sys%gr, sys%geo, sys%st, sys%ks%theory_level, sys%ks%xc_family)
       
       call messages_print_stress(stdout, 'Approximate memory requirements')
-      call memory_run(sys, hm)
+      call memory_run(sys)
       call messages_print_stress(stdout)
 
       if(calc_mode_id /= CM_DUMMY) then

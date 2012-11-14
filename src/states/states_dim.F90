@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_dim.F90 8950 2012-03-29 16:34:12Z umberto $
+!! $Id: states_dim.F90 9343 2012-09-05 23:07:49Z dstrubbe $
 
 #include "global.h"
 
@@ -212,10 +212,9 @@ contains
   end subroutine kpoints_distribute
   
   ! ---------------------------------------------------------
-  subroutine states_choose_kpoints(dd, sb, geo)
+  subroutine states_choose_kpoints(dd, sb)
     type(states_dim_t), intent(inout) :: dd
     type(simul_box_t),  intent(in)    :: sb
-    type(geometry_t),   intent(in)    :: geo
 
     integer :: ik, iq
 

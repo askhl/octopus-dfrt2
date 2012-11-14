@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: xc_oep_inc.F90 8834 2012-02-03 10:18:14Z micael $
+!! $Id: xc_oep_inc.F90 9452 2012-09-20 15:05:36Z dstrubbe $
 
 ! ---------------------------------------------------------
 !> This file handles the evaluation of the OEP potential, in the KLI or full OEP
@@ -25,8 +25,6 @@
 !! This is why it needs the xc_functl module. I prefer to put it here since
 !! the rest of the Hamiltonian module does not know about the gory details
 !! of how xc is defined and calculated.
-
-! ---------------------------------------------------------
 subroutine X(xc_oep_calc)(oep, xcs, apply_sic_pz, gr, hm, st, ex, ec, vxc)
   type(xc_oep_t),      intent(inout) :: oep
   type(xc_t),          intent(in)    :: xcs
@@ -124,7 +122,7 @@ subroutine X(xc_oep_solve) (gr, hm, st, is, vxc, oep)
   type(hamiltonian_t), intent(in)    :: hm
   type(states_t),      intent(in)    :: st
   integer,             intent(in)    :: is
-  FLOAT,               intent(inout) :: vxc(:) ! vxc(gr%mesh%np)
+  FLOAT,               intent(inout) :: vxc(:) !< (gr%mesh%np)
   type(xc_oep_t),      intent(inout) :: oep
 
   integer :: iter, ist

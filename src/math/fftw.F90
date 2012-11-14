@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fftw.F90 9196 2012-07-13 02:51:33Z xavier $
+!! $Id: fftw.F90 9483 2012-10-05 16:19:43Z dstrubbe $
 
 #include "global.h"
 
@@ -31,11 +31,25 @@ module fftw_m
   use global_m
   use messages_m
   use profiling_m
+
   implicit none
 
-  ! fftw constants. this is just a copy from file fftw3.f,
-  ! distributed with fftw package.
-  integer, parameter ::                &
+  private
+
+  public :: &
+    fftw_execute_dft,        &
+    fftw_destroy_plan,       &
+    fftw_cleanup,            &
+    fftw_init_threads,       &
+    fftw_plan_with_nthreads, &
+    fftw_cleanup_threads,    &
+    fftw_prepare_plan_r2c,   &
+    fftw_prepare_plan,       &
+    fftw_get_dims
+
+  !> fftw constants. this is just a copy from file fftw3.f,
+  !! distributed with fftw package.
+  integer, public, parameter ::        &
     FFTW_R2HC                =      0, &
     FFTW_HC2R                =      1, &
     FFTW_DHT                 =      2, &
@@ -69,14 +83,14 @@ module fftw_m
     FFTW_NO_VRECURSE         =  65536, &
     FFTW_NO_SIMD             = 131072
 
-  ! ----------------- plan_dft ------------------
+  !> ----------------- plan_dft ------------------
   interface 
     subroutine DFFTW(plan_dft_r2c_1d)(plan, n, in, out, flags)
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n
-      FLOAT,       intent(in)    :: in  ! in(n)
-      CMPLX,       intent(out)   :: out ! out(n/2+1)
+      FLOAT,       intent(in)    :: in  !< in(n)
+      CMPLX,       intent(out)   :: out !< out(n/2+1)
       integer,     intent(in)    :: flags
     end subroutine DFFTW(plan_dft_r2c_1d)
 
@@ -84,8 +98,8 @@ module fftw_m
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n1, n2
-      FLOAT,       intent(in)    :: in  ! in(n1, n2)
-      CMPLX,       intent(out)   :: out ! out(n1/2+1, n2)
+      FLOAT,       intent(in)    :: in  !< in(n1, n2)
+      CMPLX,       intent(out)   :: out !< out(n1/2+1, n2)
       integer,     intent(in)    :: flags
     end subroutine DFFTW(plan_dft_r2c_2d)
     
@@ -93,8 +107,8 @@ module fftw_m
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n1, n2, n3
-      FLOAT,       intent(in)    :: in  ! in(n1, n2, n3)
-      CMPLX,       intent(out)   :: out ! out(n1/2+1, n2, n3)
+      FLOAT,       intent(in)    :: in  !< in(n1, n2, n3)
+      CMPLX,       intent(out)   :: out !< out(n1/2+1, n2, n3)
       integer,     intent(in)    :: flags
     end subroutine DFFTW(plan_dft_r2c_3d)
 
@@ -102,8 +116,8 @@ module fftw_m
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n
-      CMPLX,       intent(in)    :: in  ! in(n/2+1)
-      FLOAT,       intent(out)   :: out ! out(n)
+      CMPLX,       intent(in)    :: in  !< in(n/2+1)
+      FLOAT,       intent(out)   :: out !< out(n)
       integer,     intent(in)    :: flags
     end subroutine DFFTW(plan_dft_c2r_1d)
 
@@ -111,8 +125,8 @@ module fftw_m
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n1, n2
-      CMPLX,       intent(in)    :: in  ! in(n1/2+1, n2)
-      FLOAT,       intent(out)   :: out ! out(n1, n2)
+      CMPLX,       intent(in)    :: in  !< in(n1/2+1, n2)
+      FLOAT,       intent(out)   :: out !< out(n1, n2)
       integer,     intent(in)    :: flags
     end subroutine DFFTW(plan_dft_c2r_2d)
 
@@ -120,8 +134,8 @@ module fftw_m
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n1, n2, n3
-      CMPLX,       intent(in)    :: in  ! in(n1/2+1, n2, n3)
-      FLOAT,       intent(out)   :: out ! out(n1, n2, n3)
+      CMPLX,       intent(in)    :: in  !< in(n1/2+1, n2, n3)
+      FLOAT,       intent(out)   :: out !< out(n1, n2, n3)
       integer,     intent(in)    :: flags
     end subroutine DFFTW(plan_dft_c2r_3d)
 
@@ -129,8 +143,8 @@ module fftw_m
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n
-      CMPLX,       intent(in)    :: in  ! in(n/2+1)
-      CMPLX,       intent(out)   :: out ! out(n)
+      CMPLX,       intent(in)    :: in  !< in(n/2+1)
+      CMPLX,       intent(out)   :: out !< out(n)
       integer,     intent(in)    :: sign, flags
     end subroutine DFFTW(plan_dft_1d)
 
@@ -138,8 +152,8 @@ module fftw_m
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n1, n2
-      CMPLX,       intent(in)    :: in  ! in(n1/2+1, n2)
-      CMPLX,       intent(out)   :: out ! out(n1, n2)
+      CMPLX,       intent(in)    :: in  !< in(n1/2+1, n2)
+      CMPLX,       intent(out)   :: out !< out(n1, n2)
       integer,     intent(in)    :: sign, flags
     end subroutine DFFTW(plan_dft_2d)
 
@@ -147,8 +161,8 @@ module fftw_m
       use c_pointer_m
       type(c_ptr), intent(inout) :: plan
       integer,     intent(in)    :: n1, n2, n3
-      CMPLX,       intent(in)    :: in  ! in(n1/2+1, n2, n3)
-      CMPLX,       intent(out)   :: out ! out(n1, n2, n3)
+      CMPLX,       intent(in)    :: in  !< in(n1/2+1, n2, n3)
+      CMPLX,       intent(out)   :: out !< out(n1, n2, n3)
       integer,     intent(in)    :: sign, flags
     end subroutine DFFTW(plan_dft_3d)
   end interface
@@ -179,7 +193,7 @@ module fftw_m
   end interface fftw_execute_dft
 
 
-  ! ----------------- destroy_plan ------------------
+  !> ----------------- destroy_plan ------------------
   interface fftw_destroy_plan
     subroutine DFFTW(destroy_plan)(plan)
       use c_pointer_m
@@ -188,14 +202,14 @@ module fftw_m
   end interface fftw_destroy_plan
 
  
-  ! ----------------- cleanup ------------------
+  !> ----------------- cleanup ------------------
   interface fftw_cleanup
     subroutine DFFTW(cleanup)
     end subroutine DFFTW(cleanup)
   end interface fftw_cleanup
 
 
-  ! ----------------- thread related functions---------------
+  !> ----------------- thread-related functions---------------
 
   interface fftw_init_threads
     subroutine DFFTW(init_threads)(iret)

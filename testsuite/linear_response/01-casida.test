@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 01-casida.test 8329 2011-09-26 23:03:34Z xavier $
+# $Id: 01-casida.test 9582 2012-11-08 22:06:42Z dstrubbe $
 
 Test       : Casida linear response TDDFT
 Programs   : octopus; octopus_mpi
@@ -37,13 +37,36 @@ Enabled    : Yes
 
 Input: 01-casida.01-gs.inp
 match ; Total energy   ; GREP(static/info, 'Total       =', 20) ; -19.92968467
+match ; HOMO-1         ; GREP(static/info, '4   --', 12) ;  -0.440481
 match ; HOMO           ; GREP(static/info, '5   --', 12) ;  -0.384524
 
 Input: 01-casida.02-unocc.inp
-match ; LUMO           ; LINE(static/eigenvalues, -8, 12) ; -0.085106
+match ; HOMO-1         ; LINE(static/eigenvalues, -11, 12); -0.440481
+match ; HOMO           ; LINE(static/eigenvalues, -10, 12); -0.384524
+match ; LUMO           ; LINE(static/eigenvalues, -9, 12) ; -0.085106
+match ; LUMO+2         ; LINE(static/eigenvalues, -7, 12) ;  0.013016
+match ; LUMO+3         ; LINE(static/eigenvalues, -6, 12) ;  0.042278
+match ; LUMO+6         ; LINE(static/eigenvalues, -4, 12) ;  0.045205
+match ; LUMO+8         ; LINE(static/eigenvalues, -1, 12) ;  0.153188
+
+Input: 01-casida.022-unocc_restart.inp
+match ; HOMO-1         ; LINE(static/eigenvalues, -11, 12); -0.440481
+match ; HOMO           ; LINE(static/eigenvalues, -10, 12); -0.384524
+match ; LUMO           ; LINE(static/eigenvalues, -9, 12) ; -0.085106
+match ; LUMO+2         ; LINE(static/eigenvalues, -7, 12) ;  0.013016
+match ; LUMO+3         ; LINE(static/eigenvalues, -6, 12) ;  0.042278
+match ; LUMO+6         ; LINE(static/eigenvalues, -4, 12) ;  0.045205
 match ; LUMO+8         ; LINE(static/eigenvalues, -1, 12) ;  0.153188
 
 Input: 01-casida.03-casida.inp
+match ; 1st eps-diff   ; LINE(casida/eps_diff, 2, 9) ; 2.99416473E-01
+match ; 2nd eps-diff   ; LINE(casida/eps_diff, 4, 9) ; 3.55375584E-01
+match ; 3rd eps-diff   ; LINE(casida/eps_diff, 5, 9) ; 3.55375584E-01
+
+match ; 1st Petersilka ; LINE(casida/petersilka, 2, 9) ; 3.43091004E-01
+# owing to degeneracy and the gauge-dependence of Petersilka, the 2nd is not well defined
+match ; 3rd Petersilka ; LINE(casida/petersilka, 6, 9) ; 4.11090328E-01
+
 match ; 1st excitation ; LINE(casida/casida, 2, 7) ; 3.37393747E-01
 match ; 2nd excitation ; LINE(casida/casida, 4, 7) ; 3.55373946E-01
 match ; 3rd excitation ; LINE(casida/casida, 5, 7) ; 3.75379848E-01

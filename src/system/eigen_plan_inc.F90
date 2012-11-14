@@ -36,10 +36,8 @@ subroutine X(eigensolver_plan) (gr, st, hm, pre, tol, niter, converged, ik, diff
   integer,                     intent(inout) :: niter
   integer,                     intent(out)   :: converged
   integer,                     intent(in)    :: ik
-  FLOAT,             optional, intent(out)   :: diff(1:st%nst)
+  FLOAT,             optional, intent(out)   :: diff(:) !< (1:st%nst)
 
-
-  ! Local stuff
   !  integer :: n       ! Dimension of the problem.
   integer :: ned        ! Number of smallest eigenpairs desired
   integer :: nec        ! number of eigen-pairs converged, if initially
@@ -196,7 +194,7 @@ subroutine X(eigensolver_plan) (gr, st, hm, pre, tol, niter, converged, ik, diff
 
       ! Diagonalization in the subspace, using LAPACK.
       hevec(1:d2, 1:d2) = ham(1:d2, 1:d2)
-      call lalg_eigensolve(d2, hevec(1:d2, 1:d2), tmp(1:d2))
+      call lalg_eigensolve(d2, hevec, tmp)
 
       ! Store the Ritz values as approximate eigenvalues.
       call lalg_copy(winsiz, tmp, eigenval(nec + 1:nec + winsiz))
@@ -253,7 +251,7 @@ subroutine X(eigensolver_plan) (gr, st, hm, pre, tol, niter, converged, ik, diff
       blk = 1
 
       ! Convergence test, and reordering of the eigenpairs. Starts checking
-      ! the convergece of the eigenpairs of the window, and stops checking
+      ! the convergence of the eigenpairs of the window, and stops checking
       ! whenever it finds one not converged. Then, for each converged eigenpair,
       ! compares its eigenvalue to the previous one, swapping them if
       ! necessary.

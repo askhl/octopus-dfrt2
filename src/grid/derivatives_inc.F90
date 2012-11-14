@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: derivatives_inc.F90 9286 2012-08-30 17:42:05Z xavier $
+!! $Id: derivatives_inc.F90 9443 2012-09-17 20:18:46Z dstrubbe $
 
 ! This module calculates the derivatives (gradients, Laplacians, etc.) 
 ! of a function. Note that the function whose derivative is to be calculated
@@ -25,9 +25,9 @@
 
 
 ! ---------------------------------------------------------
-! Set all boundary points in ff to zero to implement zero
-! boundary conditions for the derivatives, in finite system;
-! or set according to periodic boundary conditions.
+!> Set all boundary points in ffb to zero to implement zero
+!! boundary conditions for the derivatives, in finite system;
+!! or set according to periodic boundary conditions.
 subroutine X(derivatives_batch_set_bc)(der, ffb)
   type(derivatives_t), intent(in)    :: der
   type(batch_t),       intent(inout) :: ffb
@@ -64,26 +64,17 @@ contains
   subroutine zero_boundaries()
     integer :: ist, ip
 #ifdef HAVE_OPENCL
-    integer :: localsize, globalsize
+    integer :: np
 #endif
 
     PUSH_SUB(X(derivatives_batch_set_bc).zero_boundaries)
 
     select case(batch_status(ffb))
-#ifdef HAVE_OPENCL
     case(BATCH_CL_PACKED)
-
-      call opencl_set_kernel_arg(set_zero_part, 0, bndry_start - 1)
-      call opencl_set_kernel_arg(set_zero_part, 1, bndry_end)
-      call opencl_set_kernel_arg(set_zero_part, 2, ffb%pack%buffer)
-      call opencl_set_kernel_arg(set_zero_part, 3, log2(ffb%pack%size_real(1)))
-
-      localsize = opencl_kernel_workgroup_size(set_zero_part)/ffb%pack%size_real(1)
-      globalsize = pad(bndry_end - bndry_start + 1, localsize)
-      
-      call opencl_kernel_run(set_zero_part, (/ffb%pack%size_real(1), globalsize/), (/ffb%pack%size_real(1), localsize/))
+#ifdef HAVE_OPENCL
+      np = ffb%pack%size(1)*(bndry_end - bndry_start + 1)
+      call opencl_set_buffer_to_zero(ffb%pack%buffer, batch_type(ffb), np, offset = ffb%pack%size(1)*(bndry_start - 1))
       call opencl_finish()
-
 #endif
     case(BATCH_PACKED)
       forall(ip = bndry_start:bndry_end) 
@@ -253,7 +244,7 @@ end subroutine X(derivatives_set_bc)
 
 
 ! ---------------------------------------------------------
-! These are the workhorse routines that handle the calculation of derivatives
+!> These are the workhorse routines that handle the calculation of derivatives
 subroutine X(derivatives_batch_start)(op, der, ff, opff, handle, ghost_update, set_bc, factor)
   type(nl_operator_t),      target, intent(in)    :: op
   type(derivatives_t),      target, intent(in)    :: der
@@ -371,12 +362,12 @@ end subroutine X(derivatives_batch_perform)
 
 
 ! ---------------------------------------------------------
-! Now the simplified interfaces
+!> Now the simplified interfaces
 subroutine X(derivatives_perform)(op, der, ff, op_ff, ghost_update, set_bc, factor)
   type(nl_operator_t), target, intent(in)    :: op
   type(derivatives_t),         intent(in)    :: der
-  R_TYPE,                      intent(inout) :: ff(:)     ! ff(der%mesh%np_part)
-  R_TYPE,                      intent(out)   :: op_ff(:)  ! op_ff(der%mesh%np)
+  R_TYPE,                      intent(inout) :: ff(:)     !< (der%mesh%np_part)
+  R_TYPE,                      intent(out)   :: op_ff(:)  !< (der%mesh%np)
   logical, optional,           intent(in)    :: ghost_update
   logical, optional,           intent(in)    :: set_bc
   FLOAT,   optional,           intent(in)    :: factor
@@ -407,8 +398,8 @@ end subroutine X(derivatives_perform)
 ! ---------------------------------------------------------
 subroutine X(derivatives_lapl)(der, ff, op_ff, ghost_update, set_bc)
   type(derivatives_t),       intent(in)    :: der
-  R_TYPE,                    intent(inout) :: ff(:)     ! f(der%mesh%np_part)
-  R_TYPE,                    intent(out)   :: op_ff(:)  ! lapl(der%mesh%np)
+  R_TYPE,                    intent(inout) :: ff(:)     !< (der%mesh%np_part)
+  R_TYPE,                    intent(out)   :: op_ff(:)  !< (der%mesh%np)
   logical, optional,         intent(in)    :: ghost_update
   logical, optional,         intent(in)    :: set_bc
 
@@ -454,8 +445,8 @@ end subroutine X(derivatives_grad)
 ! ---------------------------------------------------------
 subroutine X(derivatives_div)(der, ff, op_ff, ghost_update, set_bc)
   type(derivatives_t), intent(in)    :: der
-  R_TYPE,              intent(inout) :: ff(:,:)   ! ff(der%mesh%np_part, der%mesh%sb%dim)
-  R_TYPE,              intent(out)   :: op_ff(:)  ! op_ff(der%mesh%np)
+  R_TYPE,              intent(inout) :: ff(:,:)   !< ff(der%mesh%np_part, der%mesh%sb%dim)
+  R_TYPE,              intent(out)   :: op_ff(:)  !< op_ff(der%mesh%np)
   logical, optional,   intent(in)    :: ghost_update
   logical, optional,   intent(in)    :: set_bc
 
@@ -487,10 +478,10 @@ end subroutine X(derivatives_div)
 ! ---------------------------------------------------------
 subroutine X(derivatives_curl)(der, ff, op_ff, ghost_update, set_bc)
   type(derivatives_t), intent(in)    :: der
-  R_TYPE,              intent(inout) :: ff(:,:)    ! ff(der%mesh%np_part, der%dim) 
+  R_TYPE,              intent(inout) :: ff(:,:)    !< ff(der%mesh%np_part, der%dim) 
   R_TYPE,              intent(out)   :: op_ff(:,:)
-    ! if dim = 2, op_ff(der%mesh%np, der%dim)
-    ! if dim = 1, op_ff(der%mesh%np, 1)
+    !< if dim = 2, op_ff(der%mesh%np, der%dim)
+    !! if dim = 1, op_ff(der%mesh%np, 1)
   logical, optional,   intent(in)    :: ghost_update
   logical, optional,   intent(in)    :: set_bc
 
@@ -614,7 +605,7 @@ subroutine X(derivatives_test)(this)
       call batch_unpack(opffb)
     end if
 
-    forall(ip = 1:this%mesh%np) 
+    forall(ip = 1:this%mesh%np)
       opffb%states_linear(blocksize)%X(psi)(ip) = CNST(2.0)*opffb%states_linear(blocksize)%X(psi)(ip) - &
         (M_FOUR*aa**2*bb*sum(this%mesh%x(ip, :)**2)*exp(-aa*sum(this%mesh%x(ip, :)**2)) &
         - this%mesh%sb%dim*M_TWO*aa*bb*exp(-aa*sum(this%mesh%x(ip, :)**2)))
@@ -624,7 +615,7 @@ subroutine X(derivatives_test)(this)
       'Laplacian ', trim(type),  &
       ' bsize = ', blocksize,    &
       ' , error = ', X(mf_nrm2)(this%mesh, opffb%states_linear(blocksize)%X(psi)), &
-      ' , gflops = ',  &
+      ' , Gflops = ',  &
 #ifdef R_TREAL
       blocksize*this%mesh%np*CNST(2.0)*this%lapl%stencil%size/(etime*CNST(1.0e9))
 #else

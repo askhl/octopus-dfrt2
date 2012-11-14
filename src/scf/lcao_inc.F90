@@ -15,19 +15,18 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: lcao_inc.F90 8692 2011-12-15 03:23:04Z xavier $
+!! $Id: lcao_inc.F90 9617 2012-11-13 19:55:25Z dstrubbe $
 
 
 ! ---------------------------------------------------------
 !> This routine fills state psi with an atomic orbital -- provided
 !! by the pseudopotential structure in geo.
 ! ---------------------------------------------------------
-subroutine X(lcao_atomic_orbital) (this, iorb, mesh, hm, geo, sb, psi, spin_channel)
+subroutine X(lcao_atomic_orbital) (this, iorb, mesh, st, geo, psi, spin_channel)
   type(lcao_t),             intent(in)    :: this
   integer,                  intent(in)    :: iorb
   type(mesh_t),             intent(in)    :: mesh
-  type(simul_box_t),        intent(in)    :: sb
-  type(hamiltonian_t),      intent(in)    :: hm
+  type(states_t),           intent(in)    :: st
   type(geometry_t), target, intent(in)    :: geo
   R_TYPE,                   intent(inout) :: psi(:, :)
   integer,                  intent(in)    :: spin_channel
@@ -43,7 +42,7 @@ subroutine X(lcao_atomic_orbital) (this, iorb, mesh, hm, geo, sb, psi, spin_chan
   ASSERT(iorb >= 1)
   ASSERT(iorb <= this%maxorbs)
 
-  psi(1:mesh%np, 1:hm%d%dim) = R_TOTYPE(M_ZERO)
+  psi(1:mesh%np, 1:st%d%dim) = R_TOTYPE(M_ZERO)
 
   iatom = this%atom(iorb)
   jj = this%level(iorb)
@@ -68,22 +67,20 @@ end subroutine X(lcao_atomic_orbital)
 
 
 ! ---------------------------------------------------------
-subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
+subroutine X(lcao_wf)(this, st, gr, geo, hm, start)
   type(lcao_t),        intent(inout) :: this
   type(states_t),      intent(inout) :: st
   type(grid_t),        intent(inout) :: gr
   type(geometry_t),    intent(in)    :: geo
   type(hamiltonian_t), intent(in)    :: hm
-  integer,             intent(in)    :: start
+  integer, optional,   intent(in)    :: start
 
   integer :: nst, ik, n1, n2, idim, lcao_start, ie, max
   R_TYPE, allocatable :: hpsi(:, :, :), overlap(:, :, :)
   FLOAT, allocatable :: ev(:)
   R_TYPE, allocatable :: hamilt(:, :, :), lcaopsi(:, :, :), lcaopsi2(:, :)
-  integer :: kstart, kend, ispin
+  integer :: kstart, kend, ispin, iunit_h, iunit_s, iunit_e
 
-  integer, allocatable :: cst(:, :), ck(:, :)
-  R_SINGLE, allocatable :: buff(:, :, :, :)
 #ifdef HAVE_MPI
   FLOAT, allocatable :: tmp(:, :)
 #endif
@@ -99,8 +96,8 @@ subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
   kstart = st%d%kpt%start
   kend = st%d%kpt%end
 
-  lcao_start = start
-  if(st%parallel_in_states .and. st%st_start > start) lcao_start = st%st_start
+  lcao_start = optional_default(start, 1)
+  if(st%parallel_in_states .and. st%st_start > lcao_start) lcao_start = st%st_start
 
   ! Allocation of variables
 
@@ -110,8 +107,6 @@ subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
   SAFE_ALLOCATE(hamilt(this%norbs, this%norbs, kstart:kend))
   SAFE_ALLOCATE(overlap(this%norbs, this%norbs, st%d%spin_channels))
 
-  call init_orbitals()
-
   ie = 0
   max = this%norbs * (this%norbs + 1)/2
 
@@ -120,10 +115,23 @@ subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
 
   if(mpi_grp_is_root(mpi_world)) call loct_progress_bar(-1, max)
 
+! This code (and related below) is commented out because it causes mysterious optimization
+! problems with PGI 12.4.0 -- LAPACK fails in diagonalization, only if mesh partition from scratch!
+  !if(this%write_matrices) then
+  !  iunit_h = io_open(file=trim(STATIC_DIR)//'lcao_hamiltonian', action='write')
+  !  iunit_s = io_open(file=trim(STATIC_DIR)//'lcao_overlap', action='write')
+  !  iunit_e = io_open(file=trim(STATIC_DIR)//'lcao_eigenvectors', action='write')
+  !  if(mpi_grp_is_root(mpi_world)) then
+  !    write(iunit_h,'(4a6,a15)') 'iorb', 'jorb', 'ik', 'spin', 'hamiltonian'
+  !    write(iunit_s,'(3a6,a15)') 'iorb', 'jorb', 'spin', 'overlap'
+  !    write(iunit_e,'(4a6,a15)') 'ieig', 'jorb', 'ik', 'spin', 'coefficient'
+  !  endif
+  !endif
+
   do n1 = 1, this%norbs
     
     do ispin = 1, st%d%spin_channels
-      call get_ao(n1, ispin, lcaopsi(:, :, ispin), use_psi = .true.)
+      call X(get_ao)(this, st, gr%mesh, geo, n1, ispin, lcaopsi(:, :, ispin), use_psi = .true.)
     end do
 
     do ik = kstart, kend
@@ -134,14 +142,20 @@ subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
     do n2 = n1, this%norbs
       do ispin = 1, st%d%spin_channels
 
-        call get_ao(n2, ispin, lcaopsi2, use_psi = .true.)
+        call X(get_ao)(this, st, gr%mesh, geo, n2, ispin, lcaopsi2, use_psi = .true.)
 
         overlap(n1, n2, ispin) = X(mf_dotp)(gr%mesh, st%d%dim, lcaopsi(:, :, ispin), lcaopsi2)
         overlap(n2, n1, ispin) = R_CONJ(overlap(n1, n2, ispin))
+!        if(this%write_matrices .and. mpi_grp_is_root(mpi_world)) &
+!          write(iunit_s,'(3i6,2f15.6)') n1, n2, ispin, overlap(n1, n2, ispin)
+
         do ik = kstart, kend
           if(ispin /= states_dim_get_spin_index(st%d, ik)) cycle
           hamilt(n1, n2, ik) = X(mf_dotp)(gr%mesh, st%d%dim, hpsi(:, :, ik), lcaopsi2)
           hamilt(n2, n1, ik) = R_CONJ(hamilt(n1, n2, ik))
+
+!          if(this%write_matrices .and. mpi_grp_is_root(mpi_world)) &
+!            write(iunit_h,'(4i6,2f15.6)') n1, n2, ik, ispin, units_from_atomic(units_out%energy, hamilt(n1, n2, ik))
         end do
       end do
       
@@ -157,9 +171,16 @@ subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
 
   SAFE_ALLOCATE(ev(1:this%norbs))
 
-  do ik =  kstart, kend
+  do ik = kstart, kend
     ispin = states_dim_get_spin_index(st%d, ik)
-    call lalg_geneigensolve(this%norbs, hamilt(1:this%norbs, 1:this%norbs, ik), overlap(:, :, ispin), ev)
+    call lalg_geneigensolve(this%norbs, hamilt(:, :, ik), overlap(:, :, ispin), ev)
+
+#ifdef HAVE_MPI
+    ! the eigenvectors are not unique due to phases and degenerate subspaces, but
+    ! they must be consistent among processors in domain parallelization
+    if(gr%mesh%parallel_in_domains) &
+      call MPI_Bcast(hamilt(1, 1, ik), this%norbs**2, R_MPITYPE, 0, gr%mesh%mpi_grp%comm, mpi_err)
+#endif
 
     st%eigenval(lcao_start:nst, ik) = ev(lcao_start:nst)
 
@@ -167,9 +188,21 @@ subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
       ASSERT(associated(st%X(psi)))
       st%X(psi)(1:gr%mesh%np, 1:st%d%dim, lcao_start:st%st_end, ik) = R_TOTYPE(M_ZERO)
     end if
-
   end do
 
+!  if(this%write_matrices .and. mpi_grp_is_root(mpi_world)) then
+!    do ik =  kstart, kend
+!      do n2 = 1, this%norbs
+!        do n1 = 1, this%norbs
+!          write(iunit_e,'(4i6,2f15.6)') n2, n1, ik, ispin, hamilt(n1, n2, ik)
+!        enddo
+!      enddo
+!    enddo
+!
+!    call io_close(iunit_h)
+!    call io_close(iunit_s)
+!    call io_close(iunit_e)
+!  endif
 
 #ifdef HAVE_MPI
   if(st%d%kpt%parallel) then
@@ -189,7 +222,7 @@ subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
   do n2 = 1, this%norbs
     do ispin = 1, st%d%spin_channels
       
-      call get_ao(n2, ispin, lcaopsi2, use_psi = .false.)
+      call X(get_ao)(this, st, gr%mesh, geo, n2, ispin, lcaopsi2, use_psi = .false.)
 
       do ik =  kstart, kend
         if(ispin /= states_dim_get_spin_index(st%d, ik)) cycle
@@ -209,142 +242,139 @@ subroutine X(lcao_wf) (this, st, gr, geo, hm, start)
   SAFE_DEALLOCATE_A(hamilt)
   SAFE_DEALLOCATE_A(overlap)
   
-  SAFE_DEALLOCATE_A(buff)
-  SAFE_DEALLOCATE_A(cst)
-  SAFE_DEALLOCATE_A(ck)
-
   SAFE_DEALLOCATE_A(lcaopsi)
   SAFE_DEALLOCATE_A(lcaopsi2)
 
   POP_SUB(X(lcao_wf))
-
-contains 
-
-
-! ---------------------------------------------------------
-  subroutine init_orbitals()
-    integer :: iorb, ispin, ist, ik, size
-    R_TYPE, allocatable :: ao(:, :)
-
-    PUSH_SUB(X(lcao_wf).init_orbitals)
-
-    ! We calculate the atomic orbitals first. To save memory we put
-    ! all the orbitals we can in the part of st%Xpsi that we are going
-    ! to overwrite and then the rest is stored in a single-precision
-    ! buffer.
-
-    SAFE_ALLOCATE(cst(1:this%norbs, 1:st%d%spin_channels))
-    SAFE_ALLOCATE( ck(1:this%norbs, 1:st%d%spin_channels))
-    SAFE_ALLOCATE(  ao(1:gr%mesh%np, 1:st%d%dim))
-
-    ck = 0
-
-    iorb = 1
-    ispin = 1
-
-    ! first store in st%Xpsi
-    ist_loop: do ist = lcao_start, st%st_end
-      do ik = kstart, kend
-
-        cst(iorb, ispin) = ist
-        ck(iorb, ispin) = ik
-
-        call X(lcao_atomic_orbital)(this, iorb, gr%mesh, hm, geo, gr%sb, ao, ispin)
-        call states_set_state(st, gr%mesh, ist, ik, ao)
-
-        if(ispin < st%d%spin_channels) then
-          ispin = ispin + 1
-        else
-          ispin = 1
-          iorb = iorb + 1
-          if(iorb > this%norbs) exit ist_loop
-        end if
-
-      end do
-    end do ist_loop
-
-    if(ispin < st%d%spin_channels) iorb = iorb - 1 ! we have not completed all the spin channels
-
-    ! if there are any orbitals left, allocate extra space for them
-
-    if(iorb <= this%norbs) then
-
-      size = (this%norbs - iorb + 1) * st%d%spin_channels
-      write(message(1), '(a, i5, a)') "Info: Single-precision storage for ", size, " extra orbitals will be allocated."
-      call messages_info(1)
-
-      SAFE_ALLOCATE(buff(1:gr%mesh%np, 1:st%d%dim, iorb:this%norbs, 1:st%d%spin_channels))
-      
-      do iorb = iorb, this%norbs
-        do ispin = 1, st%d%spin_channels
-          call X(lcao_atomic_orbital)(this, iorb, gr%mesh, hm, geo, gr%sb, ao, ispin)
-          buff(1:gr%mesh%np, 1:st%d%dim, iorb, ispin) = ao(1:gr%mesh%np, 1:st%d%dim)
-        end do
-      end do
-      
-    end if
-
-    SAFE_DEALLOCATE_A(ao)
-
-    POP_SUB(X(lcao_wf).init_orbitals)
-
-  end subroutine init_orbitals
-
-
-! ---------------------------------------------------------
-  subroutine get_ao(iorb, ispin, ao, use_psi)
-    integer, intent(in)    :: iorb
-    integer, intent(in)    :: ispin
-    R_TYPE,  intent(out)   :: ao(:, :)
-    logical, intent(in)    :: use_psi
-
-    integer :: idim
-
-    PUSH_SUB(X(lcao_wf).get_ao)
-
-    if(ck(iorb, ispin) == 0) then
-      ao(1:gr%mesh%np, 1:st%d%dim) = buff(1:gr%mesh%np, 1:st%d%dim, iorb, ispin)
-    else
-      if(use_psi) then
-        call states_get_state(st, gr%mesh, cst(iorb, ispin), ck(iorb, ispin), ao)
-      else
-        call X(lcao_atomic_orbital)(this, iorb, gr%mesh, hm, geo, gr%sb, ao, ispin)
-      end if
-    end if
-
-    POP_SUB(X(lcao_wf).get_ao)
-
-  end subroutine get_ao
-
 end subroutine X(lcao_wf)
 
-
 ! ---------------------------------------------------------
-! The alternative implementation.
-subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
+subroutine X(init_orbitals)(this, st, gr, geo, start)
   type(lcao_t),        intent(inout) :: this
   type(states_t),      intent(inout) :: st
   type(grid_t),        intent(inout) :: gr
   type(geometry_t),    intent(in)    :: geo
-  type(hamiltonian_t), intent(in)    :: hm
-  integer,             intent(in)    :: start
+  integer, optional,   intent(in)    :: start
 
-  integer :: iatom, jatom, ik, ist, idim, ip, ispin, nev, ib
-  integer :: ibasis, jbasis, iorb, jorb, norbs, dof
-  R_TYPE, allocatable :: hamiltonian(:, :), overlap(:, :), aa(:, :), bb(:, :)
-  integer :: prow, pcol, ilbasis, jlbasis
-  R_TYPE, allocatable :: psii(:, :, :), hpsi(:, :, :)
-  type(submesh_t), allocatable :: sphere(:)
-  type(batch_t) :: hpsib, psib
-  type(batch_t), allocatable :: orbitals(:)
-  FLOAT, allocatable :: eval(:)
-  R_TYPE, allocatable :: evec(:, :), levec(:, :)  
-  FLOAT :: dist2
-  type(profile_t), save :: prof_matrix, prof_wavefunction
+  integer :: iorb, ispin, ist, ik, size
+  integer :: nst, kstart, kend, lcao_start
+  R_TYPE, allocatable :: ao(:, :)
 
-  PUSH_SUB(X(lcao_wf2))
+  PUSH_SUB(X(init_orbitals))
 
-  ASSERT(start == 1)
+  nst = st%nst
+  kstart = st%d%kpt%start
+  kend = st%d%kpt%end
+
+  lcao_start = optional_default(start, 1)
+  if(st%parallel_in_states .and. st%st_start > lcao_start) lcao_start = st%st_start
+
+  ! We calculate the atomic orbitals first. To save memory we put
+  ! all the orbitals we can in the part of st%Xpsi that we are going
+  ! to overwrite and then the rest is stored in a single-precision
+  ! buffer.
+
+  SAFE_ALLOCATE(this%cst(1:this%norbs, 1:st%d%spin_channels))
+  SAFE_ALLOCATE(this%ck(1:this%norbs, 1:st%d%spin_channels))
+  SAFE_ALLOCATE(ao(1:gr%mesh%np, 1:st%d%dim))
+
+  this%ck = 0
+
+  iorb = 1
+  ispin = 1
+
+  ! first store in st%Xpsi
+  ist_loop: do ist = lcao_start, st%st_end
+    do ik = kstart, kend
+
+      this%cst(iorb, ispin) = ist
+      this%ck(iorb, ispin) = ik
+
+      call X(lcao_atomic_orbital)(this, iorb, gr%mesh, st, geo, ao, ispin)
+      call states_set_state(st, gr%mesh, ist, ik, ao)
+
+      if(ispin < st%d%spin_channels) then
+        ispin = ispin + 1
+      else
+        ispin = 1
+        iorb = iorb + 1
+        if(iorb > this%norbs) exit ist_loop
+      end if
+
+    end do
+  end do ist_loop
+
+  if(ispin < st%d%spin_channels) iorb = iorb - 1 ! we have not completed all the spin channels
+
+  ! if there are any orbitals left, allocate extra space for them
+
+  if(iorb <= this%norbs) then
+
+    size = (this%norbs - iorb + 1) * st%d%spin_channels
+    write(message(1), '(a, i5, a)') "Info: Single-precision storage for ", size, " extra orbitals will be allocated."
+    call messages_info(1)
+
+    SAFE_ALLOCATE(this%X(buff)(1:gr%mesh%np, 1:st%d%dim, iorb:this%norbs, 1:st%d%spin_channels))
+
+    do iorb = iorb, this%norbs
+      do ispin = 1, st%d%spin_channels
+        call X(lcao_atomic_orbital)(this, iorb, gr%mesh, st, geo, ao, ispin)
+        this%X(buff)(1:gr%mesh%np, 1:st%d%dim, iorb, ispin) = ao(1:gr%mesh%np, 1:st%d%dim)
+      end do
+    end do
+
+  end if
+
+  SAFE_DEALLOCATE_A(ao)
+
+  POP_SUB(X(init_orbitals))
+
+end subroutine X(init_orbitals)
+
+
+! ---------------------------------------------------------
+subroutine X(get_ao)(this, st, mesh, geo, iorb, ispin, ao, use_psi)
+  type(lcao_t),        intent(inout) :: this
+  type(states_t),      intent(in)    :: st
+  type(mesh_t),        intent(in)    :: mesh
+  type(geometry_t),    intent(in)    :: geo
+  integer,             intent(in)    :: iorb
+  integer,             intent(in)    :: ispin
+  R_TYPE,              intent(out)   :: ao(:, :)
+  logical,             intent(in)    :: use_psi
+  
+  PUSH_SUB(X(get_ao))
+  
+  if(this%ck(iorb, ispin) == 0) then
+    ao(1:mesh%np, 1:st%d%dim) = this%X(buff)(1:mesh%np, 1:st%d%dim, iorb, ispin)
+  else
+    if(use_psi) then
+      call states_get_state(st, mesh, this%cst(iorb, ispin), this%ck(iorb, ispin), ao)
+    else
+      call X(lcao_atomic_orbital)(this, iorb, mesh, st, geo, ao, ispin)
+    end if
+  end if
+
+  POP_SUB(X(get_ao))
+  
+end subroutine X(get_ao)
+
+! ---------------------------------------------------------
+
+subroutine X(lcao_alt_init_orbitals)(this, st, gr, geo, start)
+  type(lcao_t),        intent(inout) :: this
+  type(states_t),      intent(inout) :: st
+  type(grid_t),        intent(inout) :: gr
+  type(geometry_t),    intent(in)    :: geo
+  integer, optional,   intent(in)    :: start
+
+  integer :: iatom, norbs, dof
+
+  PUSH_SUB(X(lcao_alt_init_orbitals))
+
+  if(present(start)) then
+    ASSERT(start == 1)
+  end if
 
   write(message(1), '(a,i6,a)') 'Info: Performing LCAO calculation with ', this%nbasis, ' orbitals.'
   write(message(2), '(a)') ' '
@@ -362,6 +392,53 @@ subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
     end if
   end if
 
+  SAFE_ALLOCATE(this%sphere(1:geo%natoms))
+  SAFE_ALLOCATE(this%orbitals(1:geo%natoms))
+
+  dof = 0
+  do iatom = 1, geo%natoms
+    norbs = species_niwfs(geo%atom(iatom)%spec)
+
+    ! initialize the radial grid
+    call submesh_init_sphere(this%sphere(iatom), gr%mesh%sb, gr%mesh, geo%atom(iatom)%x, this%radius(iatom))
+    INCR(dof, this%sphere(iatom)%np*this%mult*norbs)
+    call batch_init(this%orbitals(iatom), 1, this%mult*norbs)
+  end do
+
+  if(this%keep_orb) then
+    write(message(1), '(a,f10.2,a)') &
+      'Info: LCAO requires', dof*CNST(8.0)/CNST(1024.0)**2, ' Mb of memory for atomic orbitals.'
+    call messages_info(1)
+  end if
+
+  POP_SUB(X(lcao_alt_init_orbitals))
+end subroutine X(lcao_alt_init_orbitals)
+
+! ---------------------------------------------------------
+!> The alternative implementation.
+subroutine X(lcao_alt_wf) (this, st, gr, geo, hm, start)
+  type(lcao_t),        intent(inout) :: this
+  type(states_t),      intent(inout) :: st
+  type(grid_t),        intent(inout) :: gr
+  type(geometry_t),    intent(in)    :: geo
+  type(hamiltonian_t), intent(in)    :: hm
+  integer,             intent(in)    :: start
+
+  integer :: iatom, jatom, ik, ist, ispin, nev, ib
+  integer :: ibasis, jbasis, iorb, jorb, norbs
+  R_TYPE, allocatable :: hamiltonian(:, :), overlap(:, :), aa(:, :), bb(:, :)
+  integer :: prow, pcol, ilbasis, jlbasis
+  R_TYPE, allocatable :: psii(:, :, :), hpsi(:, :, :)
+  type(batch_t) :: hpsib, psib
+  FLOAT, allocatable :: eval(:)
+  R_TYPE, allocatable :: evec(:, :), levec(:, :)  
+  FLOAT :: dist2
+  type(profile_t), save :: prof_matrix, prof_wavefunction
+
+  PUSH_SUB(X(lcao_alt_wf))
+
+  ASSERT(start == 1)
+
   if(.not. this%parallel) then
     SAFE_ALLOCATE(hamiltonian(1:this%nbasis, 1:this%nbasis))
     SAFE_ALLOCATE(overlap(1:this%nbasis, 1:this%nbasis))
@@ -369,29 +446,11 @@ subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
     SAFE_ALLOCATE(hamiltonian(1:this%lsize(1), 1:this%lsize(2)))
     SAFE_ALLOCATE(overlap(1:this%lsize(1), 1:this%lsize(2)))
   end if
+
   SAFE_ALLOCATE(aa(1:this%maxorb, 1:this%maxorb))
   SAFE_ALLOCATE(bb(1:this%maxorb, 1:this%maxorb))  
   SAFE_ALLOCATE(psii(1:gr%mesh%np_part, 1:st%d%dim, this%maxorb))
   SAFE_ALLOCATE(hpsi(1:gr%mesh%np, 1:st%d%dim, this%maxorb))
-  SAFE_ALLOCATE(sphere(1:geo%natoms))
-  SAFE_ALLOCATE(orbitals(1:geo%natoms))
-
-
-  dof = 0
-  do iatom = 1, geo%natoms
-    norbs = species_niwfs(geo%atom(iatom)%spec)
-
-    ! initialize the radial grid
-    call submesh_init_sphere(sphere(iatom), gr%mesh%sb, gr%mesh, geo%atom(iatom)%x, this%radius(iatom))
-    INCR(dof, sphere(iatom)%np*this%mult*norbs)
-    call batch_init(orbitals(iatom), 1, this%mult*norbs)
-  end do
-
-  if(this%keep_orb) then
-    write(message(1), '(a,i8,a)') &
-      'Info: LCAO requires', nint(dof*CNST(8.0)/CNST(1024.0)**2), ' Mb of memory for atomic orbitals.'
-    call messages_info(1)
-  end if
 
   call states_set_zero(st)
 
@@ -407,7 +466,7 @@ subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
     if(ispin > 1) then
       ! we need to deallocate previous orbitals
       do iatom = 1, geo%natoms
-        call lcao_end_orbital(orbitals(iatom))
+        call lcao_alt_end_orbital(this%orbitals(iatom))
       end do
     end if
 
@@ -435,14 +494,14 @@ subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
       do iatom = 1, geo%natoms
         norbs = this%norb_atom(iatom)
 
-        call lcao_get_orbital(orbitals(iatom), sphere(iatom), st, geo, ispin, iatom, this%norb_atom(iatom))
+        call lcao_alt_get_orbital(this%orbitals(iatom), this%sphere(iatom), geo, ispin, iatom, this%norb_atom(iatom))
 
         psii = M_ZERO
 
         call batch_init( psib, st%d%dim, this%atom_orb_basis(iatom, 1), this%atom_orb_basis(iatom, norbs), psii)
         call batch_init(hpsib, st%d%dim, this%atom_orb_basis(iatom, 1), this%atom_orb_basis(iatom, norbs), hpsi)
 
-        call X(submesh_batch_add)(sphere(iatom), orbitals(iatom), psib)
+        call X(submesh_batch_add)(this%sphere(iatom), this%orbitals(iatom), psib)
         call X(hamiltonian_apply_batch)(hm, gr%der, psib, hpsib, ik)
 
         do jatom = 1, geo%natoms
@@ -454,20 +513,20 @@ subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
 
           if(dist2 > (this%radius(iatom) + this%radius(jatom) + this%lapdist)**2) cycle
 
-          call lcao_get_orbital(orbitals(jatom), sphere(jatom), st, geo, ispin, jatom, this%norb_atom(jatom))
+          call lcao_alt_get_orbital(this%orbitals(jatom), this%sphere(jatom), geo, ispin, jatom, this%norb_atom(jatom))
 
           ibasis = this%atom_orb_basis(iatom, 1)
           jbasis = this%atom_orb_basis(jatom, 1)
 
-          call X(submesh_batch_dotp_matrix)(sphere(jatom), hpsib, orbitals(jatom), aa)
+          call X(submesh_batch_dotp_matrix)(this%sphere(jatom), hpsib, this%orbitals(jatom), aa)
 
           if(dist2 > (this%radius(iatom) + this%radius(jatom))**2) then 
             bb = M_ZERO
           else
-            call X(submesh_batch_dotp_matrix)(sphere(jatom), psib, orbitals(jatom), bb)
+            call X(submesh_batch_dotp_matrix)(this%sphere(jatom), psib, this%orbitals(jatom), bb)
           end if
 
-          if(.not. this%keep_orb) call lcao_end_orbital(orbitals(jatom))
+          if(.not. this%keep_orb) call lcao_alt_end_orbital(this%orbitals(jatom))
 
           !now, store the result in the matrix
 
@@ -497,7 +556,7 @@ subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
         call batch_end(psib)
         call batch_end(hpsib)
 
-        if(.not. this%keep_orb) call lcao_end_orbital(orbitals(iatom))
+        if(.not. this%keep_orb) call lcao_alt_end_orbital(this%orbitals(iatom))
 
         if(mpi_grp_is_root(mpi_world)) call loct_progress_bar(iatom, geo%natoms)
       end do
@@ -538,14 +597,14 @@ subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
       do iatom = 1, geo%natoms
         norbs = this%norb_atom(iatom)
 
-        call lcao_get_orbital(orbitals(iatom), sphere(iatom), st, geo, ispin, iatom, this%norb_atom(iatom))
+        call lcao_alt_get_orbital(this%orbitals(iatom), this%sphere(iatom), geo, ispin, iatom, this%norb_atom(iatom))
 
         do ib = st%block_start, st%block_end
-          call X(submesh_batch_add_matrix)(sphere(iatom), evec(ibasis:, states_block_min(st, ib):), &
-            orbitals(iatom), st%psib(ib, ik))
+          call X(submesh_batch_add_matrix)(this%sphere(iatom), evec(ibasis:, states_block_min(st, ib):), &
+            this%orbitals(iatom), st%psib(ib, ik))
         end do
 
-        if(.not. this%keep_orb) call lcao_end_orbital(orbitals(iatom))
+        if(.not. this%keep_orb) call lcao_alt_end_orbital(this%orbitals(iatom))
 
         ibasis = ibasis + norbs
         if(mpi_grp_is_root(mpi_world)) call loct_progress_bar(ibasis, this%nbasis)
@@ -567,18 +626,17 @@ subroutine X(lcao_wf2) (this, st, gr, geo, hm, start)
   end do
 
   do iatom = 1, geo%natoms
-    call submesh_end(sphere(iatom))
-    call lcao_end_orbital(orbitals(iatom))
-    call batch_end(orbitals(iatom))
+    call submesh_end(this%sphere(iatom))
+    call lcao_alt_end_orbital(this%orbitals(iatom))
+    call batch_end(this%orbitals(iatom))
   end do
 
   SAFE_DEALLOCATE_A(psii)
   SAFE_DEALLOCATE_A(hpsi)  
   SAFE_DEALLOCATE_A(hamiltonian)
   SAFE_DEALLOCATE_A(overlap)
-  SAFE_DEALLOCATE_A(sphere)
 
-  POP_SUB(X(lcao_wf2))
+  POP_SUB(X(lcao_alt_wf))
 
 contains
 
@@ -605,7 +663,7 @@ contains
 #endif
     type(profile_t), save :: prof
 
-    PUSH_SUB(X(lcao_wf2).diagonalization)
+    PUSH_SUB(X(lcao_alt_wf).diagonalization)
 
     SAFE_ALLOCATE(ifail(1:this%nbasis))
 
@@ -767,7 +825,8 @@ contains
       end do
 
       call MPI_Alltoallv(send_buffer(1, 1), send_count(1), send_disp(1), R_MPITYPE, &
-        recv_buffer(1, 1), recv_count(1), recv_disp(1), R_MPITYPE, st%dom_st_mpi_grp%comm, mpi_err)
+        recv_buffer(1, 1), recv_count(1), recv_disp(1), R_MPITYPE, &
+        st%dom_st_mpi_grp%comm, mpi_err)
 
       do node = 1, st%dom_st_mpi_grp%size
         do ii = 1, recv_count(node)
@@ -838,6 +897,13 @@ contains
         call messages_warning(1)
       end if
 
+#ifdef HAVE_MPI
+    ! the eigenvectors are not unique due to phases and degenerate subspaces, but 
+    ! they must be consistent among processors in domain parallelization
+    if(gr%mesh%parallel_in_domains) &
+      call MPI_Bcast(hamiltonian(1, 1), size(hamiltonian), R_MPITYPE, 0, gr%mesh%mpi_grp%comm, mpi_err)
+#endif
+
     end if
 
     SAFE_DEALLOCATE_A(iwork)
@@ -846,10 +912,10 @@ contains
 
     call profiling_out(prof)
 
-    POP_SUB(X(lcao_wf2).diagonalization)
+    POP_SUB(X(lcao_alt_wf).diagonalization)
   end subroutine diagonalization
 
-end subroutine X(lcao_wf2)
+end subroutine X(lcao_alt_wf)
 
 !! Local Variables:
 !! mode: f90

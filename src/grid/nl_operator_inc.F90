@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: nl_operator_inc.F90 9233 2012-08-18 23:12:14Z xavier $
+!! $Id: nl_operator_inc.F90 9446 2012-09-18 19:00:12Z dstrubbe $
 
 ! ---------------------------------------------------------
 
@@ -174,6 +174,9 @@ contains
   end subroutine select_op
 
 
+!pgi$r novector
+!This is a pragma for the PGI compiler, preventing vector optimization for this subroutine
+
   ! ---------------------------------------------------------
   subroutine operate_const_weights()
     integer :: nn, ll, ii, ist
@@ -298,34 +301,6 @@ contains
       pnri = pad(nri, bsize)
 
       call opencl_kernel_run(kernel_operate, (/eff_size, pnri/), (/eff_size, bsize/eff_size/))
-
-    case(OP_MAP_SPLIT)
-
-      call clGetDeviceInfo(opencl%device, CL_DEVICE_LOCAL_MEM_SIZE, local_mem_size, cl_status)
-      isize = int(dble(local_mem_size)/(op%stencil%size*types_get_size(TYPE_INTEGER)))
-      isize = pad_pow2(isize)/2
-
-      isize = min(isize, opencl_kernel_workgroup_size(kernel_operate)/eff_size)
-
-      if(eff_size*isize < fi%pack%size_real(1)) then
-        message(1) = "The value of StatesBlockSize is too large for this OpenCL implementation."
-        call messages_fatal(1)
-      end if
-
-      call opencl_set_kernel_arg(kernel_operate, 0, op%stencil%size)
-      call opencl_set_kernel_arg(kernel_operate, 1, op%n1)
-      call opencl_set_kernel_arg(kernel_operate, 2, op%n1 + op%n4)
-      call opencl_set_kernel_arg(kernel_operate, 3, op%buff_ri)
-      call opencl_set_kernel_arg(kernel_operate, 4, op%buff_map_split)
-      call opencl_set_kernel_arg(kernel_operate, 5, buff_weights)
-      call opencl_set_kernel_arg(kernel_operate, 6, fi%pack%buffer)
-      call opencl_set_kernel_arg(kernel_operate, 7, log2(eff_size))
-      call opencl_set_kernel_arg(kernel_operate, 8, fo%pack%buffer)
-      call opencl_set_kernel_arg(kernel_operate, 9, log2(eff_size))
-      call opencl_set_kernel_arg(kernel_operate, 10, TYPE_INTEGER, isize*op%stencil%size)
-
-!      print*, isize, eff_size*isize, isize*op%stencil%size*types_get_size(TYPE_INTEGER), local_mem_size
-      call opencl_kernel_run(kernel_operate, (/eff_size, pad(op%n4 + op%n1, isize)/), (/eff_size, isize/))
 
     case(OP_MAP)
       call opencl_set_kernel_arg(kernel_operate, 0, op%stencil%size)
