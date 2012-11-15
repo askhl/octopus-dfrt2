@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: pes_rc.F90 9540 2012-10-30 12:23:20Z joseba $
+!! $Id: pes_rc.F90 9628 2012-11-14 20:30:13Z dstrubbe $
 
 #include "global.h"
 
@@ -148,17 +148,17 @@
 
 
     ! ---------------------------------------------------------
-    subroutine PES_rc_calc(pesrc, st,mesh, ii)
+    subroutine PES_rc_calc(pesrc, st, mesh, ii)
       type(PES_rc_t), intent(inout) :: pesrc
       type(states_t), intent(in)    :: st
       integer,        intent(in)    :: ii
-      type(mesh_t),   intent(in) :: mesh
+      type(mesh_t),   intent(in)    :: mesh
 
       integer :: ip, ik, ist, idim
       logical :: contains_ip
-      CMPLX :: wf
 #if defined(HAVE_MPI)
-      integer status(MPI_STATUS_SIZE)
+      CMPLX :: wf
+      integer :: status(MPI_STATUS_SIZE)
 #endif
 
       PUSH_SUB(PES_rc_calc)
@@ -168,7 +168,7 @@
       do ip = 1, pesrc%npoints
 
 #if defined(HAVE_MPI)
-        if(mesh%mpi_grp%rank .eq. pesrc%rankmin(ip))then !needed if mesh%parallel_in_domains is true
+        if(mesh%mpi_grp%rank .eq. pesrc%rankmin(ip)) then !needed if mesh%parallel_in_domains is true
           contains_ip = .true.
         else
           contains_ip = .false.

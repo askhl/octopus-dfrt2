@@ -139,9 +139,10 @@ void XC(lda_kxc_fd)(const XC(func_type) *p, int np, const FLOAT *rho, FLOAT *kxc
 void XC(lda_x_attenuation_function)(int interaction, int order, FLOAT aa, FLOAT *f, FLOAT *df, FLOAT *d2f, FLOAT *d3f);
 
 /* direct access to the internal functions */
-void XC(lda_c_hl_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
-void XC(lda_c_pw_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
-void XC(lda_c_pz_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
+void XC(lda_c_hl_func)  (const XC(func_type) *p, XC(lda_rs_zeta) *r);
+void XC(lda_c_pw_func)  (const XC(func_type) *p, XC(lda_rs_zeta) *r);
+void XC(lda_c_pz_func)  (const XC(func_type) *p, XC(lda_rs_zeta) *r);
+void XC(lda_c_rc04_func)(const XC(func_type) *p, XC(lda_rs_zeta) *r);
 
 /* GGAs */
 void work_gga_becke_init(XC(func_type) *p);
@@ -185,6 +186,7 @@ typedef struct XC(work_mgga_x_params) {
   FLOAT d2fdrsx, d2fdrst, d2fdrsu, d2fdxt, d2fdxu, d2fdtu;
 } XC(work_mgga_x_params);
 
+void XC(mgga_series_w)(int order, int n, const FLOAT *a, FLOAT t, FLOAT *fw, FLOAT *dfwdt);
 
 /* direct access to the internal functions */
 void XC(mgga_x_gvt4_func)(int order, FLOAT x, FLOAT z, FLOAT alpha, const FLOAT *d, 

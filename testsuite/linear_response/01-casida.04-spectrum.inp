@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 01-casida.04-spectrum.inp 9569 2012-11-07 22:05:22Z dstrubbe $
+# $Id: 01-casida.04-spectrum.inp 9630 2012-11-15 02:31:55Z dstrubbe $
 
 CalculationMode = casida
 
@@ -22,17 +22,6 @@ Radius = 12.0
 Spacing = 0.36
 
 XCFunctional = lda_x + lda_c_vwn
-
-ConvRelDens = 1e-9
-
-LCAODimension = 18
-
-EigenSolver = cg_new
-EigenSolverTolerance = 1e-5
-
-EigenSolverMaxIter = 20
-
-NumberUnoccStates = 9
 
 PoissonSolver = fft
 PoissonFFTKernel = multipole_correction

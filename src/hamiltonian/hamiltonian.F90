@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian.F90 9557 2012-11-06 18:17:31Z dstrubbe $
+!! $Id: hamiltonian.F90 9631 2012-11-15 04:57:06Z dstrubbe $
 
 #include "global.h"
 
@@ -103,8 +103,8 @@ module hamiltonian_m
     zexchange_operator
 
   type hamiltonian_t
-    ! The Hamiltonian must know what are the "dimensions" of the spaces,
-    ! in order to be able to operate on the states.
+    !> The Hamiltonian must know what are the "dimensions" of the spaces,
+    !! in order to be able to operate on the states.
     type(states_dim_t)       :: d
     type(hamiltonian_base_t) :: hm_base
     type(energy_t), pointer  :: energy
@@ -114,7 +114,7 @@ module hamiltonian_m
     FLOAT, pointer :: axc(:,:,:)  !< XC vector potential divided by c
     FLOAT, pointer :: vtau(:,:)   !< Derivative of e_XC w.r.t. tau
     FLOAT, pointer :: vberry(:,:) !< Berry phase potential from external E_field
-    !cmplxscl: imaginary parts of the potentials
+    !>cmplxscl: imaginary parts of the potentials
     FLOAT, pointer :: Imvhartree(:) !< Hartree potential
     FLOAT, pointer :: Imvxc(:,:)    !< XC potential
     FLOAT, pointer :: Imvhxc(:,:)   !< XC potential + Hartree potential + Berry potential

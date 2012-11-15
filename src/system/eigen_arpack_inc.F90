@@ -26,7 +26,7 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   integer,             intent(inout) :: niter
   integer,             intent(inout) :: converged
   integer,             intent(in)    :: ik
-  FLOAT,     optional, intent(out)   :: diff(1:st%nst)
+  FLOAT,     optional, intent(out)   :: diff(:) !< (1:st%nst)
 	
   logical, allocatable :: select(:)
   R_TYPE, allocatable  :: resid(:), v(:, :),   &

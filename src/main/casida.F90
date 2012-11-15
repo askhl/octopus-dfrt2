@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: casida.F90 9615 2012-11-13 18:50:43Z dstrubbe $
+!! $Id: casida.F90 9629 2012-11-14 23:17:47Z dstrubbe $
 
 #include "global.h"
 
@@ -625,6 +625,12 @@ contains
       end do
 
       if(mpi_grp_is_root(mpi_world)) write(*, "(1x)")
+
+#if defined(HAVE_MPI)
+      if(cas%parallel_in_eh_pairs) then
+        call MPI_Barrier(cas%mpi_grp%comm, mpi_err)
+      end if
+#endif
 
       ! close restart file
       call io_close(iunit)
