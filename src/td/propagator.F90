@@ -94,6 +94,7 @@ module propagator_m
     type(exponential_t) :: te               !< How to apply the propagator \f$ e^{-i H \Delta t} \f$.
     !> Storage of the KS potential of previous iterations.
     FLOAT, pointer      :: v_old(:, :, :) => null()
+    FLOAT, pointer      :: Imv_old(:, :, :) => null()
     !> Auxiliary function to store the Magnus potentials.
     FLOAT, pointer      :: vmagnus(:, :, :) => null() 
     type(ob_terms_t)    :: ob               !< For open boundaries: leads, memory
@@ -122,6 +123,7 @@ contains
     !this%method
     !call exponential_nullify(this%te)
     this%v_old=>null()
+    this%Imv_old=>null()
     this%vmagnus=>null() 
     !call ob_terms_nullify(this%ob)
     !this%scf_propagation_steps 
@@ -149,6 +151,7 @@ contains
     end select
 
     call loct_pointer_copy(tro%v_old, tri%v_old)
+    call loct_pointer_copy(tro%Imv_old, tri%Imv_old)
     call exponential_copy(tro%te, tri%te)
     tro%scf_propagation_steps = tri%scf_propagation_steps
 
@@ -171,8 +174,11 @@ contains
     logical,             intent(in)    :: have_fields 
 
     integer :: default_propagator
-
+    logical :: cmplxscl
+    
     PUSH_SUB(propagator_init)
+    
+    cmplxscl = hm%cmplxscl
     
     call propagator_nullify(tr)
 
@@ -331,6 +337,11 @@ contains
     ! Allocate memory to store the old KS potentials
     SAFE_ALLOCATE(tr%v_old(1:gr%mesh%np, 1:st%d%nspin, 0:3))
     tr%v_old(:, :, :) = M_ZERO
+    if(cmplxscl) then
+      SAFE_ALLOCATE(tr%Imv_old(1:gr%mesh%np, 1:st%d%nspin, 0:3))
+      tr%Imv_old(:, :, :) = M_ZERO
+    end if
+
     call exponential_init(tr%te) ! initialize propagator
 
     call messages_obsolete_variable('TDSelfConsistentSteps', 'TDStepsWithSelfConsistency')
@@ -393,6 +404,7 @@ contains
     ! sanity check
     ASSERT(associated(tr%v_old)) 
     SAFE_DEALLOCATE_P(tr%v_old)         ! clean old KS potentials
+    SAFE_DEALLOCATE_P(tr%Imv_old) 
 
     select case(tr%method)
     case(PROP_MAGNUS)
@@ -427,6 +439,11 @@ contains
     forall(idim = 1:3, ispin = 1:hm%d%nspin, ip = 1:gr%mesh%np)
       tr%v_old(ip, ispin, idim) = hm%vhxc(ip, ispin)
     end forall
+    if(hm%cmplxscl) then
+      forall(idim = 1:3, ispin = 1:hm%d%nspin, ip = 1:gr%mesh%np)
+        tr%Imv_old(ip, ispin, idim) = hm%Imvhxc(ip, ispin)
+      end forall
+    end if
 
     POP_SUB(propagator_run_zero_iter)
   end subroutine propagator_run_zero_iter
@@ -454,13 +471,16 @@ contains
 
     integer :: is, iter, ik, ist
     FLOAT   :: d, d_max
-    logical :: self_consistent
+    logical :: self_consistent, cmplxscl
     CMPLX, allocatable :: zpsi1(:, :, :, :)
     FLOAT, allocatable :: dtmp(:), vaux(:, :), vold(:, :)
+    FLOAT, allocatable :: Imvaux(:, :), Imvold(:, :)
     type(profile_t), save :: prof
 
     call profiling_in(prof, "TD_PROPAGATOR")
     PUSH_SUB(propagator_dt)
+
+    cmplxscl = hm%cmplxscl
 
     if(present(ions)) then
       ASSERT(present(geo))
@@ -487,15 +507,29 @@ contains
 
     SAFE_ALLOCATE(vaux(1:gr%mesh%np, 1:st%d%nspin))
     vaux(1:gr%mesh%np, 1:st%d%nspin) = hm%vhxc(1:gr%mesh%np, 1:st%d%nspin)
+    if (cmplxscl) then
+      SAFE_ALLOCATE(Imvaux(1:gr%mesh%np, 1:st%d%nspin))
+      Imvaux(1:gr%mesh%np, 1:st%d%nspin) = hm%Imvhxc(1:gr%mesh%np, 1:st%d%nspin)
+    end if 
 
     if(.not. propagator_requires_vks(tr)) then
       SAFE_ALLOCATE(vold(1:gr%mesh%np, 1:st%d%nspin))
       call lalg_copy(gr%mesh%np, st%d%nspin, tr%v_old(:, :, 1), vold)
+      if(cmplxscl) then
+        SAFE_ALLOCATE(Imvold(1:gr%mesh%np, 1:st%d%nspin))
+        call lalg_copy(gr%mesh%np, st%d%nspin, tr%Imv_old(:, :, 1), Imvold)
+      end if
     else
       call lalg_copy(gr%mesh%np, st%d%nspin, tr%v_old(:, :, 2), tr%v_old(:, :, 3))
       call lalg_copy(gr%mesh%np, st%d%nspin, tr%v_old(:, :, 1), tr%v_old(:, :, 2))
       call lalg_copy(gr%mesh%np, st%d%nspin, hm%vhxc(:, :),     tr%v_old(:, :, 1))
       call interpolate( (/time - dt, time - M_TWO*dt, time - M_THREE*dt/), tr%v_old(:, :, 1:3), time, tr%v_old(:, :, 0))
+      if(cmplxscl) then
+        call lalg_copy(gr%mesh%np, st%d%nspin, tr%Imv_old(:, :, 2), tr%Imv_old(:, :, 3))
+        call lalg_copy(gr%mesh%np, st%d%nspin, tr%Imv_old(:, :, 1), tr%Imv_old(:, :, 2))
+        call lalg_copy(gr%mesh%np, st%d%nspin, hm%Imvhxc(:, :),     tr%Imv_old(:, :, 1))
+        call interpolate( (/time - dt, time - M_TWO*dt, time - M_THREE*dt/), tr%Imv_old(:, :, 1:3), time, tr%Imv_old(:, :, 0))
+      end if
     end if
 
     select case(tr%method)
@@ -515,7 +549,11 @@ contains
     if(self_consistent) then
 
       ! First, compare the new potential to the extrapolated one.
-      call density_calc(st, gr, st%rho)
+      if(.not. cmplxscl) then
+        call density_calc(st, gr, st%rho)
+      else
+        call density_calc(st, gr, st%zrho%Re, st%zrho%Im)
+      end if
       call v_ks_calc(ks, hm, st, geo, time = time - dt)
       SAFE_ALLOCATE(dtmp(1:gr%mesh%np))
       d_max = M_ZERO
@@ -541,6 +579,10 @@ contains
           
           tr%v_old(:, :, 0) = hm%vhxc(:, :)
           vaux(:, :) = hm%vhxc(:, :)
+          if(cmplxscl) then
+            tr%v_old(:, :, 0) = hm%vhxc(:, :)
+            vaux(:, :) = hm%vhxc(:, :)
+          end if
           select case(tr%method)
           case(PROP_ETRS);                     call td_etrs
           case(PROP_AETRS, PROP_CAETRS);       call td_aetrs
@@ -553,7 +595,11 @@ contains
             call td_qoct_tddft_propagator(hm, gr, st, tr, time, dt)
           end select
 
-          call density_calc(st, gr, st%rho)
+          if(.not. cmplxscl) then
+            call density_calc(st, gr, st%rho)
+          else
+            call density_calc(st, gr, st%zrho%Re, st%zrho%Im)
+          end if
           call v_ks_calc(ks, hm, st, geo, time = time - dt)
           SAFE_ALLOCATE(dtmp(1:gr%mesh%np))
           d_max = M_ZERO
@@ -574,6 +620,9 @@ contains
     
     SAFE_DEALLOCATE_A(vold)
     SAFE_DEALLOCATE_A(vaux)
+    
+    SAFE_DEALLOCATE_A(Imvold)
+    SAFE_DEALLOCATE_A(Imvaux)
     
     POP_SUB(propagator_dt)
     call profiling_out(prof)
@@ -983,6 +1032,9 @@ contains
       SAFE_ALLOCATE(rhs(1:np*st%d%dim))
         
       call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time - dt/M_TWO, hm%vhxc(:, :))
+      if(cmplxscl) & 
+        call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time - dt/M_TWO, hm%Imvhxc(:, :))
+    
       call hamiltonian_update(hm, gr%mesh, time = time - dt/M_TWO)
 
       ! solve (1+i\delta t/2 H_n)\psi^{predictor}_{n+1} = (1-i\delta t/2 H_n)\psi^n
