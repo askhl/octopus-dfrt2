@@ -237,7 +237,7 @@ contains
     integer :: iunit, iunit2, iunit_mesh, iunit_states, iunit_geo, iunit_rho
     integer :: err, ik, idir, ist, idim, isp, itot
     character(len=80) :: filename
-    logical :: lr_wfns_are_associated, should_write
+    logical :: lr_wfns_are_associated, should_write, cmplxscl
     type(json_object_t) :: json
     FLOAT   :: kpoint(1:MAX_DIM)
     FLOAT,  allocatable :: dpsi(:)
@@ -245,6 +245,9 @@ contains
     FLOAT, pointer :: rho(:)
 
     PUSH_SUB(restart_write)
+
+    cmplxscl = .false.
+    if(associated(st%zeigenval%Im)) cmplxscl = .true.
 
     if(.not. restart_write_files) then
       ierr = 0
@@ -329,7 +332,9 @@ contains
 
           if(mpi_grp_is_root(st%dom_st_kpt_mpi_grp)) then
             write(iunit, '(i8,a,i8,a,i8,3a)') ik, ' | ', ist, ' | ', idim, ' | "', trim(filename), '"'
-            write(iunit2, '(e21.14,a,e21.14,a)', advance='no') st%occ(ist,ik), ' | ', st%eigenval(ist, ik), ' | '
+            write(iunit2, '(e21.14,a,e21.14,a)', advance='no') st%occ(ist,ik), ' | ', st%eigenval(ist, ik)
+            if (cmplxscl) write(iunit2, '(1x,e21.14)', advance='no') st%zeigenval%Im(ist, ik)
+            write(iunit2, '(a)', advance='no')  ' | '
             do idir = 1, gr%sb%dim
               write(iunit2, '(e21.14,a)', advance='no') kpoint(idir), ' | '
             enddo
@@ -498,7 +503,7 @@ contains
 
     FLOAT                :: my_occ, flt
     logical              :: read_occ, lr_allocated, grid_changed, grid_reordered
-    logical              :: exact_, integral_occs, rdmft_
+    logical              :: exact_, integral_occs, rdmft_, cmplxscl
     FLOAT, allocatable   :: dpsi(:)
     CMPLX, allocatable   :: zpsi(:)
     character(len=256), allocatable :: restart_file(:, :, :)
@@ -507,6 +512,9 @@ contains
     PUSH_SUB(restart_read)
 
     call profiling_in(prof_read, "RESTART_READ")
+
+    cmplxscl = .false.
+    if(associated(st%zeigenval%Im)) cmplxscl = .true.
 
     exact_ = optional_default(exact, .false.)
     rdmft_ = optional_default(rdmft, .false.)
@@ -648,7 +656,12 @@ contains
       call iopar_read(st%dom_st_kpt_mpi_grp, occ_file, line, err)
       if(.not. present(lr)) then ! do not read eigenvalues or occupations when reading linear response
         ! # occupations | eigenvalue[a.u.] | k-points | k-weights | filename | ik | ist | idim
-        read(line, *) my_occ, char, st%eigenval(ist, ik), char, (flt, char, idir = 1, gr%sb%dim), st%d%kweights(ik)
+        if(.not. cmplxscl) then
+          read(line, *) my_occ, char, st%eigenval(ist, ik), char, (flt, char, idir = 1, gr%sb%dim), st%d%kweights(ik)
+        else
+          read(line, *) my_occ, char, st%eigenval(ist, ik), st%zeigenval%Im(ist, ik), &
+                        char, (flt, char, idir = 1, gr%sb%dim), st%d%kweights(ik)
+        end if
         if(read_occ) then
           st%occ(ist, ik) = my_occ
           integral_occs = integral_occs .and. &
