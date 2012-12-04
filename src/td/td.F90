@@ -125,7 +125,7 @@ contains
     type(grid_t),     pointer :: gr   ! some shortcuts
     type(states_t),   pointer :: st
     type(geometry_t), pointer :: geo
-    logical                   :: stopping, update_energy
+    logical                   :: stopping, update_energy, cmplxscl
     integer                   :: iter, ii, ierr, scsteps, ispin
     real(8)                   :: etime
     logical                   :: generate
@@ -134,6 +134,8 @@ contains
     FLOAT, allocatable :: vold(:, :)
 
     PUSH_SUB(td_run)
+
+    cmplxscl = hm%cmplxscl
 
     ! some shortcuts
     gr  => sys%gr
@@ -366,7 +368,12 @@ contains
     subroutine print_header
 
       if(td%dynamics /= CP) then
-        write(message(1), '(a7,1x,a14,a14,a10,a17)') 'Iter ', 'Time ', 'Energy ', 'SC Steps', 'Elapsed Time '
+        if(.not.cmplxscl) then
+          write(message(1), '(a7,1x,a14,a14,a10,a17)') 'Iter ', 'Time ', 'Energy ', 'SC Steps', 'Elapsed Time '
+        else
+          write(message(1), '(a7,1x,a14,a14,a14,a10,a17)') &
+                                      'Iter ', 'Time ', 'Re(Energy) ','Im(Energy) ', 'SC Steps', 'Elapsed Time '
+        end if
       else
         write(message(1), '(a7,1x,a14,a14,a14,a17)') 'Iter ', 'Time ', 'Energy ', 'CP Energy ', 'Elapsed Time '
       end if
@@ -381,10 +388,18 @@ contains
 
       ! write info
       if(td%dynamics /= CP) then
-        write(message(1), '(i7,1x,2f14.6,i10,f14.3)') iter, &
-             units_from_atomic(units_out%time, iter*td%dt), &
-             units_from_atomic(units_out%energy, hm%energy%total + geo%kinetic_energy), &
-             scsteps, loct_clock() - etime
+        if(.not. cmplxscl) then
+          write(message(1), '(i7,1x,2f14.6,i10,f14.3)') iter, &
+               units_from_atomic(units_out%time, iter*td%dt), &
+               units_from_atomic(units_out%energy, hm%energy%total + geo%kinetic_energy), &
+               scsteps, loct_clock() - etime
+        else
+          write(message(1), '(i7,1x,3f14.6,i10,f14.3)') iter, &
+               units_from_atomic(units_out%time, iter*td%dt), &
+               units_from_atomic(units_out%energy, hm%energy%total + geo%kinetic_energy), &
+               units_from_atomic(units_out%energy, hm%energy%Imtotal), &
+               scsteps, loct_clock() - etime
+        end if     
       else
         write(message(1), '(i7,1x,3f14.6,f14.3, i10)') iter, &
              units_from_atomic(units_out%time, iter*td%dt), &
@@ -601,7 +616,11 @@ contains
         call density_calc(st, gr, st%rho)
       else
         ! Normal run.
-        call density_calc(st, gr, st%rho)
+        if(.not. cmplxscl) then
+          call density_calc(st, gr, st%rho)
+        else
+          call density_calc(st, gr, st%zrho%Re, st%zrho%Im)
+        end if
         call v_ks_calc(sys%ks, hm, st, sys%geo, calc_eigenval=.true., time = td%iter*td%dt)
       end if
 
