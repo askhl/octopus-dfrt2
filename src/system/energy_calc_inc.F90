@@ -31,8 +31,11 @@ subroutine X(calculate_eigenvalues)(hm, der, st, time)
   integer :: ik, minst, maxst, ib
   type(batch_t) :: hpsib
   type(profile_t), save :: prof
+  logical :: cmplxscl
 
   PUSH_SUB(X(calculate_eigenvalues))
+  
+  cmplxscl = hm%cmplxscl
 
   if(hm%theory_level == CLASSICAL) then
     st%eigenval = M_ZERO
@@ -71,16 +74,18 @@ subroutine X(calculate_eigenvalues)(hm, der, st, time)
       end if
 
       call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hpsib, ik, time)
-      call X(mesh_batch_dotp_vector)(der%mesh, st%psib(ib, ik), hpsib, eigen(minst:maxst))
-
+      call X(mesh_batch_dotp_vector)(der%mesh, st%psib(ib, ik), hpsib, eigen(minst:maxst), cproduct = cmplxscl)        
+      
       if(hamiltonian_apply_packed(hm, der%mesh)) call batch_unpack(st%psib(ib, ik), copy = .false.)
       
       call batch_end(hpsib, copy = .false.)
 
     end do
     
-    st%eigenval(st%st_start:st%st_end, ik) = eigen(st%st_start:st%st_end)
-
+    st%eigenval(st%st_start:st%st_end, ik) = real(eigen(st%st_start:st%st_end))
+#ifdef R_TCOMPLEX    
+    if(cmplxscl) st%zeigenval%Im(st%st_start:st%st_end, ik) = aimag(eigen(st%st_start:st%st_end))
+#endif
   end do
 
   SAFE_DEALLOCATE_A(hpsi)
