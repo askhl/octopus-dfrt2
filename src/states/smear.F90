@@ -42,6 +42,7 @@ module smear_m
     smear_copy,                       &
     smear_find_fermi_energy,          &
     smear_fill_occupations,           &
+    smear_occupy_states_by_ordering,  &
     smear_calc_entropy,               &
     smear_delta_function,             &
     smear_step_function,              &
@@ -165,6 +166,30 @@ contains
 
     POP_SUB(smear_copy)
   end subroutine smear_copy
+
+  subroutine smear_occupy_states_by_ordering(this, eigenvalues, occupations, &
+    qtot, nik, nst, kweights, Imeigenvalues)
+    type(smear_t),   intent(inout) :: this
+    FLOAT,           intent(in)    :: eigenvalues(:,:)
+    FLOAT,           intent(inout) :: occupations(:,:)
+    FLOAT,           intent(in)    :: qtot, kweights(:)
+    integer,         intent(in)    :: nik, nst
+    FLOAT, optional, intent(in)    :: Imeigenvalues(:,:)    
+    
+    integer :: ii, ist, nelectrons
+
+    nelectrons = qtot
+    occupations(:, 1) = 0
+
+    do ii=1, nelectrons
+      ist = 1 + (ii - 1) / 2
+      occupations(ist, 1) = occupations(ist, 1) + 1
+      this%e_fermi = eigenvalues(ist, 1)
+    end do
+    
+    print*, 'total electrons added', sum(occupations(:, 1))
+
+  end subroutine smear_occupy_states_by_ordering
 
 
   !--------------------------------------------------

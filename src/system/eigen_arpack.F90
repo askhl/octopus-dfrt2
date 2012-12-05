@@ -57,9 +57,10 @@ use batch_m
 
     type eigen_arpack_t
       integer          :: arnoldi_vectors !< number of Arnoldi vectors
-      character(len=2) :: sort            !< which eigenvalue sorting 
-      integer          :: init_resid      !< inital residual strategy 
-      logical          :: use_parpack  
+      character(len=2) :: sort            !< which eigenvalue sorting
+      integer          :: init_resid      !< inital residual strategy
+      CMPLX            :: rotation        !< rotate spectrum by complex number before determining order
+      logical          :: use_parpack
     end type eigen_arpack_t
 
   contains
@@ -69,13 +70,22 @@ use batch_m
     type(grid_t),          intent(in)    :: gr
     integer,               intent(in)    :: nst
 
+    FLOAT   :: rotate_spectrum_angle
     logical :: use_parpack
 
     PUSH_SUB(arpack_init)
-#if defined(HAVE_ARPACK)  
+#if defined(HAVE_ARPACK)
+
+    rotate_spectrum_angle = M_ZERO
+    ! XXX yuck, this parameter is also given in Hamiltonian.  How should it be transferred from there to here
+    ! without parsing the parameter again?  For now we'll just parse it again
+    call parse_float(datasets_check('ComplexScalingRotateSpectrum'), M_ZERO, rotate_spectrum_angle)
+    call messages_print_var_value(stdout, "ComplexScalingRotateSpectrum", rotate_spectrum_angle)
+
+    this%rotation = exp(M_zI * rotate_spectrum_angle)
      
     use_parpack = .false.
-#if defined(HAVE_PARPACK)    
+#if defined(HAVE_PARPACK)
 
     use_parpack = gr%mesh%parallel_in_domains
     

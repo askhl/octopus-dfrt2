@@ -254,17 +254,20 @@ contains
   end subroutine reorder_states_by_args
 
 ! ---------------------------------------------------------
-  subroutine states_sort_complex( mesh, st, diff, cmplxscl_th)
+  subroutine states_sort_complex(mesh, st, diff, cmplxscl_th, cmplxscl_rotatespectrum)
     type(mesh_t),      intent(in)    :: mesh
     type(states_t),    intent(inout) :: st
     FLOAT,             intent(inout) :: diff(:,:) !eigenstates convergence error
     FLOAT,             intent(in)    :: cmplxscl_th
+    FLOAT,             intent(in)    :: cmplxscl_rotatespectrum
 
     integer              :: ik, ist, idim
     integer, allocatable :: index(:)
     FLOAT, allocatable   :: diff_copy(:,:)
     FLOAT, allocatable   :: buf(:)
+    FLOAT                :: imthreshold, penalizationfactor
     CMPLX, allocatable   :: cbuf(:)
+    CMPLX                :: rotatespectrumfactor
     
     PUSH_SUB(states_sort_complex)
     
@@ -273,45 +276,46 @@ contains
     SAFE_ALLOCATE(buf(st%nst))
     SAFE_ALLOCATE(diff_copy(1:size(diff,1),1:size(diff,2)))
     
+    rotatespectrumfactor = exp(M_zI * cmplxscl_rotatespectrum)
+
     diff_copy = diff
 
-
-!real(st%zeigenval%Re(:, ik))
+    !%Variable ComplexScalingPenalizationFactor
+    !%Type float
+    !%Default 2
+    !%Section ComplexScaling
+    !%Description
+    !% Eigenstates eps will be ordered by
+    !%  \Re(\epsilon) + penalizationfactor (\Im(\epsilon))^2
+    !%End
+    call parse_float(datasets_check('ComplexScalingPenalizationFactor'), M_TWO, penalizationfactor)
 
     do ik = st%d%kpt%start, st%d%kpt%end
-      cbuf(:) = st%zeigenval%Re(:, ik) + M_zI * st%zeigenval%Im(:, ik)
-      buf(:) = aimag(log(cbuf(:)))
-      !buf(:) = aimag(log(cbuf(:) * exp(-M_zI * M_HALF * M_PI))) + M_zI * M_PI * M_HALF
-!       print*, 'SORTING'
-      do ist=1, st%nst
-!          print*, ist, buf(ist), cbuf(ist)
-         if ((buf(ist).lt.(-cmplxscl_th)).and.((-M_THREE / M_FOUR * M_PI).lt.buf(ist))) then
-            cbuf(ist) = cbuf(ist) + CNST(1e3) ! We cheat and assign very high energies
-            ! to states that we think are continuum states
-            !st%zeigelval%Re(ist, ik) = st%zeigelval%Re(ist, ik) + 1e3
-         end if
-      end do
-      buf(:) = real(cbuf)
-      !buf(:) = st%zeigenval%Re(:, ik) / abs(cbuf(:))**(M_SEVEN / M_EIGHT) / cos(buf(:))**2
+      cbuf(:) = (st%zeigenval%Re(:, ik) + M_zI * st%zeigenval%Im(:, ik))! * rotatespectrumfactor
+      !buf(:) = aimag(cbuf)
+      !imthreshold = -minval(buf) * M_THREE / M_FOUR
+      !print*, 'imthreshold', imthreshold
+      !buf(:) = real(cbuf)
+      !do ist=1, st%nst
+      !  if (abs(aimag(cbuf(ist))).gt.imthreshold) then
+      !    print*, 'penalize', ist, aimag(cbuf(ist))
+      !    buf(ist) = buf(ist) + CNST(1e9)
+      !  end if
+      !end do
+      buf(:) = real(cbuf) + penalizationfactor * imag(cbuf)**2
       
-      !print*, 'ENERGIES', cbuf(1:3)
-      !print*, 'SCORES', buf(1:6)
       call sort(buf, index)
-      !print*, 'ENERGIES AFTER', cbuf(1:3)
-      !print*, 'SCORES AFTER', buf(1:6)
-      !print*, 'SORT ARGS', index(1:6)
-      !call sort(st%zeigenval%Re(:, ik), st%zeigenval%Im(:, ik), index)
-      do ist = 1 , st%nst !reorder the eigenstates error accordingly
+      cbuf(:) = cbuf(:)! / rotatespectrumfactor
+      do ist=1, st%nst !reorder the eigenstates error accordingly
         diff(ist, ik) = diff_copy(index(ist),ik)
         st%zeigenval%Re(ist, ik) = real(cbuf(index(ist)))
         st%zeigenval%Im(ist, ik) = aimag(cbuf(index(ist)))
       end do
     
-      do idim =1, st%d%dim
+      do idim=1, st%d%dim
         call reorder_states_by_args(st, mesh, index, ik)
       end do
     end do
-    
     
     SAFE_DEALLOCATE_A(index)
     SAFE_DEALLOCATE_A(diff_copy)

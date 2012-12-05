@@ -87,6 +87,8 @@ print OUT <<EOF;
 !% OEP: Exact exchange
 !%Option lda_xc_cmplx             701
 !% LDA complex scaled exchange-correlation.
+!%Option xc_half_hartree          917
+!% Half-Hartree exchange for two electrons (supports complex scaling)
 !%Option none                       0
 !% Exchange and correlation set to zero.
 !%End

@@ -1336,34 +1336,34 @@ subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec
     
     call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
 
+  else if(functl(1)%id == XC_HALF_HARTREE) then
+
     ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
     ! we keep it here for debug purposes
-    if(.false.) then
-      print*, 'half hartree exchange'
-      SAFE_ALLOCATE(zpot(1:size(vxc,1)))
-      SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
+    !print*, 'half hartree exchange'
+    SAFE_ALLOCATE(zpot(1:size(vxc,1)))
+    SAFE_ALLOCATE(zrho_tot(1:size(vxc,1)))
 
-      zrho_tot = M_z0
-      do isp = 1, ispin
-        zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
-      end do
+    zrho_tot = M_z0
+    do isp = 1, ispin
+      zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
+    end do
 
-      call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
+    call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
 
-      zpot = - zpot /CNST(2.0)
-      vxc(:,1) = real(zpot(:)) 
-      Imvxc(:,1) = aimag(zpot(:))
+    zpot = - zpot /CNST(2.0)
+    vxc(:,1) = real(zpot(:)) 
+    Imvxc(:,1) = aimag(zpot(:))
   
-      if(calc_energy) then
-        ztmp = M_HALF *zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
-        ex =  real(ztmp)
-        Imex = aimag(ztmp)
-        ec   = M_ZERO
-        Imec = M_ZERO    
-      end if
-      SAFE_DEALLOCATE_P(zrho_tot)
-      SAFE_DEALLOCATE_P(zpot)
+    if(calc_energy) then
+      ztmp = M_HALF *zmf_dotp(der%mesh, zrho_tot, zpot, dotu = .true. )
+      ex =  real(ztmp)
+      Imex = aimag(ztmp)
+      ec   = M_ZERO
+      Imec = M_ZERO    
     end if
+    SAFE_DEALLOCATE_P(zrho_tot)
+    SAFE_DEALLOCATE_P(zpot)
     
   else if(functl(1)%family == XC_FAMILY_NONE) then
 

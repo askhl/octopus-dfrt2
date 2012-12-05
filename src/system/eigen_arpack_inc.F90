@@ -18,7 +18,7 @@
 	
 	
 subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik, diff)
-  type(eigen_arpack_t),intent(in)   :: arpack
+  type(eigen_arpack_t),intent(in)    :: arpack
   type(grid_t),        intent(in)    :: gr
   type(states_t),      intent(inout) :: st
   type(hamiltonian_t), intent(in)    :: hm
@@ -29,16 +29,16 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   FLOAT,     optional, intent(out)   :: diff(:) !< (1:st%nst)
 	
   logical, allocatable :: select(:)
-  R_TYPE, allocatable  :: resid(:), v(:, :),   &
+  R_TYPE, allocatable  :: resid(:), v(:, :), &
                           workd(:), workev(:), workl(:), zd(:), &
                           psi(:,:), hpsi(:,:)
                      
   integer :: ldv, nev, iparam(11), ipntr(14), ido, n, lworkl, info, ierr, &
-             i, j, ishfts, maxitr, mode1, ist, idim, ncv 
+             i, j, ishfts, maxitr, mode1, ist, idim, ncv
   FLOAT :: tol, sigmar, sigmai, resid_sum, tmp
-  FLOAT, allocatable :: rwork(:), d(:, :) 
-  CMPLX :: sigma 
-  integer :: mpi_comm 
+  FLOAT, allocatable :: rwork(:), d(:, :)
+  CMPLX :: sigma, eps_temp
+  integer :: mpi_comm
   character(len=2) :: which
   	
 	!!!!WARNING: No support for spinors, yet. 
@@ -110,10 +110,10 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
     resid_sum = abs(sum(resid(:)**2))
     print *,"residual", resid_sum
     if(resid_sum < M_EPSILON .or. resid_sum > M_HUGE) then
-      resid(:) = R_TOTYPE(M_ONE) 
+      resid(:) = R_TOTYPE(M_ONE)
     end if
     
-  else 
+  else
     resid(:) = R_TOTYPE(M_ONE)
   end if
   
@@ -141,14 +141,14 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
       call pznaupd  ( mpi_comm, &
             ido, 'I', n, which, nev, tol, resid, ncv, &
             v, ldv, iparam, ipntr, workd, workl, lworkl, &
-            rwork,info )
+            rwork, info)
 
 #endif
     else
       call znaupd  ( & 
             ido, 'I', n, which, nev, tol, resid, ncv, &
             v, ldv, iparam, ipntr, workd, workl, lworkl, &
-            rwork,info )
+            rwork, info)
     end if
 
 #else 
@@ -156,20 +156,20 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
 #if defined(HAVE_PARPACK)
       call pdnaupd  ( mpi_comm, &
             ido, 'I', n, which, nev, tol, resid, ncv, &
-            v, ldv, iparam, ipntr, workd, workl, lworkl, & 
+            v, ldv, iparam, ipntr, workd, workl, lworkl, &
             info )  
 #endif
     else 
       call dnaupd  ( & 
             ido, 'I', n, which, nev, tol, resid, ncv, &
-            v, ldv, iparam, ipntr, workd, workl, lworkl, & 
-            info )
+            v, ldv, iparam, ipntr, workd, workl, lworkl, &
+            info)
     end if
 #endif      
       
     if( abs(ido).ne.1) exit
     
-    call av (n, workd(ipntr(1)), workd(ipntr(2))) ! calculate H * psi
+    call av (arpack, n, workd(ipntr(1)), workd(ipntr(2))) ! calculate H * psi
     
   end do
   
@@ -241,10 +241,12 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
     psi(n+1:gr%mesh%np_part,1) = R_TOTYPE(M_ZERO) 
     
     call states_set_state(st, gr%mesh, j, ik, psi)
-        
-    st%eigenval(j, ik) = d(j, 1)
-    if(associated(st%zeigenval%Im))then 
-      st%zeigenval%Im(j, ik) = d(j, 2)
+
+    eps_temp = (d(j, 1) + M_zI * d(j, 2)) / arpack%rotation
+
+    st%eigenval(j, ik) = real(eps_temp)
+    if(associated(st%zeigenval%Im)) then
+      st%zeigenval%Im(j, ik) = aimag(eps_temp)
     end if
 
     if(abs(workl(ipntr(11)+j-1))< M_EPSILON) then
@@ -289,10 +291,11 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
 contains
 
   ! ---------------------------------------------------------
-  subroutine av (n, v, w)
-    integer, intent(in) :: n
-    R_TYPE,  intent(in) :: v(n)
-    R_TYPE,  intent(out):: w(n)
+  subroutine av (arpack, n, v, w)
+    type(eigen_arpack_t), intent(in) :: arpack
+    integer,              intent(in) :: n
+    R_TYPE,               intent(in) :: v(n)
+    R_TYPE,               intent(out):: w(n)
     
     integer :: i, NP, NP_PART
     R_TYPE, allocatable :: psi(:, :), hpsi(:, :)
@@ -319,7 +322,7 @@ contains
     
     call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, 1, ik)
     
-    w(1:n) = hpsi(1:n,1)
+    w(1:n) = arpack%rotation * hpsi(1:n,1) ! XXX only works if complex
     
  !    do i = 1, NP
  !       w(i) = hpsi(i, 1)!*sqrt(gr%mesh%volume_element)

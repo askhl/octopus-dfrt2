@@ -1924,11 +1924,13 @@ contains
     PUSH_SUB(states_fermi)
 
     if(st%d%cmplxscl) then
-      call smear_find_fermi_energy(st%smear, st%zeigenval%Re, st%occ, st%qtot, &
-        st%d%nik, st%nst, st%d%kweights, st%zeigenval%Im)
+      call smear_occupy_states_by_ordering(st%smear, st%eigenval, st%occ, st%qtot, &
+        st%d%nik, st%nst, st%d%kweights)
+      !call smear_find_fermi_energy(st%smear, st%zeigenval%Re, st%occ, st%qtot, &
+      !  st%d%nik, st%nst, st%d%kweights, st%zeigenval%Im)
 
-      call smear_fill_occupations(st%smear, st%eigenval, st%occ, &
-        st%d%nik, st%nst, st%zeigenval%Im)
+      !call smear_fill_occupations(st%smear, st%eigenval, st%occ, &
+      !  st%d%nik, st%nst, st%zeigenval%Im)
     else
       
       call smear_find_fermi_energy(st%smear, st%eigenval, st%occ, st%qtot, &

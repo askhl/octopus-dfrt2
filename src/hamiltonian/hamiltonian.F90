@@ -173,6 +173,7 @@ module hamiltonian_m
     !> If we use a complex-scaled Hamiltonian by complexifying the spatial coordinate with 
     !> the transformation r -> r*exp(i*theta)  
     FLOAT                    :: cmplxscl_th !< the complex scaling angle
+    FLOAT                    :: cmplxscl_rotatespectrum !< complex rotation of eigenvalues to customize occupation assignment
     logical                  :: cmplxscl
     
   end type hamiltonian_t
@@ -233,7 +234,7 @@ contains
     nullify(hm%oct_fxc)
 
     !%Variable ComplexScalingAngle
-    !%Type float 
+    !%Type float
     !%Default 0.3
     !%Section Hamiltonian
     !%Description
@@ -250,6 +251,18 @@ contains
       call messages_print_stress(stdout)
     end if
 
+    !%Variable ComplexScalingRotateSpectrum
+    !%Type float
+    !%Default 0.0
+    !%Section Hamiltonian
+    !%Description
+    !% The order of occupation of eigenvalues is by
+    !% real part unless otherwise specified.  This parameter 
+    !% is used to rotate the whole spectrum before assigning
+    !% occupations, thus customizing the sorting scheme.
+    !% The spectrum is rotated back afterwards.
+    !%End
+    call parse_float(datasets_check('ComplexScalingRotateSpectrum'), M_ZERO, hm%cmplxscl_rotatespectrum)
 
     ! allocate potentials and density of the cores
     ! In the case of spinors, vxc_11 = hm%vxc(:, 1), vxc_22 = hm%vxc(:, 2), Re(vxc_12) = hm%vxc(:. 3);
