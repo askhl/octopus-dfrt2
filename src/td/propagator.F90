@@ -855,6 +855,8 @@ contains
 
       if(hm%theory_level.ne.INDEPENDENT_PARTICLES) then
         call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time - dt/M_TWO, hm%vhxc(:, :))
+        if(cmplxscl) &
+          call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time - dt/M_TWO, hm%Imvhxc(:, :))
       end if
 
       !move the ions to time 'time - dt/2'
@@ -1036,7 +1038,8 @@ contains
         call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time - dt/M_TWO, hm%Imvhxc(:, :))
     
       call hamiltonian_update(hm, gr%mesh, time = time - dt/M_TWO)
-
+      
+      
       ! solve (1+i\delta t/2 H_n)\psi^{predictor}_{n+1} = (1-i\delta t/2 H_n)\psi^n
       do ik = st%d%kpt%start, st%d%kpt%end
         do ist = st%st_start, st%st_end
@@ -1067,7 +1070,7 @@ contains
 
           do idim = 1, st%d%dim
             call states_set_state(st, gr%mesh, idim, ist, ik, zpsi((idim-1)*np + 1:(idim - 1)*np + np))
-          end do
+          end do          
 
           if(.not.converged) then
             write(message(1),'(a)')        'The linear solver used for the Crank-Nicholson'
