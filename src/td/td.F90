@@ -131,7 +131,7 @@ contains
     logical                   :: generate
     type(gauge_force_t)       :: gauge_force
     type(profile_t),     save :: prof
-    FLOAT, allocatable :: vold(:, :)
+    FLOAT, allocatable :: vold(:, :), Imvold(:, :)
 
     PUSH_SUB(td_run)
 
@@ -260,8 +260,14 @@ contains
       end select
 
       ! update density
-      if(.not. propagator_dens_is_propagated(td%tr)) call density_calc(st, gr, st%rho)
-
+      if(.not. propagator_dens_is_propagated(td%tr)) then 
+        if(.not. cmplxscl) then
+          call density_calc(st, gr, st%rho)
+        else
+          call density_calc(st, gr, st%zrho%Re, st%zrho%Im)
+        end if  
+      end if
+      
       generate = .false.
 
       if(ion_dynamics_ions_move(td%ions)) then
@@ -289,6 +295,12 @@ contains
           do ispin = 1, st%d%nspin
             call lalg_copy(gr%mesh%np, hm%vhxc(:, ispin), vold(:, ispin))
           end do
+          if(cmplxscl) then
+            SAFE_ALLOCATE(Imvold(1:gr%mesh%np, 1:st%d%nspin))
+            do ispin = 1, st%d%nspin
+              call lalg_copy(gr%mesh%np, hm%Imvhxc(:, ispin), Imvold(:, ispin))
+            end do
+          end if
         end if
    
 
@@ -313,6 +325,12 @@ contains
             call lalg_copy(gr%mesh%np, vold(:, ispin), hm%vhxc(:, ispin))
           end do
           SAFE_DEALLOCATE_A(vold)
+          if(cmplxscl) then
+            do ispin = 1, st%d%nspin
+              call lalg_copy(gr%mesh%np, Imvold(:, ispin), hm%Imvhxc(:, ispin))
+            end do
+            SAFE_DEALLOCATE_A(Imvold)
+          end if
         end if
       end if
 
