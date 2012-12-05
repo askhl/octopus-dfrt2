@@ -1385,10 +1385,14 @@ contains
     FLOAT,               intent(in) :: ke
 
     integer :: ii
+    logical :: cmplxscl
+    character(len=80) :: aux  
 
     if(.not.mpi_grp_is_root(mpi_world)) return ! only first node outputs
 
     PUSH_SUB(td_write_energy)
+
+    cmplxscl = hm%cmplxscl
 
     if(iter == 0) then
       call td_write_print_header_init(out_energy)
@@ -1396,36 +1400,79 @@ contains
       ! first line -> column names
       call write_iter_header_start(out_energy)
       call write_iter_header(out_energy, 'Total')
+      if(cmplxscl) call write_iter_header(out_energy, ' ')      
       call write_iter_header(out_energy, 'Kinetic (ions)')
       call write_iter_header(out_energy, 'Ion-Ion')
       call write_iter_header(out_energy, 'Electronic')
+      if(cmplxscl) call write_iter_header(out_energy, '')
       call write_iter_header(out_energy, 'Eigenvalues')
+      if(cmplxscl) call write_iter_header(out_energy, ' ')      
       call write_iter_header(out_energy, 'Hartree')
+      if(cmplxscl) call write_iter_header(out_energy, ' ')      
       call write_iter_header(out_energy, 'Int[n v_xc]')
+      if(cmplxscl) call write_iter_header(out_energy, ' ')      
       call write_iter_header(out_energy, 'Exchange')
+      if(cmplxscl) call write_iter_header(out_energy, ' ')      
       call write_iter_header(out_energy, 'Correlation')
+      if(cmplxscl) call write_iter_header(out_energy, ' ')      
       call write_iter_nl(out_energy)
 
-      ! second line: units
+      if(cmplxscl) then
+        call write_iter_string(out_energy, '#       _         ')
+        call write_iter_header(out_energy, ' ')      
+        call write_iter_header(out_energy, 'Re')
+        call write_iter_header(out_energy, 'Im')
+        call write_iter_header(out_energy, ' ')      
+        call write_iter_header(out_energy, ' ')      
+        call write_iter_header(out_energy, 'Re')
+        call write_iter_header(out_energy, 'Im')
+        call write_iter_header(out_energy, 'Re')
+        call write_iter_header(out_energy, 'Im')
+        call write_iter_header(out_energy, 'Re')
+        call write_iter_header(out_energy, 'Im')
+        call write_iter_header(out_energy, 'Re')
+        call write_iter_header(out_energy, 'Im')
+        call write_iter_header(out_energy, 'Re')
+        call write_iter_header(out_energy, 'Im')
+        call write_iter_header(out_energy, 'Re')
+        call write_iter_header(out_energy, 'Im')
+        call write_iter_nl(out_energy)
+      end if
+
+      ! units
       call write_iter_string(out_energy, '#[Iter n.]')
       call write_iter_header(out_energy, '[' // trim(units_abbrev(units_out%time)) // ']')
-      do ii = 1, 7
+      do ii = 1, 9
         call write_iter_header(out_energy, '[' // trim(units_abbrev(units_out%energy)) // ']')
       end do
+      if(cmplxscl) then
+        do ii = 1, 7
+          call write_iter_header(out_energy, '[' // trim(units_abbrev(units_out%energy)) // ']')
+        end do        
+      end if
       call write_iter_nl(out_energy)
+      
+      
       call td_write_print_header_end(out_energy)
     end if
 
     call write_iter_start(out_energy)
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%total+ke), 1)
+    if(cmplxscl) call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%Imtotal), 1)
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, ke), 1)
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%ep%eii), 1)
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%total-hm%ep%eii), 1)
+    if(cmplxscl) call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%Imtotal), 1)
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%eigenvalues), 1)
+    if(cmplxscl) call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%Imeigenvalues), 1)
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%hartree), 1)
+    if(cmplxscl) call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%Imhartree), 1)    
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%intnvxc), 1)
+    if(cmplxscl) call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%Imintnvxc), 1)
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%exchange), 1)
+    if(cmplxscl) call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%Imexchange), 1)
     call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%correlation), 1)
+    if(cmplxscl) call write_iter_double(out_energy, units_from_atomic(units_out%energy, hm%energy%Imcorrelation), 1)
     call write_iter_nl(out_energy)
 
     POP_SUB(td_write_energy)
