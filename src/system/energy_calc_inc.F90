@@ -124,8 +124,11 @@ R_TYPE function X(energy_calc_electronic)(hm, der, st, terms, cproduct) result(e
       call batch_copy(st%psib(ib, ik), hpsib, reference = .false.)
 
       call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hpsib, ik, terms = terms)
-      call X(mesh_batch_dotp_vector)(der%mesh, st%psib(ib, ik), hpsib, tt(minst:maxst, ik), cproduct = cproduct_)
-
+      if(st%have_left_states) then
+        call X(mesh_batch_dotp_vector)(der%mesh, st%psibL(ib, ik), hpsib, tt(minst:maxst, ik), cproduct = cproduct_)
+      else
+        call X(mesh_batch_dotp_vector)(der%mesh, st%psib(ib, ik), hpsib, tt(minst:maxst, ik), cproduct = cproduct_)
+      end if
       call batch_end(hpsib, copy = .false.)
 
     end do

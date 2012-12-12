@@ -731,6 +731,7 @@ contains
 
       if(tr%method == PROP_CAETRS) then
         call lalg_copy(gr%mesh%np, st%d%nspin, vold, hm%vhxc)
+        if(cmplxscl) call lalg_copy(gr%mesh%np, st%d%nspin, Imvold, hm%Imvhxc)
         call hamiltonian_update(hm, gr%mesh, time = time - dt)
         call v_ks_calc_start(ks, hm, st, geo, time = time - dt, calc_energy = .false.)
       end if

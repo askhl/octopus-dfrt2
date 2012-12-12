@@ -165,6 +165,8 @@ module states_m
     type(cmplx_array2_t)     :: zeigenval    !< cmplxscl: the complexified eigenvalues 
     FLOAT,           pointer :: Imrho_core(:)  
     FLOAT,           pointer :: Imfrozen_rho(:, :)   
+    type(batch_t),   pointer :: psibL(:, :)  !< Left wave-functions blocks
+    logical                  :: have_left_states
 
 
     type(batch_t), pointer   :: psib(:, :)            !< A set of wave-functions blocks
@@ -272,7 +274,7 @@ contains
     nullify(st%zeigenval%Re, st%zeigenval%Im) 
     nullify(st%zrho%Re, st%zrho%Im)
     nullify(st%Imrho_core, st%Imfrozen_rho)
-
+    nullify(st%psibL)
 
     nullify(st%dpsi, st%zpsi)
     nullify(st%psib, st%iblock, st%block_is_local)
@@ -612,7 +614,8 @@ contains
     !%End
     call parse_logical(datasets_check('ComplexScaling'), .false., st%d%cmplxscl)
 
-
+    st%have_left_states = .false.
+    
     if (st%d%cmplxscl) then
       call messages_experimental('Complex Scaling')
       call messages_print_var_value(stdout, "ComplexScaling", st%d%cmplxscl)
@@ -1181,11 +1184,12 @@ contains
 
   ! ---------------------------------------------------------
   !> Allocates the KS wavefunctions defined within a states_t structure.
-  subroutine states_allocate_wfns(st, mesh, wfs_type, alloc_zphi)
+  subroutine states_allocate_wfns(st, mesh, wfs_type, alloc_zphi, alloc_Left)
     type(states_t),         intent(inout)   :: st
     type(mesh_t),           intent(in)      :: mesh
     type(type_t), optional, intent(in)      :: wfs_type
     logical,      optional, intent(in)      :: alloc_zphi ! only needed for gs transport
+    logical,      optional, intent(in)      :: alloc_Left ! allocate an addtional set of wfs to store left eigenstates
 
     integer :: ip, ik, ist, idim, st1, st2, k1, k2, np_part
     logical :: force
@@ -1201,6 +1205,12 @@ contains
       ASSERT(wfs_type == TYPE_FLOAT .or. wfs_type == TYPE_CMPLX)
       st%priv%wfs_type = wfs_type
     end if
+
+    st%have_left_states = optional_default(alloc_Left, .false.) .and. st%d%cmplxscl
+    if(st%have_left_states) then
+      ASSERT(st%priv%wfs_type == TYPE_CMPLX) 
+    end if
+    print *,"HAVE LEFT STATES?? = ",st%have_left_states
 
     !%Variable ForceComplex
     !%Type logical
@@ -1232,9 +1242,11 @@ contains
       else        
         SAFE_ALLOCATE(st%psi%zR(1:np_part, 1:st%d%dim, st1:st2, k1:k2))  
         st%zpsi => st%psi%zR
-        if(st%d%cmplxscl) then
+        if(st%d%cmplxscl .and. st%have_left_states) then
+          print *, "ALLOCATE LEFT"
           SAFE_ALLOCATE(st%psi%zL(1:np_part, 1:st%d%dim, st1:st2, k1:k2))  
         else
+          print *, "POINT LEFT"          
           st%psi%zL => st%psi%zR  
         end if          
       end if
@@ -1344,6 +1356,9 @@ contains
     end do
 
     SAFE_ALLOCATE(st%psib(1:st%nblocks, 1:st%d%nik))
+    if(st%have_left_states) then
+      SAFE_ALLOCATE(st%psibL(1:st%nblocks, 1:st%d%nik))
+    end if
     SAFE_ALLOCATE(st%block_is_local(1:st%nblocks, 1:st%d%nik))
     st%block_is_local = .false.
     st%block_start  = -1
@@ -1385,6 +1400,18 @@ contains
     st%block_size(1:st%nblocks) = bend(1:st%nblocks) - bstart(1:st%nblocks) + 1
 
     st%block_initialized = .true.
+    
+    
+    !cmplxscl
+    if(st%have_left_states) then
+      do ib = 1, st%nblocks
+        do iqn = st%d%kpt%start, st%d%kpt%end
+          call batch_copy(st%psib(ib,iqn), st%psibL(ib,iqn), reference = .false.)
+        end do
+      end do
+    else
+      st%psibL => st%psib
+    end if
 
 !!$!!!!DEBUG
 !!$    ! some debug output that I will keep here for the moment
@@ -1424,11 +1451,19 @@ contains
     if (st%block_initialized) then
        do ib = 1, st%nblocks
           do iq = st%d%kpt%start, st%d%kpt%end
-            if(st%block_is_local(ib, iq)) call batch_end(st%psib(ib, iq))
+            if(st%block_is_local(ib, iq)) then
+              call batch_end(st%psib(ib, iq))
+              if(st%have_left_states) call batch_end(st%psibL(ib, iq)) !cmplxscl
+            end if
           end do
        end do
 
        SAFE_DEALLOCATE_P(st%psib)
+       if(st%have_left_states) then !cmplxscl
+         SAFE_DEALLOCATE_P(st%psibL)
+       else  
+         nullify(st%psibL)
+       end if      
        SAFE_DEALLOCATE_P(st%iblock)
        SAFE_DEALLOCATE_P(st%block_range)
        SAFE_DEALLOCATE_P(st%block_size)
@@ -1664,6 +1699,7 @@ contains
       call loct_pointer_copy(stout%Imrho_core, stin%Imrho_core)
       call loct_pointer_copy(stout%Imfrozen_rho, stin%Imfrozen_rho)
     end if
+    stout%have_left_states = stin%have_left_states
 
     
     ! the call to init_block is done at the end of this subroutine
@@ -1806,8 +1842,11 @@ contains
     CMPLX   :: alpha, beta
     FLOAT, allocatable :: dpsi(:,  :)
     CMPLX, allocatable :: zpsi(:,  :), zpsi2(:)
+    logical            :: cmplxscl
 
     PUSH_SUB(states_generate_random)
+
+    cmplxscl = st%d%cmplxscl
 
     ist_start = st%st_start
     if(present(ist_start_)) ist_start = max(ist_start, ist_start_)
@@ -1842,8 +1881,13 @@ contains
           else
             call zmf_random(mesh, zpsi(:, 1), seed)
             call states_set_state(st, mesh, ist,  ik, zpsi)
+            if(st%have_left_states) then
+              call zmf_random(mesh, zpsi(:, 1), seed)
+              call states_set_state(st, mesh, ist,  ik, zpsi, left = .true.)
+            end if
           end if
           st%eigenval(ist, ik) = M_ZERO
+          if(cmplxscl) st%zeigenval%Im(ist, ik) = M_ZERO
         end do
       end do
 
@@ -2535,6 +2579,7 @@ contains
         end if
         
         call batch_pack(st%psib(ib, iqn), copy)
+        if(st%have_left_states)  call batch_pack(st%psibL(ib, iqn), copy)
       end do
     end do qnloop
 
@@ -2558,6 +2603,7 @@ contains
     do iqn = st%d%kpt%start, st%d%kpt%end
       do ib = st%block_start, st%block_end
         if(batch_is_packed(st%psib(ib, iqn))) call batch_unpack(st%psib(ib, iqn), copy)
+        if(batch_is_packed(st%psib(ib, iqn)) .and. st%have_left_states) call batch_unpack(st%psibL(ib, iqn), copy)        
       end do
     end do
 
@@ -2578,6 +2624,7 @@ contains
       do iqn = st%d%kpt%start, st%d%kpt%end
         do ib = st%block_start, st%block_end
           call batch_sync(st%psib(ib, iqn))
+          if(st%have_left_states) call batch_sync(st%psibL(ib, iqn))
         end do
       end do
 
@@ -2599,6 +2646,10 @@ contains
     write(message(2), '(a,i8)')    'Number of states         = ', st%nst
     write(message(3), '(a,i8)')    'States block-size        = ', st%d%block_size
     call messages_info(3)
+    if(st%have_left_states) then
+      write(message(1), '(a)')    'States have left states'
+      call messages_info(1)
+    end if
 
     call messages_print_stress(stdout)
 
@@ -2625,6 +2676,7 @@ contains
     do iqn = st%d%kpt%start, st%d%kpt%end
       do ib = st%block_start, st%block_end
         call batch_set_zero(st%psib(ib, iqn))
+        if(st%have_left_states) call batch_set_zero(st%psibL(ib, iqn)) 
       end do
     end do
     
