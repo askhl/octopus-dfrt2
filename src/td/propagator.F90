@@ -877,6 +877,12 @@ contains
 
       do ik = st%d%kpt%start, st%d%kpt%end
         do ib = st%block_start, st%block_end
+          if(cmplxscl) then ! Propagate the left state
+            ! We use:
+            ! (L(t)| = (L|U(-t) = (L|e^{i H(t) t} = e^{i H(t) t} |R)
+            st%psibL(ib, ik) = st%psib(ib, ik)
+            call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, -dt/mu, time - dt/M_TWO)            
+          end if
           call exponential_apply_batch(tr%te, gr%der, hm, st%psib(ib, ik), ik, dt/mu, time - dt/M_TWO)
         end do
       end do
