@@ -716,16 +716,17 @@ end subroutine X(mf_put_radial_spline)
 !! And so on.
 !! -----------------------------------------------------------------------------
 subroutine X(mf_multipoles) (mesh, ff, lmax, multipole)
-  type(mesh_t),   intent(in)  :: mesh
-  R_TYPE,         intent(in)  :: ff(:)
-  integer,        intent(in)  :: lmax
-  R_TYPE,         intent(out) :: multipole(:) !< ((lmax + 1)**2)
+  type(mesh_t),      intent(in)  :: mesh
+  R_TYPE,            intent(in)  :: ff(:)
+  integer,           intent(in)  :: lmax
+  R_TYPE,            intent(out) :: multipole(:) !< ((lmax + 1)**2)
 
   integer :: idim, ip, ll, lm, add_lm
   FLOAT   :: xx(MAX_DIM), rr, ylm
   R_TYPE, allocatable :: ff2(:)
 
   PUSH_SUB(X(mf_multipoles))
+
 
   ASSERT(ubound(ff, dim = 1) == mesh%np .or. ubound(ff, dim = 1) == mesh%np_part)
 

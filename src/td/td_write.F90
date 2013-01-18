@@ -792,8 +792,13 @@ contains
     integer :: is, ll, mm, add_lm
     character(len=120) :: aux
     FLOAT, allocatable :: ionic_dipole(:), multipole(:,:)
+    CMPLX, allocatable :: zmultipole(:,:)
+    logical :: cmplxscl
 
     PUSH_SUB(td_write_multipole)
+
+    cmplxscl = .false.
+    if(st%d%cmplxscl) cmplxscl = .true.
 
     if(mpi_grp_is_root(mpi_world).and.iter == 0) then
       call td_write_print_header_init(out_multip)
@@ -854,9 +859,18 @@ contains
     SAFE_ALLOCATE(multipole(1:(lmax + 1)**2, 1:st%d%nspin))
     ionic_dipole(:) = M_ZERO
     multipole   (:,:) = M_ZERO
+    if(cmplxscl) then
+      SAFE_ALLOCATE(zmultipole(1:(lmax + 1)**2, 1:st%d%nspin))
+      zmultipole(:,:) = M_z0
+    end if
 
     do is = 1, st%d%nspin
-      call dmf_multipoles(gr%mesh, st%rho(:,is), lmax, multipole(:,is))
+      if(.not. cmplxscl) then
+        call dmf_multipoles(gr%mesh, st%rho(:,is), lmax, multipole(:,is))
+      else
+        call zmf_multipoles(gr%mesh, st%zrho%Re(:,is) + M_zI * st%zrho%Im(:,is), lmax, zmultipole(:,is))
+        multipole (:,is) = real(zmultipole(:,is)) ! it should be real anyways 
+      end if 
     end do
     call geometry_dipole(geo, ionic_dipole)
     do is = 1, st%d%nspin
@@ -879,6 +893,7 @@ contains
 
     SAFE_DEALLOCATE_A(ionic_dipole)
     SAFE_DEALLOCATE_A(multipole)
+    SAFE_DEALLOCATE_A(zmultipole)
     POP_SUB(td_write_multipole)
   end subroutine td_write_multipole
 

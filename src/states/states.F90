@@ -1242,13 +1242,15 @@ contains
       else        
         SAFE_ALLOCATE(st%psi%zR(1:np_part, 1:st%d%dim, st1:st2, k1:k2))  
         st%zpsi => st%psi%zR
-        if(st%d%cmplxscl .and. st%have_left_states) then
-          print *, "ALLOCATE LEFT"
-          SAFE_ALLOCATE(st%psi%zL(1:np_part, 1:st%d%dim, st1:st2, k1:k2))  
-        else
-          print *, "POINT LEFT"          
-          st%psi%zL => st%psi%zR  
-        end if          
+        if(st%d%cmplxscl) then 
+          if (st%have_left_states) then
+            print *, "ALLOCATE LEFT"
+            SAFE_ALLOCATE(st%psi%zL(1:np_part, 1:st%d%dim, st1:st2, k1:k2))  
+          else
+            print *, "POINT LEFT"          
+            st%psi%zL => st%psi%zR  
+          end if          
+        end if
       end if
       
       if(optional_default(alloc_zphi, .false.)) then
@@ -1387,7 +1389,19 @@ contains
               call batch_init(st%psib(ib, iqn), st%d%dim, bend(ib) - bstart(ib) + 1)
               call zbatch_new(st%psib(ib, iqn), bstart(ib), bend(ib), mesh%np_part)
             end if
+            if(st%have_left_states) then !cmplxscl
+              if(associated(st%psi%zL)) then
+                call batch_init(st%psibL(ib, iqn), st%d%dim, bstart(ib), bend(ib), st%psi%zL(:, :, bstart(ib):bend(ib), iqn))
+              else
+                ASSERT(present(mesh))
+                call batch_init(st%psibL(ib, iqn), st%d%dim, bend(ib) - bstart(ib) + 1)
+                call zbatch_new(st%psibL(ib, iqn), bstart(ib), bend(ib), mesh%np_part)
+              end if 
+            else
+              st%psibL => st%psib                           
+            end if            
           end if
+          
         end do
       end if
     end do
@@ -1402,16 +1416,16 @@ contains
     st%block_initialized = .true.
     
     
-    !cmplxscl
-    if(st%have_left_states) then
-      do ib = 1, st%nblocks
-        do iqn = st%d%kpt%start, st%d%kpt%end
-          call batch_copy(st%psib(ib,iqn), st%psibL(ib,iqn), reference = .false.)
-        end do
-      end do
-    else
-      st%psibL => st%psib
-    end if
+!     !cmplxscl
+!     if(st%have_left_states) then
+!       do ib = 1, st%nblocks
+!         do iqn = st%d%kpt%start, st%d%kpt%end
+!           call batch_copy(st%psib(ib,iqn), st%psibL(ib,iqn), reference = .false.)
+!         end do
+!       end do
+!     else
+!       st%psibL => st%psib
+!     end if
 
 !!$!!!!DEBUG
 !!$    ! some debug output that I will keep here for the moment
@@ -1459,6 +1473,7 @@ contains
        end do
 
        SAFE_DEALLOCATE_P(st%psib)
+
        if(st%have_left_states) then !cmplxscl
          SAFE_DEALLOCATE_P(st%psibL)
        else  

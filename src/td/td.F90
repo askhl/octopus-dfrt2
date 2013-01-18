@@ -225,7 +225,11 @@ contains
 
       if(iter > 1) then
         if( ((iter-1)*td%dt <= hm%ep%kick%time) .and. (iter*td%dt > hm%ep%kick%time) ) then
-          call kick_apply(gr, st, td%ions, geo, hm%ep%kick)
+          if(.not. cmplxscl) then
+            call kick_apply(gr, st, td%ions, geo, hm%ep%kick)
+          else
+            call kick_apply(gr, st, td%ions, geo, hm%ep%kick, hm%cmplxscl_th)
+          end if
           call td_write_kick(gr, hm, sys%outp, geo, iter)
         end if
       end if
@@ -568,7 +572,8 @@ contains
               call states_set_state(st, gr%mesh, ist,  ik, zpsi, left = .true.)
             end do
           end do    
-          SAFE_DEALLOCATE_A(zpsi)          
+          SAFE_DEALLOCATE_A(zpsi)       
+          print *, "CIRICIRICIAO '"   
         end if
         
 
@@ -697,7 +702,11 @@ contains
       ! I apply the delta electric field *after* td_write_iter, otherwise the
       ! dipole matrix elements in write_proj are wrong
       if(hm%ep%kick%time .eq. M_ZERO) then
-        call kick_apply(gr, st, td%ions, geo, hm%ep%kick)
+        if(.not. cmplxscl) then
+          call kick_apply(gr, st, td%ions, geo, hm%ep%kick)
+        else
+          call kick_apply(gr, st, td%ions, geo, hm%ep%kick, hm%cmplxscl_th)
+        end if
         call td_write_kick(gr, hm, sys%outp, geo, 0)
       end if
       call propagator_run_zero_iter(hm, gr, td%tr)
