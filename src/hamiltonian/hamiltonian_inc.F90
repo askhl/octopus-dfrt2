@@ -126,8 +126,6 @@ subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, terms)
     call profiling_in(prof_kinetic_finish, "KINETIC_FINISH")
     call X(derivatives_batch_finish)(handle)
     call profiling_out(prof_kinetic_finish)
-!     print *, "in H hpsib",hpsib%states(1)%zpsi(:,1)        
-!     print *, "in H psib",epsib%states(1)%zpsi(:,1)        
 
     if(hm%cmplxscl) then !cmplxscl
     !complex scale the laplacian 
