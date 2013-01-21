@@ -757,7 +757,13 @@ contains
           else
             if(.not. present(lr)) then
               call states_set_state(st, gr%mesh, idim, ist, ik, zpsi)
-              if(read_left_) call states_set_state(st, gr%mesh, idim, ist, ik, zpsiL, left = .true.)
+              if(st%have_left_states) then
+                if(read_left_) then
+                  call states_set_state(st, gr%mesh, idim, ist, ik, zpsiL, left = .true.)
+                else
+                  call states_set_state(st, gr%mesh, idim, ist, ik, zpsi, left = .true.)
+                end if
+              end if  
             else
               call lalg_copy(gr%mesh%np, zpsi, lr%zdl_psi(:, idim, ist, ik))
             end if
