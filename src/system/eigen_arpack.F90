@@ -75,6 +75,8 @@ use batch_m
 #if defined(HAVE_ARPACK)  
      
     use_parpack = .false.
+    this%use_parpack = use_parpack
+
 #if defined(HAVE_PARPACK)    
 
     use_parpack = gr%mesh%parallel_in_domains
