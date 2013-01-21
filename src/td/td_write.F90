@@ -1407,6 +1407,7 @@ contains
 
     PUSH_SUB(td_write_energy)
 
+    cmplxscl = .false.
     cmplxscl = hm%cmplxscl
 
     if(iter == 0) then
