@@ -70,22 +70,22 @@ subroutine X(calculate_eigenvalues)(hm, der, st, time)
 
       if(hamiltonian_apply_packed(hm, der%mesh)) then
         call batch_pack(st%psib(ib, ik))
+        if(st%have_left_states) call batch_pack(st%psibL(ib, ik))
         call batch_pack(hpsib, copy = .false.)
       end if
 
+      
       call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hpsib, ik, time)
       if(st%have_left_states) then
         call X(mesh_batch_dotp_vector)(der%mesh, st%psibL(ib, ik), hpsib, eigen(minst:maxst), cproduct = cmplxscl)
-        print *,"stczz", eigen(:)
-        print *, "sum", sum(st%psibL(ib, ik)%states(1)%zpsi(:,1)*hpsib%states(1)%zpsi(:,1))
-        print *, "psibL",st%psibL(ib, ik)%states(1)%zpsi(:,1)         
-        print *, "psib",st%psib(ib, ik)%states(1)%zpsi(:,1)         
-        print *, "hpsib",hpsib%states(1)%zpsi(:,1)         
       else
         call X(mesh_batch_dotp_vector)(der%mesh, st%psib(ib, ik), hpsib, eigen(minst:maxst), cproduct = cmplxscl)        
       end if
-      if(hamiltonian_apply_packed(hm, der%mesh)) call batch_unpack(st%psib(ib, ik), copy = .false.)
-      
+      if(hamiltonian_apply_packed(hm, der%mesh)) then
+        call batch_unpack(st%psib(ib, ik), copy = .false.)
+        if(st%have_left_states) call batch_unpack(st%psib(ib, ik), copy = .false.)
+      end if
+
       call batch_end(hpsib, copy = .false.)
 
     end do
