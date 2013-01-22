@@ -50,12 +50,8 @@ subroutine X(states_get_state1)(st, mesh, idim, ist, iqn, psi, left)
   PUSH_SUB(X(states_get_state1))
 
   if (optional_default(left, .false.)) then
-#ifdef R_COMPLEX    
     ASSERT(st%have_left_states)
     call batch_get_state(st%psibL(st%iblock(ist, iqn), iqn), (/ist, idim/), mesh%np, psi)
-#else
-    call batch_get_state(st%psib(st%iblock(ist, iqn), iqn), (/ist, idim/), mesh%np, psi)
-#endif    
   else
     call batch_get_state(st%psib(st%iblock(ist, iqn), iqn), (/ist, idim/), mesh%np, psi)
   end if
@@ -99,12 +95,8 @@ subroutine X(states_set_state1)(st, mesh, idim, ist, iqn, psi, left)
   PUSH_SUB(X(states_set_state1))
   
   if (optional_default(left, .false.)) then
-#ifdef R_COMPLEX    
     ASSERT(st%have_left_states)
     call batch_set_state(st%psibL(st%iblock(ist, iqn), iqn), (/ist, idim/), mesh%np, psi)
-#else
-    call batch_set_state(st%psib(st%iblock(ist, iqn), iqn), (/ist, idim/), mesh%np, psi)
-#endif    
   else
     call batch_set_state(st%psib(st%iblock(ist, iqn), iqn), (/ist, idim/), mesh%np, psi)
   end if
