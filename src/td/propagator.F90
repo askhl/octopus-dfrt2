@@ -880,17 +880,12 @@ contains
           if(cmplxscl) then ! Propagate the left state
             ! We use:
             ! (L(t+dt)| = (L|U(t-dt) = (L|e^{i H(t) (-dt)} = e^{i H(t) (-dt)} |R)
-!              do ii = 1, st%psibL(ib, ik)%nst
-!                st%psibL(ib, ik)%states(ii)%zpsi(:,:) = st%psib(ib, ik)%states(ii)%zpsi(:,:)
-!              end do
-!               call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, dt/mu, time - dt/M_TWO)            
-!               call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, -dt/mu, time - dt/M_TWO)            
+            do ii = 1, st%psibL(ib, ik)%nst
+             st%psibL(ib, ik)%states(ii)%zpsi(:,:) = st%psib(ib, ik)%states(ii)%zpsi(:,:)
+            end do
+            call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, dt/mu, time - dt/M_TWO)            
+!             call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, -dt/mu, time - dt/M_TWO)            
              
-!              do ii = 1, st%psib(ib, ik)%nst
-! !                st%psibL(ib, ik)%states(ii)%zpsi(:,:) = conjg(st%psibL(ib, ik)%states(ii)%zpsi(:,:))
-!                st%psibL(ib, ik)%states(ii)%zpsi(:,:) = M_z0
-! !                st%psibL(ib, ik)%states_linear(ii)%zpsi(:) = M_z0               
-!              end do
           end if
           call exponential_apply_batch(tr%te, gr%der, hm, st%psib(ib, ik), ik, dt/mu, time - dt/M_TWO)
 
