@@ -573,7 +573,6 @@ contains
             end do
           end do    
           SAFE_DEALLOCATE_A(zpsi)       
-          print *, "CIRICIRICIAO '"   
         end if
         
 
