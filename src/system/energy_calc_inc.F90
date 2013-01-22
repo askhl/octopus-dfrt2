@@ -83,7 +83,7 @@ subroutine X(calculate_eigenvalues)(hm, der, st, time)
       end if
       if(hamiltonian_apply_packed(hm, der%mesh)) then
         call batch_unpack(st%psib(ib, ik), copy = .false.)
-        if(st%have_left_states) call batch_unpack(st%psib(ib, ik), copy = .false.)
+        if(st%have_left_states) call batch_unpack(st%psibL(ib, ik), copy = .false.)
       end if
 
       call batch_end(hpsib, copy = .false.)
