@@ -848,7 +848,7 @@ contains
     ! ---------------------------------------------------------
     !> Exponential midpoint
     subroutine exponential_midpoint
-      integer :: ib, ik, ii, ip
+      integer :: ib, ik, ii
       type(ion_state_t) :: ions_state
       FLOAT :: vecpot(1:MAX_DIM), vecpot_vel(1:MAX_DIM)
 
@@ -877,20 +877,35 @@ contains
 
       do ik = st%d%kpt%start, st%d%kpt%end
         do ib = st%block_start, st%block_end
-          if(cmplxscl) then ! Propagate the left state
-            ! We use:
-            ! (L(t+dt)| = (L|U(t-dt) = (L|e^{i H(t) (-dt)} = e^{i H(t) (-dt)} |R)
-            do ii = 1, st%psibL(ib, ik)%nst
-             st%psibL(ib, ik)%states(ii)%zpsi(:,:) = st%psib(ib, ik)%states(ii)%zpsi(:,:)
-            end do
-            call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, dt/mu, time - dt/M_TWO)            
-!             call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, -dt/mu, time - dt/M_TWO)            
-             
-          end if
+
           call exponential_apply_batch(tr%te, gr%der, hm, st%psib(ib, ik), ik, dt/mu, time - dt/M_TWO)
 
         end do
       end do
+
+      if(cmplxscl) then ! Propagate the left state
+        ! FIXME: check this interpolation!! 
+        ! probably need some rethinking 
+        
+        if(hm%theory_level.ne.INDEPENDENT_PARTICLES) then
+          call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time + dt/M_TWO, hm%vhxc(:, :))
+          if(cmplxscl) &
+            call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time + dt/M_TWO, hm%Imvhxc(:, :))
+        end if
+        
+        ! We use:
+        ! (L(t+dt)| = (L|U(t-dt) = (L|e^{i H_\theta(t-dt/2) (dt)}
+
+        call hamiltonian_update(hm, gr%mesh, time = time + M_HALF*dt)
+
+        do ik = st%d%kpt%start, st%d%kpt%end
+          do ib = st%block_start, st%block_end
+            call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, -dt/mu, time + dt/M_TWO)            
+
+          end do
+        end do
+      end if
+
 
       !restore to time 'time - dt'
       if(present(ions)) call ion_dynamics_restore_state(ions, geo, ions_state)
