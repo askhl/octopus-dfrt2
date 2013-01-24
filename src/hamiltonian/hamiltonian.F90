@@ -26,6 +26,7 @@ module hamiltonian_m
 #ifdef HAVE_OPENCL
   use cl
 #endif  
+  use cmplxscl_m
   use datasets_m
   use derivatives_m
   use energy_m
@@ -766,7 +767,7 @@ contains
     PUSH_SUB(hamiltonian_hermitian)
     hamiltonian_hermitian = .not.((hm%ab .eq. IMAGINARY_ABSORBING) .or. &
                                   hamiltonian_oct_exchange(hm)     .or. &
-                                  hm%d%cmplxscl)
+                                  hm%cmplxscl)
 
     POP_SUB(hamiltonian_hermitian)
   end function hamiltonian_hermitian

@@ -565,14 +565,14 @@ contains
 !           ! In the future we may consider to extend the ground state scf
 !           ! to deal with the general case (this would be needed, for instance, to include
 !           ! magnetic fields) 
-!           SAFE_ALLOCATE(zpsi(1:gr%mesh%np, 1:st%d%dim))
+!           cSAFE_ALLOCATE(zpsi(1:gr%mesh%np, 1:st%d%dim))
 !           do ik = st%d%kpt%start, st%d%kpt%end
 !             do ist = st%st_start, st%st_end
 !               call states_get_state(st, gr%mesh, ist,  ik, zpsi)
 !               call states_set_state(st, gr%mesh, ist,  ik, zpsi, left = .true.)
 !             end do
 !           end do    
-!           SAFE_DEALLOCATE_A(zpsi)       
+!           cSAFE_DEALLOCATE_A(zpsi)       
 !         end if
         
 
