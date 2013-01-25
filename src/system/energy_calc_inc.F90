@@ -35,7 +35,7 @@ subroutine X(calculate_eigenvalues)(hm, der, st, time)
 
   PUSH_SUB(X(calculate_eigenvalues))
   
-  cmplxscl = hm%cmplxscl
+  cmplxscl = hm%cmplxscl%space
 
   if(hm%theory_level == CLASSICAL) then
     st%eigenval = M_ZERO
@@ -142,7 +142,7 @@ R_TYPE function X(energy_calc_electronic)(hm, der, st, terms, cproduct) result(e
     end do
   end do
 
-  if(hm%cmplxscl) then
+  if(hm%cmplxscl%space) then
 #ifdef R_TCOMPLEX
     energy = zstates_eigenvalues_sum(st, tt)
 #else

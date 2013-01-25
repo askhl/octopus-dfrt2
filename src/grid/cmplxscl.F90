@@ -34,6 +34,7 @@ module cmplxscl_m
   public :: &
        cmplxscl_t, &
        cmplxscl_init, & 
+       cmplxscl_copy, & 
        cmplxscl_end 
        
   !> Complex scaling module    
@@ -108,7 +109,7 @@ contains
 
     !%Variable ComplexScalingAlphaLeft
     !%Type float 
-    !%Default -2*theta
+    !%Default 2*theta
     !%Section Hamiltonian
     !%Description
     !% The time coordinate complex scaling angle \alpha_l used to evolve 
@@ -120,16 +121,20 @@ contains
 
     if (this%space .or. this%time) then
       call messages_print_stress(stdout, "Complex Scaling")
+      call messages_experimental('Complex Scaling')
     end if
+    
     if (this%space) then
-      write(message(1), '(a,f12.3)') 'Complex scaling angle theta = ', this%theta
-      call messages_info(1)
+      write(message(1), '(a)') 'Spatial complex scaling transformation r -> r * e^(i * theta) '
+      write(message(2), '(a,f12.3)') 'Complex scaling angle theta = ', this%theta
+      call messages_info(2)
     end if
       
     if (this%time) then
-      write(message(1), '(a,f12.3)') 'Complex scaling angle alphaR = ', this%alphaR
-      write(message(2), '(a,f12.3)') 'Complex scaling angle alphaL = ', this%alphaL
-      call messages_info(2)
+      write(message(1), '(a)') 'Time complex scaling transformation t -> t * e^(i * alpha[R,L]) '
+      write(message(2), '(a,f12.3)') 'Complex scaling angle alphaR = ', this%alphaR
+      write(message(3), '(a,f12.3)') 'Complex scaling angle alphaL = ', this%alphaL
+      call messages_info(3)
     end if
 
     if (this%space .or. this%time) then

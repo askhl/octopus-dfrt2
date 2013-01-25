@@ -172,7 +172,7 @@ contains
     PUSH_SUB(states_orthogonalize_cproduct)
     SAFE_ALLOCATE(  psi(1:mesh%np_part, 1:st%d%dim))
    
-    ASSERT(st%d%cmplxscl .eqv. .true.)
+    ASSERT(st%cmplxscl%space .eqv. .true.)
 
     do ik = st%d%kpt%start, st%d%kpt%end
       do ist = 1, st%nst
@@ -254,11 +254,11 @@ contains
   end subroutine reorder_states_by_args
 
 ! ---------------------------------------------------------
-  subroutine states_sort_complex( mesh, st, diff, cmplxscl_th)
+  subroutine states_sort_complex( mesh, st, diff, theta)
     type(mesh_t),      intent(in)    :: mesh
     type(states_t),    intent(inout) :: st
     FLOAT,             intent(inout) :: diff(:,:) !eigenstates convergence error
-    FLOAT,             intent(in)    :: cmplxscl_th
+    FLOAT,             intent(in)    :: theta
 
     integer              :: ik, ist, idim
     integer, allocatable :: index(:)
@@ -285,7 +285,7 @@ contains
 !       print*, 'SORTING'
       do ist=1, st%nst
 !          print*, ist, buf(ist), cbuf(ist)
-         if ((buf(ist).lt.(-cmplxscl_th)).and.((-M_THREE / M_FOUR * M_PI).lt.buf(ist))) then
+         if ((buf(ist).lt.(-theta)).and.((-M_THREE / M_FOUR * M_PI).lt.buf(ist))) then
             cbuf(ist) = cbuf(ist) + CNST(1e3) ! We cheat and assign very high energies
             ! to states that we think are continuum states
             !st%zeigelval%Re(ist, ik) = st%zeigelval%Re(ist, ik) + 1e3

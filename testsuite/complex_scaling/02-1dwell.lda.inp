@@ -1,9 +1,9 @@
 CalculationMode = gs
 
 ExperimentalFeatures = yes
-ComplexScaling = yes
+ComplexScalingSpace = yes
 
-ComplexScalingAngle = 0.4
+ComplexScalingTheta = 0.4
 
 Dimensions = 1
 ForceComplex = true # arpack solver works only if ForceComplex
@@ -24,7 +24,7 @@ TheoryLevel = DFT
 
 Eigensolver = arpack
 
-eith = exp(i * ComplexScalingAngle)
+eith = exp(i * ComplexScalingTheta)
 
 a0 = 4.0
 b0 = 0.5

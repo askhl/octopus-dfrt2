@@ -798,7 +798,7 @@ contains
     PUSH_SUB(td_write_multipole)
 
     cmplxscl = .false.
-    if(st%d%cmplxscl) cmplxscl = .true.
+    if(st%cmplxscl%space) cmplxscl = .true.
 
     if(mpi_grp_is_root(mpi_world).and.iter == 0) then
       call td_write_print_header_init(out_multip)
@@ -1408,7 +1408,7 @@ contains
     PUSH_SUB(td_write_energy)
 
     cmplxscl = .false.
-    cmplxscl = hm%cmplxscl
+    cmplxscl = hm%cmplxscl%space
 
     if(iter == 0) then
       call td_write_print_header_init(out_energy)

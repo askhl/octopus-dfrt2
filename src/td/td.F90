@@ -135,7 +135,7 @@ contains
 
     PUSH_SUB(td_run)
 
-    cmplxscl = hm%cmplxscl
+    cmplxscl = hm%cmplxscl%space
 
     ! some shortcuts
     gr  => sys%gr
@@ -228,7 +228,7 @@ contains
           if(.not. cmplxscl) then
             call kick_apply(gr, st, td%ions, geo, hm%ep%kick)
           else
-            call kick_apply(gr, st, td%ions, geo, hm%ep%kick, hm%cmplxscl_th)
+            call kick_apply(gr, st, td%ions, geo, hm%ep%kick, hm%cmplxscl%theta)
           end if
           call td_write_kick(gr, hm, sys%outp, geo, iter)
         end if
@@ -704,7 +704,7 @@ contains
         if(.not. cmplxscl) then
           call kick_apply(gr, st, td%ions, geo, hm%ep%kick)
         else
-          call kick_apply(gr, st, td%ions, geo, hm%ep%kick, hm%cmplxscl_th)
+          call kick_apply(gr, st, td%ions, geo, hm%ep%kick, hm%cmplxscl%theta)
         end if
         call td_write_kick(gr, hm, sys%outp, geo, 0)
       end if

@@ -1168,11 +1168,11 @@ CMPLX function get_logarithm_branch(x, branch) result(y)
 end function get_logarithm_branch
 
 
-subroutine zxc_complex_lda(mesh, rho, Imrho, cmplxscl_th, ex, Imex, ec, Imec, vxc, Imvxc)
+subroutine zxc_complex_lda(mesh, rho, Imrho, theta, ex, Imex, ec, Imec, vxc, Imvxc)
   type(mesh_t),    intent(in)    :: mesh
   FLOAT,           intent(in)    :: rho(:, :)
   FLOAT,           intent(in)    :: Imrho(:, :)
-  FLOAT,           intent(in)    :: cmplxscl_th
+  FLOAT,           intent(in)    :: theta
   FLOAT, optional, intent(inout) :: ex
   FLOAT, optional, intent(inout) :: Imex            
   FLOAT, optional, intent(inout) :: ec
@@ -1222,7 +1222,7 @@ subroutine zxc_complex_lda(mesh, rho, Imrho, cmplxscl_th, ex, Imex, ec, Imec, vx
   SAFE_ALLOCATE(vxbuf(cube%rs_n_global(1), cube%rs_n_global(2), cube%rs_n_global(3)))
 
 
-  dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
+  dimphase = exp(-mesh%sb%dim * M_zI * theta)
   
   vxbuf(:, :, :) = Wx * (cf%zRS(:, :, :) * dimphase)**(M_ONE / M_THREE)
   
@@ -1295,7 +1295,7 @@ end subroutine zxc_complex_lda
 !> This is the complex scaled interface for xc functionals.
 !! It will eventually be merged with the other one dxc_get_vxc after some test
 !! -----------------------------------------------------------------------------
-subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec, Imvxc, cmplxscl_th)
+subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec, Imvxc, theta)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
   FLOAT,                intent(in)    :: rho(:, :)       !< Electronic density 
@@ -1307,7 +1307,7 @@ subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec
   FLOAT, optional,      intent(inout) :: Imex            !< cmplxscl: Exchange energy.
   FLOAT, optional,      intent(inout) :: Imec            !< cmplxscl: Correlation energy
   FLOAT, optional,      intent(inout) :: Imvxc(:,:)      !< cmplxscl: XC potential
-  FLOAT,                intent(in)    :: cmplxscl_th     !< complex scaling angle
+  FLOAT,                intent(in)    :: theta           !< complex scaling angle
 
   
   CMPLX, pointer :: zpot(:), zrho_tot(:)
@@ -1341,15 +1341,15 @@ subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec
     
     if(calc_energy) then
       if(present(vxc)) then
-        call zxc_complex_lda(der%mesh, rho, Imrho, cmplxscl_th, ex, Imex, ec, Imec, vxc, Imvxc)
+        call zxc_complex_lda(der%mesh, rho, Imrho, theta, ex, Imex, ec, Imec, vxc, Imvxc)
       else
-        call zxc_complex_lda(der%mesh, rho, Imrho, cmplxscl_th, ex, Imex, ec, Imec)
+        call zxc_complex_lda(der%mesh, rho, Imrho, theta, ex, Imex, ec, Imec)
       end if
     else
       if(present(vxc)) then
-        call zxc_complex_lda(der%mesh, rho, Imrho, cmplxscl_th, vxc=vxc, Imvxc=Imvxc)
+        call zxc_complex_lda(der%mesh, rho, Imrho, theta, vxc=vxc, Imvxc=Imvxc)
       else
-        call zxc_complex_lda(der%mesh, rho, Imrho, cmplxscl_th)
+        call zxc_complex_lda(der%mesh, rho, Imrho, theta)
       end if    
     end if
     ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
@@ -1364,7 +1364,7 @@ subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec
         zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
       end do
 
-      call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
+      call zpoisson_solve(psolver, zpot, zrho_tot, theta = theta)
 
       zpot = - zpot /CNST(2.0)
       vxc(:,1) = real(zpot(:)) 

@@ -395,7 +395,7 @@ contains
       write(iunit_rho,'(a)') '%densities'
     end if
     if(gr%have_fine_mesh) then
-      if(st%d%cmplxscl) then
+      if(st%cmplxscl%space) then
         SAFE_ALLOCATE(zrho(1:gr%mesh%np))
       else
         SAFE_ALLOCATE(rho(1:gr%mesh%np))
@@ -411,7 +411,7 @@ contains
         write(iunit_rho, '(i8,a,i8,a)') isp, ' | ', st%d%nspin, ' | "'//trim(adjustl(filename))//'"'
       end if
       if(gr%have_fine_mesh)then
-        if(st%d%cmplxscl) then
+        if(st%cmplxscl%space) then
           SAFE_ALLOCATE(zrho_fine(1:gr%fine%mesh%np))
           zrho_fine(:)= st%zrho%Re(:,isp)+M_zI*st%zrho%Im(:,isp)
           call zmultigrid_fine2coarse(gr%fine%tt, gr%fine%der, gr%mesh, zrho_fine, zrho, INJECTION)
@@ -422,7 +422,7 @@ contains
           call drestart_write_function(dir, filename, gr%mesh, rho, err)
         end if
       else
-        if(st%d%cmplxscl) then
+        if(st%cmplxscl%space) then
           call zrestart_write_function(dir, filename, gr%mesh, st%zrho%Re(:,isp)+M_zI*st%zrho%Im(:,isp), err)
         else
           call drestart_write_function(dir, filename, gr%mesh, st%rho(:,isp), err)

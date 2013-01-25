@@ -564,11 +564,11 @@ contains
 
   ! ---------------------------------------------------------
   ! 
-  subroutine kick_function_get(gr, kick, kick_function, cmplxscl_th)
+  subroutine kick_function_get(gr, kick, kick_function, theta)
     type(grid_t),         intent(in)    :: gr
     type(kick_t),         intent(in)    :: kick
     CMPLX,                intent(out)   :: kick_function(:)
-    FLOAT, optional,      intent(in)    :: cmplxscl_th
+    FLOAT, optional,      intent(in)    :: theta
 
     integer :: ip, im
     FLOAT   :: xx(MAX_DIM)
@@ -578,7 +578,7 @@ contains
     PUSH_SUB(kick_function_get)
 
     cmplxscl = .false.
-    if(present(cmplxscl_th)) cmplxscl = .true.
+    if(present(theta)) cmplxscl = .true.
     
     if(abs(kick%qlength) > M_EPSILON) then ! q-vector is set
 
@@ -644,7 +644,7 @@ contains
             kick%pol(1:gr%mesh%sb%dim, kick%pol_dir))
         end forall
         if(cmplxscl) then
-          kick_function(:) = kick_function(:) * exp(M_zI * cmplxscl_th)
+          kick_function(:) = kick_function(:) * exp(M_zI * theta)
         end if
       end if
     end if
@@ -656,13 +656,13 @@ contains
   ! ---------------------------------------------------------
   !> Applies the delta-function electric field \f$ E(t) = E_0 \Delta(t) \f$
   !! where \f$ E_0 = \frac{- k \hbar}{e} \f$ k = kick\%delta_strength.
-  subroutine kick_apply(gr, st, ions, geo, kick, cmplxscl_th)
+  subroutine kick_apply(gr, st, ions, geo, kick, theta)
     type(grid_t),         intent(in)    :: gr
     type(states_t),       intent(inout) :: st
     type(ion_dynamics_t), intent(in)    :: ions
     type(geometry_t),     intent(inout) :: geo
     type(kick_t),         intent(in)    :: kick
-    FLOAT, optional,      intent(in)    :: cmplxscl_th
+    FLOAT, optional,      intent(in)    :: theta
 
     integer :: iqn, ist, idim, ip, ispin, iatom
     CMPLX   :: cc(2), kick_value
@@ -672,7 +672,7 @@ contains
     PUSH_SUB(kick_apply)
 
     cmplxscl = .false.
-    if(present(cmplxscl_th)) cmplxscl = .true.
+    if(present(theta)) cmplxscl = .true.
     
     ! The wavefunctions at time delta t read
     ! psi(delta t) = psi(t) exp(i k x)
@@ -683,7 +683,7 @@ contains
         if(.not. cmplxscl) then
           call kick_function_get(gr, kick, kick_function)
         else
-          call kick_function_get(gr, kick, kick_function, cmplxscl_th)          
+          call kick_function_get(gr, kick, kick_function, theta)          
         end if
 
         write(message(1),'(a,f11.6)') 'Info: Applying delta kick: k = ', kick%delta_strength

@@ -127,17 +127,17 @@ subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, terms)
     call X(derivatives_batch_finish)(handle)
     call profiling_out(prof_kinetic_finish)
 
-    if(hm%cmplxscl) then !cmplxscl
+    if(hm%cmplxscl%space) then !cmplxscl
     !complex scale the laplacian 
       do sp = 1, der%mesh%np, bs   
         if(batch_is_packed(hpsib)) then
           forall (ist = 1:hpsib%nst_linear, ip = sp:min(sp + bs - 1, der%mesh%np))
-            hpsib%pack%X(psi)(ist, ip) = exp(-M_TWO*M_zI*hm%cmplxscl_th)*hpsib%pack%X(psi)(ist, ip)
+            hpsib%pack%X(psi)(ist, ip) = exp(-M_TWO*M_zI*hm%cmplxscl%theta)*hpsib%pack%X(psi)(ist, ip)
           end forall
         else
           do ii = 1, nst
             call set_pointers()
-            forall(ip = sp:min(sp + bs - 1, der%mesh%np)) hpsi(ip) = exp(-M_TWO*M_zI*hm%cmplxscl_th)*hpsi(ip)
+            forall(ip = sp:min(sp + bs - 1, der%mesh%np)) hpsi(ip) = exp(-M_TWO*M_zI*hm%cmplxscl%theta)*hpsi(ip)
           end do
         end if
       end do    
@@ -257,7 +257,7 @@ subroutine X(hamiltonian_external)(this, mesh, psib, vpsib)
 
   PUSH_SUB(X(hamiltonian_external))
 
-  cmplxscl = this%cmplxscl
+  cmplxscl = this%cmplxscl%space
   
   select case(batch_status(psib))
   case(BATCH_NOT_PACKED)
@@ -415,7 +415,7 @@ subroutine X(exchange_operator) (hm, der, psi, hpsi, ist, ik, exx_coef)
 
     call states_get_state(hm%hf_st, der%mesh, jst, ik, psi2)
     
-    if(.not. hm%cmplxscl) then
+    if(.not. hm%cmplxscl%space) then
       do idim = 1, hm%hf_st%d%dim
         forall(ip = 1:der%mesh%np)
           rho(ip) = rho(ip) + R_CONJ(psi2(ip, idim))*psi(ip, idim)
@@ -431,7 +431,7 @@ subroutine X(exchange_operator) (hm, der, psi, hpsi, ist, ik, exx_coef)
           rho(ip) = rho(ip) + psi2(ip, idim)*psi(ip, idim)
         end forall
       end do
-      call zpoisson_solve(psolver, pot, rho, theta = hm%cmplxscl_th)
+      call zpoisson_solve(psolver, pot, rho, theta = hm%cmplxscl%theta)
 #endif      
     end if
 

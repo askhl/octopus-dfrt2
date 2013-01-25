@@ -26,6 +26,7 @@ module propagator_m
 #ifdef HAVE_OPENCL
   use cl
 #endif
+  use cmplxscl_m
   use cube_function_m
   use datasets_m
   use density_m
@@ -178,7 +179,7 @@ contains
     
     PUSH_SUB(propagator_init)
     
-    cmplxscl = hm%cmplxscl
+    cmplxscl = st%cmplxscl%space
     
     call propagator_nullify(tr)
 
@@ -439,7 +440,7 @@ contains
     forall(idim = 1:3, ispin = 1:hm%d%nspin, ip = 1:gr%mesh%np)
       tr%v_old(ip, ispin, idim) = hm%vhxc(ip, ispin)
     end forall
-    if(hm%cmplxscl) then
+    if(hm%cmplxscl%space) then
       forall(idim = 1:3, ispin = 1:hm%d%nspin, ip = 1:gr%mesh%np)
         tr%Imv_old(ip, ispin, idim) = hm%Imvhxc(ip, ispin)
       end forall
@@ -480,7 +481,7 @@ contains
     call profiling_in(prof, "TD_PROPAGATOR")
     PUSH_SUB(propagator_dt)
 
-    cmplxscl = hm%cmplxscl
+    cmplxscl = hm%cmplxscl%space
 
     if(present(ions)) then
       ASSERT(present(geo))

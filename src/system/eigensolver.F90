@@ -483,8 +483,8 @@ contains
     ! If we complex scale H the eigenstates need to be orthonormalized with respect to the c-product.
     ! Moreover the eigenvalues ordering need to be imposed as there is no eigensolver 
     ! supporting this ordering (yet).
-    if(hm%cmplxscl) then
-      call states_sort_complex(gr%mesh, st, eigens%diff, hm%cmplxscl_th)
+    if(st%cmplxscl%space) then
+      call states_sort_complex(gr%mesh, st, eigens%diff, st%cmplxscl%theta)
       call states_orthogonalize_cproduct(st, gr%mesh)
     end if
     
