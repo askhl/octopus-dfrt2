@@ -232,19 +232,8 @@ contains
     ! initialize variables
     nullify(hm%oct_fxc)
 
-!     !%Variable ComplexScalingAngle
-!     !%Type float 
-!     !%Default 0.3
-!     !%Section Hamiltonian
-!     !%Description
-!     !% The complex scaling parameter theta in DFRT.
-!     !% It should be bound to 0 <= theta < pi/4. 
-!     !%End
-!     call parse_float(datasets_check('ComplexScalingAngle'), CNST(0.3), cmplxscl%theta)
-!     if(cmplxscl%theta < M_ZERO .or. cmplxscl%theta > M_PI/CNST(4.0)) call input_error('ComplexScalingAngle')
 
-
-!     hm%cmplxscl => st%cmplxscl
+    !cmplxscl: copy cmplxscl initialized in states.F90
     call cmplxscl_copy(st%cmplxscl, hm%cmplxscl)
 
 
