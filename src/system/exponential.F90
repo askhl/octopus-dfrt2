@@ -557,10 +557,15 @@ contains
     
     integer :: ii, ist
     CMPLX, pointer :: psi(:, :)
+    logical :: cmplxscl
 
     PUSH_SUB(exponential_apply_batch)
 
     ASSERT(batch_type(psib) == TYPE_CMPLX)
+
+    cmplxscl = .false.
+    if(present(Imdeltat) .and. present(Imtime)) cmplxscl = .true. 
+  
 
     if (te%exp_method == EXP_TAYLOR) then 
       call taylor_series_batch

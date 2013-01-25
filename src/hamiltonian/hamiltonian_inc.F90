@@ -18,13 +18,14 @@
 !! $Id: hamiltonian_inc.F90 9453 2012-09-20 15:36:35Z dstrubbe $
 
 ! ---------------------------------------------------------
-subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, terms)
+subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, Imtime, terms)
   type(hamiltonian_t),   intent(in)    :: hm
   type(derivatives_t),   intent(in)    :: der
   type(batch_t), target, intent(inout) :: psib
   type(batch_t),         intent(inout) :: hpsib
   integer,               intent(in)    :: ik
   FLOAT, optional,       intent(in)    :: time
+  FLOAT, optional,       intent(in)    :: Imtime
   integer, optional,     intent(in)    :: terms
 
   integer :: nst, bs, sp
