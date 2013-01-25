@@ -606,6 +606,7 @@ contains
       call messages_info(1)
     end if
 
+    !cmplxscl
     call cmplxscl_init(st%cmplxscl)
 
     st%have_left_states = .false.
