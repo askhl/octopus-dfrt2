@@ -1,7 +1,7 @@
 CalculationMode = gs
 
 ExperimentalFeatures = yes
-ComplexScalingSpace = yes
+ComplexScaling = space
 
 ComplexScalingTheta = 0.4
 

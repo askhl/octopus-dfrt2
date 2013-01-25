@@ -29,7 +29,7 @@ module cmplxscl_m
   implicit none
   
   private
-
+  
 
   public :: &
        cmplxscl_t, &
@@ -48,40 +48,50 @@ module cmplxscl_m
 
   end type cmplxscl_t
 
+  integer, parameter ::     &
+    CMPLXSCL_NONE    = 0, &
+    CMPLXSCL_SPACE   = 2, &
+    CMPLXSCL_TIME    = 4
+
 contains
 
   !-----------------------------------------------------------------
   subroutine cmplxscl_init(this)
     type(cmplxscl_t),    intent(out) :: this
 
-
+    integer :: cmplxscl_flags
+    
     PUSH_SUB(cmplxscl_init)
 
-    !%Variable ComplexScalingSpace
-    !%Type logical
-    !%Default false
+    !%Variable ComplexScaling
+    !%Type flag
+    !%Default none
     !%Section Hamiltonian
     !%Description
-    !% (experimental) If set to yes, a complex scaled Hamiltonian will be used. 
-    !% This is implemented through a global coordinate transformation r-> r e^{i \theta}.
+    !% (experimental) Global complex scaling. The options 
+    !% allow to scale space and time coordinates in the Hamiltonian.
+    !% You can specify more than one value by giving them as a sum, 
+    !% for example:
+    !% <tt>ComplexScaling = space + time</tt>
+    !%Option none 0
+    !% No scaling is applied. This is the default.
+    !%Option space 2
+    !% This is implements the global coordinate transformation r-> r e^{i \theta}.
     !% When <tt>TheoryLevel=DFT</tt> Density functional resonance theory DFRT is employed.  
     !% In order to reveal resonances <tt>ComplexScalingTheta</tt> bigger than zero should be set.
     !% D. L. Whitenack and A. Wasserman, Phys. Rev. Lett. 107, 163002 (2011).
-    !%End
-    call parse_logical(datasets_check('ComplexScalingSpace'), .false., this%space)
-
-    !%Variable ComplexScalingTime
-    !%Type logical
-    !%Default false
-    !%Section Hamiltonian
-    !%Description
-    !% (experimental) If set to yes, the time evolution will be performed with a 
-    !% complex time variable. 
-    !% This is implemented by a coordinate transformation t-> t e^{i \alpha_r} for 
+    !%Option time 4
+    !% This is implements the coordinate transformation t-> t e^{i \alpha_r} for 
     !% right states and t-> t e^{i \alpha_l} for left states.
     !% J. Bengtsson, E. Lindroth, and S. Selstø, Phys. Rev. A 85, 013419 (2012).
     !%End
-    call parse_logical(datasets_check('ComplexScalingTime'), .false., this%time)
+    call parse_integer(datasets_check('ComplexScaling'), CMPLXSCL_NONE, cmplxscl_flags)
+    if(.not.varinfo_valid_option('ComplexScaling', cmplxscl_flags, is_flag = .true.)) then
+      call input_error('ComplexScaling')
+    end if
+    
+    this%space = iand(cmplxscl_flags, CMPLXSCL_SPACE) /= 0
+    this%time  = iand(cmplxscl_flags, CMPLXSCL_TIME)  /= 0
 
     
     !%Variable ComplexScalingTheta
@@ -125,15 +135,15 @@ contains
     end if
     
     if (this%space) then
-      write(message(1), '(a)') 'Spatial complex scaling transformation r -> r * e^(i * theta) '
-      write(message(2), '(a,f12.3)') 'Complex scaling angle theta = ', this%theta
+      write(message(1), '(a)') 'Space complex scaling transformation: r -> r * e^(i * theta) '
+      write(message(2), '(a,f7.4)') 'Complex scaling angle theta =  ', this%theta
       call messages_info(2)
     end if
       
     if (this%time) then
-      write(message(1), '(a)') 'Time complex scaling transformation t -> t * e^(i * alpha[R,L]) '
-      write(message(2), '(a,f12.3)') 'Complex scaling angle alphaR = ', this%alphaR
-      write(message(3), '(a,f12.3)') 'Complex scaling angle alphaL = ', this%alphaL
+      write(message(1), '(a)') 'Time complex scaling transformation:  t -> t * e^(i * alpha[R,L]) '
+      write(message(2), '(a,f7.4)') 'Complex scaling angle alphaR = ', this%alphaR
+      write(message(3), '(a,f7.4)') 'Complex scaling angle alphaL = ', this%alphaL
       call messages_info(3)
     end if
 
