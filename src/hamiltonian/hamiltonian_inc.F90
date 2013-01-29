@@ -50,6 +50,10 @@ subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, Imtime, t
     ASSERT(abs(time - hm%current_time) < CNST(1e-10))
   end if
 
+  if(present(Imtime)) then
+    ASSERT(abs(Imtime - hm%Imcurrent_time) < CNST(1e-10))
+  end if
+
   ! all terms are enabled by default
   terms_ = optional_default(terms, TERM_ALL)
 
@@ -318,7 +322,7 @@ end subroutine X(hamiltonian_external)
 
 ! ---------------------------------------------------------
 
-subroutine X(hamiltonian_apply) (hm, der, psi, hpsi, ist, ik, time, terms)
+subroutine X(hamiltonian_apply) (hm, der, psi, hpsi, ist, ik, time, terms, Imtime)
   type(hamiltonian_t), intent(in)    :: hm
   type(derivatives_t), intent(in)    :: der
   integer,             intent(in)    :: ist       !< the index of the state
@@ -327,6 +331,7 @@ subroutine X(hamiltonian_apply) (hm, der, psi, hpsi, ist, ik, time, terms)
   R_TYPE,              intent(out)   :: hpsi(:,:) !< (gr%mesh%np, hm%d%dim)
   FLOAT,    optional,  intent(in)    :: time
   integer,  optional,  intent(in)    :: terms
+  FLOAT,    optional,  intent(in)    :: Imtime
 
   type(batch_t) :: psib, hpsib
 
@@ -339,9 +344,17 @@ subroutine X(hamiltonian_apply) (hm, der, psi, hpsi, ist, ik, time, terms)
 
   if(present(time)) then
     if(present(terms)) then
-      call X(hamiltonian_apply_batch)(hm, der, psib, hpsib, ik, time = time, terms = terms)
+      if(present(Imtime)) then
+        call X(hamiltonian_apply_batch)(hm, der, psib, hpsib, ik, time = time, terms = terms, Imtime = Imtime)
+      else       
+        call X(hamiltonian_apply_batch)(hm, der, psib, hpsib, ik, time = time, terms = terms)
+      end if
     else
-      call X(hamiltonian_apply_batch)(hm, der, psib, hpsib, ik, time = time)
+      if(present(Imtime)) then
+        call X(hamiltonian_apply_batch)(hm, der, psib, hpsib, ik, time = time, Imtime = Imtime)
+      else 
+        call X(hamiltonian_apply_batch)(hm, der, psib, hpsib, ik, time = time)
+      end if
     endif
   else
     if(present(terms)) then
@@ -359,22 +372,31 @@ end subroutine X(hamiltonian_apply)
 
 
 ! ---------------------------------------------------------
-subroutine X(hamiltonian_apply_all) (hm, der, st, hst, time)
+subroutine X(hamiltonian_apply_all) (hm, der, st, hst, time, Imtime)
   type(hamiltonian_t), intent(in)    :: hm
   type(derivatives_t), intent(inout) :: der
   type(states_t),      intent(inout) :: st
   type(states_t),      intent(inout) :: hst
   FLOAT, optional,     intent(in)    :: time
+  FLOAT, optional,     intent(in)    :: Imtime
 
   integer :: ik, ib
 
   PUSH_SUB(X(hamiltonian_apply_all))
 
-  do ik = st%d%kpt%start, st%d%kpt%end
-    do ib = st%block_start, st%block_end
-      call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hst%psib(ib, ik), ik, time)
+  if(present(Imtime)) then
+    do ik = st%d%kpt%start, st%d%kpt%end
+      do ib = st%block_start, st%block_end
+        call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hst%psib(ib, ik), ik, time, Imtime)
+      end do
     end do
-  end do
+  else 
+    do ik = st%d%kpt%start, st%d%kpt%end
+      do ib = st%block_start, st%block_end
+        call X(hamiltonian_apply_batch)(hm, der, st%psib(ib, ik), hst%psib(ib, ik), ik, time)
+      end do
+    end do
+  end if
   
   if(hamiltonian_oct_exchange(hm)) call X(oct_exchange_operator_all)(hm, der, st, hst)
 

@@ -169,6 +169,7 @@ module hamiltonian_m
     CMPLX, pointer :: phase(:, :)
 
     FLOAT :: current_time
+    FLOAT :: Imcurrent_time  !< needed when cmplxscl%time = .true.
     logical :: apply_packed  !< This is initialized by the StatesPack variable.
     
     !> If we use a complex-scaled Hamiltonian by complexifying the spatial coordinate with 
@@ -900,10 +901,11 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine hamiltonian_update(this, mesh, time)
+  subroutine hamiltonian_update(this, mesh, time, Imtime)
     type(hamiltonian_t), intent(inout) :: this
     type(mesh_t),        intent(in)    :: mesh
     FLOAT, optional,     intent(in)    :: time
+    FLOAT, optional,     intent(in)    :: Imtime
 
     integer :: ispin, ip, idir, iatom, ilaser
     type(profile_t), save :: prof
@@ -914,7 +916,9 @@ contains
     call profiling_in(prof, "HAMILTONIAN_UPDATE")
 
     this%current_time = M_ZERO
+    this%Imcurrent_time = M_ZERO !cmplxscl
     if(present(time)) this%current_time = time
+    if(present(Imtime)) this%Imcurrent_time = Imtime !cmplxscl
 
     ! set everything to zero
     call hamiltonian_base_clear(this%hm_base)
