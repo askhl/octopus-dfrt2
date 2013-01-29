@@ -852,59 +852,135 @@ contains
       integer :: ib, ik, ii
       type(ion_state_t) :: ions_state
       FLOAT :: vecpot(1:MAX_DIM), vecpot_vel(1:MAX_DIM)
+      CMPLX :: zt, zdt
 
       PUSH_SUB(propagator_dt.exponential_midpoint)
 
-      if(hm%theory_level.ne.INDEPENDENT_PARTICLES) then
-        call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time - dt/M_TWO, hm%vhxc(:, :))
-        if(cmplxscl) &
-          call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time - dt/M_TWO, hm%Imvhxc(:, :))
-      end if
-
-      !move the ions to time 'time - dt/2'
-      if(present(ions)) then
-        call ion_dynamics_save_state(ions, geo, ions_state)
-        call ion_dynamics_propagate(ions, gr%sb, geo, time - dt/M_TWO, M_HALF*dt)
-        call hamiltonian_epot_generate(hm, gr, geo, st, time = time - dt/M_TWO)
-      end if
       
-      if(gauge_field_is_applied(hm%ep%gfield)) then
-        vecpot = gauge_field_get_vec_pot(hm%ep%gfield)
-        vecpot_vel = gauge_field_get_vec_pot_vel(hm%ep%gfield)
-        call gauge_field_propagate(hm%ep%gfield, gauge_force, M_HALF*dt)
-      end if
-
-      call hamiltonian_update(hm, gr%mesh, time = time - M_HALF*dt)
-
-      do ik = st%d%kpt%start, st%d%kpt%end
-        do ib = st%block_start, st%block_end
-
-          call exponential_apply_batch(tr%te, gr%der, hm, st%psib(ib, ik), ik, dt/mu, time - dt/M_TWO)
-
-        end do
-      end do
-
-      if(cmplxscl) then ! Propagate the left state
-        ! FIXME: check this interpolation!! 
-        ! probably need some rethinking 
+      if(hm%cmplxscl%time) then
+        zt =  TOCMPLX(time, M_ZERO) *exp(M_zI * TOCMPLX(hm%cmplxscl%alphaR, M_ZERO))
+        zdt = TOCMPLX(dt,   M_ZERO) *exp(M_zI * TOCMPLX(hm%cmplxscl%alphaR, M_ZERO))
+!         print *,"R ", zt,zdt
         
+        !FIXME: not adapted yet
         if(hm%theory_level.ne.INDEPENDENT_PARTICLES) then
-          call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time + dt/M_TWO, hm%vhxc(:, :))
-          if(cmplxscl) &
-            call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time + dt/M_TWO, hm%Imvhxc(:, :))
+          call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time - dt/M_TWO, hm%vhxc(:, :))
+          if(hm%cmplxscl%space) &
+            call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time - dt/M_TWO, hm%Imvhxc(:, :))
+        end if
+
+        !FIXME: not implemented yet
+        !move the ions to time 'time - dt/2'
+        if(present(ions)) then
+          call ion_dynamics_save_state(ions, geo, ions_state)
+          call ion_dynamics_propagate(ions, gr%sb, geo, time - dt/M_TWO, M_HALF*dt)
+          call hamiltonian_epot_generate(hm, gr, geo, st, time = time - dt/M_TWO)
         end if
         
-        ! We use:
-        ! (L(t+dt)| = (L|U(t-dt) = (L|e^{i H_\theta(t-dt/2) (dt)}
+        !FIXME: not implemented yet      
+        if(gauge_field_is_applied(hm%ep%gfield)) then
+          vecpot = gauge_field_get_vec_pot(hm%ep%gfield)
+          vecpot_vel = gauge_field_get_vec_pot_vel(hm%ep%gfield)
+          call gauge_field_propagate(hm%ep%gfield, gauge_force, M_HALF*dt)
+        end if
 
-        call hamiltonian_update(hm, gr%mesh, time = time + M_HALF*dt)
+        call hamiltonian_update(hm, gr%mesh, time = real(zt - zdt/M_z2, REAL_PRECISION), Imtime = aimag(zt - zdt/M_z2  ))
 
         do ik = st%d%kpt%start, st%d%kpt%end
           do ib = st%block_start, st%block_end
-            call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, -dt/mu, time + dt/M_TWO)            
+
+            call exponential_apply_batch(tr%te, gr%der, hm, st%psib(ib, ik), ik, &
+              real(zdt/mu,REAL_PRECISION), real(zt - zdt/M_z2,REAL_PRECISION), &
+              Imdeltat = aimag(zdt/mu), Imtime = aimag(zt -  zdt / M_z2 ) )
 
           end do
         end do
+        
+      else
+
+        if(hm%theory_level.ne.INDEPENDENT_PARTICLES) then
+          call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time - dt/M_TWO, hm%vhxc(:, :))
+          if(hm%cmplxscl%space) &
+            call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time - dt/M_TWO, hm%Imvhxc(:, :))
+        end if
+
+        !move the ions to time 'time - dt/2'
+        if(present(ions)) then
+          call ion_dynamics_save_state(ions, geo, ions_state)
+          call ion_dynamics_propagate(ions, gr%sb, geo, time - dt/M_TWO, M_HALF*dt)
+          call hamiltonian_epot_generate(hm, gr, geo, st, time = time - dt/M_TWO)
+        end if
+      
+        if(gauge_field_is_applied(hm%ep%gfield)) then
+          vecpot = gauge_field_get_vec_pot(hm%ep%gfield)
+          vecpot_vel = gauge_field_get_vec_pot_vel(hm%ep%gfield)
+          call gauge_field_propagate(hm%ep%gfield, gauge_force, M_HALF*dt)
+        end if
+
+        call hamiltonian_update(hm, gr%mesh, time = time - M_HALF*dt)
+
+        do ik = st%d%kpt%start, st%d%kpt%end
+          do ib = st%block_start, st%block_end
+
+            call exponential_apply_batch(tr%te, gr%der, hm, st%psib(ib, ik), ik, dt/mu, time - dt/M_TWO)
+
+          end do
+        end do
+      end if
+
+      if(hm%cmplxscl%space) then ! Propagate the left state
+        ! We use:
+        ! (L(t+dt)| = (L|U(t-dt) = (L|e^{i H_\theta(t-dt/2) (dt)}
+        
+        if(hm%cmplxscl%time) then
+          zt =  TOCMPLX(time,M_ZERO) *exp(M_zI * TOCMPLX(hm%cmplxscl%alphaL, M_ZERO))
+          zdt = TOCMPLX(dt,  M_ZERO) *exp(M_zI * TOCMPLX(hm%cmplxscl%alphaL, M_ZERO))
+!           print *,"L ", zt,zdt , zt + zdt/M_z2
+!           print *, "dt ", dt, hm%cmplxscl%alphaL, exp(M_zI * hm%cmplxscl%alphaL)
+!           print *, "real(zt + zdt/M_z2, REAL_PRECISION) ", real(zt + zdt/M_z2, REAL_PRECISION), time + dt/M_TWO
+!           print *, "real(-zdt/mu, REAL_PRECISION)", real(-zdt/mu, REAL_PRECISION), -dt/mu
+
+          ! FIXME: check this interpolation!! 
+          ! probably need some rethinking 
+          if(hm%theory_level.ne.INDEPENDENT_PARTICLES) then
+            call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time + dt/M_TWO, hm%vhxc(:, :))
+            if(hm%cmplxscl%space) &
+              call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time + dt/M_TWO, hm%Imvhxc(:, :))
+          end if
+        
+          call hamiltonian_update(hm, gr%mesh, time = real(zt + zdt/M_z2, REAL_PRECISION), Imtime = aimag(zt + zdt/M_z2  ))
+          
+          do ik = st%d%kpt%start, st%d%kpt%end
+            do ib = st%block_start, st%block_end
+              call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik,&
+                real(-zdt/mu, REAL_PRECISION), real(zt + zdt/M_z2, REAL_PRECISION), &
+                Imdeltat = aimag(-zdt/mu), Imtime = aimag(zt +  zdt / M_z2 ) )
+
+            end do
+          end do
+        
+        else
+!           print *, "L ", dt, time, time + dt/M_TWO
+          
+          ! FIXME: check this interpolation!! 
+          ! probably need some rethinking 
+          if(hm%theory_level.ne.INDEPENDENT_PARTICLES) then
+            call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time + dt/M_TWO, hm%vhxc(:, :))
+            if(hm%cmplxscl%space) &
+              call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time + dt/M_TWO, hm%Imvhxc(:, :))
+          end if
+
+          call hamiltonian_update(hm, gr%mesh, time = time + M_HALF*dt)
+
+          do ik = st%d%kpt%start, st%d%kpt%end
+            do ib = st%block_start, st%block_end
+              call exponential_apply_batch(tr%te, gr%der, hm, st%psibL(ib, ik), ik, -dt/mu, time + dt/M_TWO)            
+
+            end do
+          end do
+        
+        end if
+                
       end if
 
 
