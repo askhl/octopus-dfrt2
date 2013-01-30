@@ -232,7 +232,9 @@ contains
     call profiling_in(exp_prof, "EXPONENTIAL")
 
     
-     ASSERT(present(Imtime) .and. present(Imdeltat)) 
+    if(present(Imtime)) then
+      ASSERT(present(Imdeltat)) 
+    end if
     
     ! In order to make things clear is better not to mix the two
     ! even if imag_time = .true. is a particular case of the
