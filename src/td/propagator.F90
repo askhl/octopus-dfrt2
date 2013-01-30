@@ -860,7 +860,6 @@ contains
       if(hm%cmplxscl%time) then
         zt =  TOCMPLX(time, M_ZERO) *exp(M_zI * TOCMPLX(hm%cmplxscl%alphaR, M_ZERO))
         zdt = TOCMPLX(dt,   M_ZERO) *exp(M_zI * TOCMPLX(hm%cmplxscl%alphaR, M_ZERO))
-!         print *,"R ", zt,zdt
         
         !FIXME: not adapted yet
         if(hm%theory_level.ne.INDEPENDENT_PARTICLES) then
@@ -929,16 +928,11 @@ contains
       end if
 
       if(hm%cmplxscl%space) then ! Propagate the left state
-        ! We use:
         ! (L(t+dt)| = (L|U(t-dt) = (L|e^{i H_\theta(t-dt/2) (dt)}
         
         if(hm%cmplxscl%time) then
           zt =  TOCMPLX(time,M_ZERO) *exp(M_zI * TOCMPLX(hm%cmplxscl%alphaL, M_ZERO))
           zdt = TOCMPLX(dt,  M_ZERO) *exp(M_zI * TOCMPLX(hm%cmplxscl%alphaL, M_ZERO))
-!           print *,"L ", zt,zdt , zt + zdt/M_z2
-!           print *, "dt ", dt, hm%cmplxscl%alphaL, exp(M_zI * hm%cmplxscl%alphaL)
-!           print *, "real(zt + zdt/M_z2, REAL_PRECISION) ", real(zt + zdt/M_z2, REAL_PRECISION), time + dt/M_TWO
-!           print *, "real(-zdt/mu, REAL_PRECISION)", real(-zdt/mu, REAL_PRECISION), -dt/mu
 
           ! FIXME: check this interpolation!! 
           ! probably need some rethinking 
@@ -960,7 +954,6 @@ contains
           end do
         
         else
-!           print *, "L ", dt, time, time + dt/M_TWO
           
           ! FIXME: check this interpolation!! 
           ! probably need some rethinking 
@@ -1138,7 +1131,7 @@ contains
       SAFE_ALLOCATE(rhs(1:np*st%d%dim))
         
       call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time - dt/M_TWO, hm%vhxc(:, :))
-      if(cmplxscl) & 
+      if(hm%cmplxscl%space) & 
         call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time - dt/M_TWO, hm%Imvhxc(:, :))
     
       call hamiltonian_update(hm, gr%mesh, time = time - dt/M_TWO)
@@ -1184,6 +1177,64 @@ contains
 
         end do
       end do
+
+      if(hm%cmplxscl%space) then !Left states
+        
+        dt_op = - dt !propagate backwards
+        t_op  = time + dt/M_TWO
+        
+        
+        call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%v_old(:, :, 0:2), time + dt/M_TWO, hm%vhxc(:, :))
+        if(hm%cmplxscl%space) & 
+          call interpolate( (/time, time - dt, time - M_TWO*dt/), tr%Imv_old(:, :, 0:2), time + dt/M_TWO, hm%Imvhxc(:, :))
+    
+        call hamiltonian_update(hm, gr%mesh, time = time + dt/M_TWO)
+      
+      
+        ! solve (1+i\delta t/2 H_n)\psi^{predictor}_{n+1} = (1-i\delta t/2 H_n)\psi^n
+        do ik = st%d%kpt%start, st%d%kpt%end
+          do ist = st%st_start, st%st_end
+
+            call states_get_state(st, gr%mesh, ist, ik, zpsi_rhs,left = .true. )
+            call exponential_apply(tr%te, gr%der, hm, zpsi_rhs, ist, ik, -dt/M_TWO, time + dt/M_TWO)
+
+            if(hamiltonian_inh_term(hm)) then
+              SAFE_ALLOCATE(inhpsi(1:gr%mesh%np))
+              do idim = 1, st%d%dim
+                call states_get_state(hm%inh_st, gr%mesh, idim, ist, ik, inhpsi, left = .true.)
+                forall(ip = 1:gr%mesh%np) zpsi_rhs(ip, idim) = zpsi_rhs(ip, idim) - dt*inhpsi(ip)
+              end do
+              SAFE_DEALLOCATE_A(inhpsi)
+            end if
+
+            ! put the values is a continuous array
+            do idim = 1, st%d%dim
+              call states_get_state(st, gr%mesh, idim, ist, ik, zpsi((idim - 1)*np+1:idim*np), left = .true.)
+              rhs((idim - 1)*np + 1:idim*np) = zpsi_rhs(1:np, idim)
+            end do
+
+            ist_op = ist
+            ik_op = ik
+            iter = 2000
+            call zqmr_sym(np*st%d%dim, zpsi, rhs, propagator_qmr_op, propagator_qmr_prec, iter, dres, cgtol, &
+              showprogress = .false., converged = converged)
+
+            do idim = 1, st%d%dim
+              call states_set_state(st, gr%mesh, idim, ist, ik, zpsi((idim-1)*np + 1:(idim - 1)*np + np), left = .true.)
+            end do          
+
+            if(.not.converged) then
+              write(message(1),'(a)')        'The linear solver used for the Crank-Nicholson'
+              write(message(2),'(a,es14.4)') 'propagator did not converge for left states: Residual = ', dres
+              call messages_warning(2)
+            end if
+
+          end do
+        end do
+        
+        
+      end if
+
 
       SAFE_DEALLOCATE_A(zpsi_rhs)
       SAFE_DEALLOCATE_A(zpsi)
