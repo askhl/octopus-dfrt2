@@ -819,8 +819,11 @@ contains
         write(aux,'(a18,i1,a1)') 'Electronic charge(', is,')'; call write_iter_header(out_multip, aux)
         if(lmax>0) then
           write(aux, '(a3,a1,i1,a1)') '<x>', '(', is,')'; call write_iter_header(out_multip, aux)
+          if(cmplxscl) call write_iter_header(out_multip, ' ')   
           write(aux, '(a3,a1,i1,a1)') '<y>', '(', is,')'; call write_iter_header(out_multip, aux)
+          if(cmplxscl) call write_iter_header(out_multip, ' ')   
           write(aux, '(a3,a1,i1,a1)') '<z>', '(', is,')'; call write_iter_header(out_multip, aux)
+          if(cmplxscl) call write_iter_header(out_multip, ' ')   
         end if
         do ll = 2, lmax
           do mm = -ll, ll
@@ -843,15 +846,42 @@ contains
               call write_iter_header(out_multip, 'Electrons')
             case(1)
               call write_iter_header(out_multip, '[' // trim(units_abbrev(units_out%length)) // ']')
+              if(cmplxscl) call write_iter_header(out_multip, ' ')   
             case default
               write(aux, '(a,a2,i1)') trim(units_abbrev(units_out%length)), "**", ll
               call write_iter_header(out_multip, '[' // trim(aux) // ']')
+              if(cmplxscl) call write_iter_header(out_multip, ' ')   
             end select
           end do
         end do
       end do
       call write_iter_nl(out_multip)
 
+      ! complex quantities
+      if(cmplxscl) then
+        call write_iter_string(out_multip, '#       _         ')
+        call write_iter_header(out_multip, ' ')
+
+        do is = 1, st%d%nspin
+          do ll = 0, lmax
+            do mm = -ll, ll
+              select case(ll)
+              case(0)
+                call write_iter_header(out_multip, ' ')
+              case(1)
+                call write_iter_header(out_multip, 'Re')
+                call write_iter_header(out_multip, 'Im')   
+              case default
+                call write_iter_header(out_multip, 'Re')
+                call write_iter_header(out_multip, 'Im')   
+              end select
+            end do
+          end do
+        end do
+        call write_iter_nl(out_multip)
+
+      end if
+      
       call td_write_print_header_end(out_multip)
     end if
 
@@ -868,10 +898,13 @@ contains
       if(.not. cmplxscl) then
         call dmf_multipoles(gr%mesh, st%rho(:,is), lmax, multipole(:,is))
       else
-        call zmf_multipoles(gr%mesh, st%zrho%Re(:,is) + M_zI * st%zrho%Im(:,is), lmax, zmultipole(:,is))
+        call zmf_multipoles(gr%mesh, st%zrho%Re(:,is) + M_zI * st%zrho%Im(:,is), lmax,&
+          zmultipole(:,is), cmplxscl_th = st%cmplxscl%theta)
         multipole (:,is) = real(zmultipole(:,is)) ! it should be real anyways 
       end if 
     end do
+    ! FIXME: with cmplxscl we need to think how to treat 
+    ! the ions dipole moment 
     call geometry_dipole(geo, ionic_dipole)
     do is = 1, st%d%nspin
       multipole(2:gr%mesh%sb%dim+1, is) = -ionic_dipole(1:gr%mesh%sb%dim)/st%d%nspin - multipole(2:gr%mesh%sb%dim+1, is)
@@ -883,7 +916,14 @@ contains
         add_lm = 1
         do ll = 0, lmax
           do mm = -ll, ll
-            call write_iter_double(out_multip, units_from_atomic(units_out%length**ll, multipole(add_lm, is)), 1)
+            if(cmplxscl .and. ll > 0 ) then
+              call write_iter_double(out_multip, units_from_atomic(units_out%length**ll,&
+                real(zmultipole(add_lm, is), REAL_PRECISION)), 1)
+              call write_iter_double(out_multip, units_from_atomic(units_out%length**ll,&
+                aimag(zmultipole(add_lm, is))), 1)
+            else
+              call write_iter_double(out_multip, units_from_atomic(units_out%length**ll, multipole(add_lm, is)), 1)
+            end if
             add_lm = add_lm + 1
           end do
         end do
