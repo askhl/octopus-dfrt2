@@ -107,7 +107,7 @@ contains
 
 
 
-    !%Variable ComplexScalingAlphaRight
+    !%Variable ComplexScalingAlpha
     !%Type float 
     !%Default 2*theta
     !%Section Hamiltonian
@@ -115,17 +115,21 @@ contains
     !% The time coordinate complex scaling angle \alpha_r used to evolve 
     !% right states.  
     !%End
-    call parse_float(datasets_check('ComplexScalingAlphaRight'), M_TWO*this%theta, this%alphaR)
+    if(this%time) then
+      call parse_float(datasets_check('ComplexScalingAlphaRight'), M_TWO*this%theta, this%alphaR)
+    else
+      call parse_float(datasets_check('ComplexScalingAlphaRight'), M_ZERO, this%alphaR)
+    end if
 
     !%Variable ComplexScalingAlphaLeft
     !%Type float 
-    !%Default 2*theta
+    !%Default ComplexScalingAlpha
     !%Section Hamiltonian
     !%Description
     !% The time coordinate complex scaling angle \alpha_l used to evolve 
     !% left states.  
     !%End
-    call parse_float(datasets_check('ComplexScalingAlphaLeft'), M_TWO*this%theta, this%alphaL)
+    call parse_float(datasets_check('ComplexScalingAlphaLeft'), this%alphaR, this%alphaL)
 
 
 
