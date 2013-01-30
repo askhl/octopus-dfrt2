@@ -115,10 +115,10 @@ contains
     !% The time coordinate complex scaling angle \alpha_r used to evolve 
     !% right states.  
     !%End
-    if(this%time) then
-      call parse_float(datasets_check('ComplexScalingAlphaRight'), M_TWO*this%theta, this%alphaR)
+    if(this%time .and. this%space) then
+      call parse_float(datasets_check('ComplexScalingAlpha'), M_TWO*this%theta, this%alphaR)
     else
-      call parse_float(datasets_check('ComplexScalingAlphaRight'), M_ZERO, this%alphaR)
+      call parse_float(datasets_check('ComplexScalingAlpha'), M_ZERO, this%alphaR)
     end if
 
     !%Variable ComplexScalingAlphaLeft
