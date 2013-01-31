@@ -572,7 +572,6 @@ contains
     SAFE_ALLOCATE(sigma(0:no_e, 1:3, 1:nspin))
 
 
-    print *, "time_steps", time_steps, "dt", dt, "no_e", no_e
     if(cmplxscl) then
       call batch_init(dipoleb, 3, 1, nspin, dipole + M_zI * Imdipole)
     else
@@ -603,7 +602,6 @@ contains
     if (abs(kick%delta_strength) < 1.d-12) kick%delta_strength = M_ONE
     do ie = 0, no_e
       energy = ie * spectrum%energy_step
-      print * , ie, energy, sigma(ie, 1:3, 1), kick%delta_strength
       forall(isp = 1:nspin) sf(ie, isp) = sum(sigma(ie, 1:3, isp)*kick%pol(1:3, kick%pol_dir))
       sf(ie, 1:nspin) = -sf(ie, 1:nspin) * (energy * M_TWO) / (M_PI * kick%delta_strength)
       sigma(ie, 1:3, 1:nspin) = -sigma(ie, 1:3, 1:nspin)*(M_FOUR*M_PI*energy/P_c)/kick%delta_strength
@@ -2116,7 +2114,8 @@ contains
         
           if(cmplxft) then
 
-            eidt = exp( -energy * time_step * exp(M_zI * cmplxscl%alphaR) + M_zI * cmplxscl%alphaR)
+!             eidt = exp( -energy * time_step * exp(M_zI * cmplxscl%alphaR) + M_zI * cmplxscl%alphaR)
+            eidt = exp( -energy * time_step)
             ez = exp(-M_zI * energy * t0)
             do itime = time_start, time_end
               time = time_step*(itime - time_start)
@@ -2127,7 +2126,7 @@ contains
               end do
               ez = ez * eidt
             end do
-            print *,energy, energy_function%states_linear(1)%dpsi(ienergy)
+!             print *,energy, energy_function%states_linear(1)%dpsi(ienergy)
           else
 
             eidt = exp( -energy * time_step)
