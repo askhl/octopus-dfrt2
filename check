@@ -1,0 +1,8 @@
+cwd=`pwd`
+cd ./testsuite
+
+./oct-run_regression_test.pl  -f./complex_scaling/01-harmonic-oscillator.test -D $cwd/src/main/
+./oct-run_regression_test.pl  -f./complex_scaling/02-1dwell.test  -D $cwd/src/main/
+
+cd $cwd
+

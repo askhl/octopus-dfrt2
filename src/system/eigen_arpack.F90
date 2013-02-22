@@ -86,9 +86,9 @@ use batch_m
     this%rotation = exp(M_zI * rotate_spectrum_angle)
      
     use_parpack = .false.
-#if defined(HAVE_PARPACK)
-
+#if defined(HAVE_PARPACK)    
     use_parpack = gr%mesh%parallel_in_domains
+    this%use_parpack = use_parpack
     
     !%Variable EigensolverParpack 
     !%Type logical 

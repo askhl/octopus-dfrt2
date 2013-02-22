@@ -1,0 +1,5 @@
+projectDirectory = "$CWD"
+windowTitle      = "$TM_DISPLAYNAME - portabilix"
+
+
+PATH             = "/sw64/bin:/opt/local/bin:/opt/local/sbin:$HOME/bin:$PATH"

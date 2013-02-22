@@ -289,7 +289,7 @@ contains
     scf%mixdim2 = 1
     if(hm%d%cdft) scf%mixdim2 = 1 + gr%mesh%sb%dim
     if(scf%mix_field /= MIXNONE) then
-      if(.not. hm%cmplxscl) then
+      if(.not. st%cmplxscl%space) then
         call mix_init(scf%smix, scf%mixdim1, scf%mixdim2, st%d%nspin)
       else
         call mix_init(scf%smix, scf%mixdim1, scf%mixdim2, st%d%nspin, func_type = TYPE_CMPLX)
@@ -424,7 +424,7 @@ contains
 
     PUSH_SUB(scf_run)
     
-    cmplxscl = hm%cmplxscl
+    cmplxscl = st%cmplxscl%space
   
     gs_run_ = .true.
     if(present(gs_run)) gs_run_ = gs_run

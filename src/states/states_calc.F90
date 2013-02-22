@@ -172,7 +172,7 @@ contains
     PUSH_SUB(states_orthogonalize_cproduct)
     SAFE_ALLOCATE(  psi(1:mesh%np_part, 1:st%d%dim))
    
-    ASSERT(st%d%cmplxscl .eqv. .true.)
+    ASSERT(st%cmplxscl%space .eqv. .true.)
 
     do ik = st%d%kpt%start, st%d%kpt%end
       do ist = 1, st%nst
@@ -253,21 +253,17 @@ contains
     POP_SUB(reorder_states_by_args)
   end subroutine reorder_states_by_args
 
-! ---------------------------------------------------------
-  subroutine states_sort_complex(mesh, st, diff, cmplxscl_th, cmplxscl_rotatespectrum)
+  subroutine states_sort_complex( mesh, st, diff)
     type(mesh_t),      intent(in)    :: mesh
     type(states_t),    intent(inout) :: st
     FLOAT,             intent(inout) :: diff(:,:) !eigenstates convergence error
-    FLOAT,             intent(in)    :: cmplxscl_th
-    FLOAT,             intent(in)    :: cmplxscl_rotatespectrum
 
     integer              :: ik, ist, idim
     integer, allocatable :: index(:)
     FLOAT, allocatable   :: diff_copy(:,:)
     FLOAT, allocatable   :: buf(:)
-    FLOAT                :: imthreshold, penalizationfactor
+    FLOAT                :: imthreshold
     CMPLX, allocatable   :: cbuf(:)
-    CMPLX                :: rotatespectrumfactor
     
     PUSH_SUB(states_sort_complex)
     
@@ -276,23 +272,11 @@ contains
     SAFE_ALLOCATE(buf(st%nst))
     SAFE_ALLOCATE(diff_copy(1:size(diff,1),1:size(diff,2)))
     
-    rotatespectrumfactor = exp(M_zI * cmplxscl_rotatespectrum)
-
     diff_copy = diff
-
-    !%Variable ComplexScalingPenalizationFactor
-    !%Type float
-    !%Default 2
-    !%Section ComplexScaling
-    !%Description
-    !% Eigenstates eps will be ordered by
-    !%  \Re(\epsilon) + penalizationfactor (\Im(\epsilon))^2
-    !%End
-    call parse_float(datasets_check('ComplexScalingPenalizationFactor'), M_TWO, penalizationfactor)
 
     do ik = st%d%kpt%start, st%d%kpt%end
       cbuf(:) = (st%zeigenval%Re(:, ik) + M_zI * st%zeigenval%Im(:, ik))
-      buf(:) = real(cbuf) + penalizationfactor * aimag(cbuf)**2
+      buf(:) = real(cbuf) + st%cmplxscl%penalizationfactor * aimag(cbuf)**2
       do ist=1, st%nst
          if(aimag(cbuf(ist)).gt.0) then
             buf(ist) = buf(ist) + 8.0 * aimag(cbuf(ist))

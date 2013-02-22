@@ -945,7 +945,7 @@ subroutine stitch(get_branch, functionvalues, startpoint)
   ! Each value of the parameter 'branch' corresponds to one such value.
   interface
      CMPLX function get_branch(x, branch)
-       CMPLX, intent(in)   :: x
+       CMPLX,   intent(in) :: x
        integer, intent(in) :: branch
      end function get_branch
   end interface
@@ -978,7 +978,7 @@ subroutine stitchline(get_branch, functionvalues, startpoint, direction, startbr
   ! Each value of the parameter 'branch' corresponds to one such value.
   interface 
      CMPLX function get_branch(x, branch)
-       CMPLX, intent(in)   :: x
+       CMPLX,   intent(in) :: x
        integer, intent(in) :: branch
      end function get_branch
   end interface
@@ -1168,39 +1168,39 @@ CMPLX function get_logarithm_branch(x, branch) result(y)
 end function get_logarithm_branch
 
 
-subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
-  type(mesh_t), intent(in) :: mesh
-  FLOAT, intent(in)        :: rho(:, :)
-  FLOAT, intent(inout)     :: vxc(:, :)
-  FLOAT, intent(inout)     :: ex
-  FLOAT, intent(inout)     :: ec
-  FLOAT, intent(in)        :: Imrho(:, :)
-  FLOAT, intent(inout)     :: Imvxc(:, :)
-  FLOAT, intent(inout)     :: Imex
-  FLOAT, intent(inout)     :: Imec
-  FLOAT, intent(in)        :: cmplxscl_th
+subroutine zxc_complex_lda(mesh, rho, Imrho, theta, ex, Imex, ec, Imec, vxc, Imvxc)
+  type(mesh_t),    intent(in)    :: mesh
+  FLOAT,           intent(in)    :: rho(:, :)
+  FLOAT,           intent(in)    :: Imrho(:, :)
+  FLOAT,           intent(in)    :: theta
+  FLOAT, optional, intent(inout) :: ex
+  FLOAT, optional, intent(inout) :: Imex            
+  FLOAT, optional, intent(inout) :: ec
+  FLOAT, optional, intent(inout) :: Imec            
+  FLOAT, optional, intent(inout) :: vxc(:, :)
+  FLOAT, optional, intent(inout) :: Imvxc(:, :)
 
   ! Exchange potential prefactor
   FLOAT, parameter :: Wx = -0.98474502184269641
 
   ! LDA correlation parameters
   FLOAT, parameter :: gamma = 0.031091, alpha1 = 0.21370, beta1 = 7.5957, beta2 = 3.5876, beta3 = 1.6382, beta4 = 0.49294
-
   CMPLX, allocatable   :: zvc_arr(:, :, :), Q0(:, :, :), Q1(:, :, :), dQ1drs(:, :, :), epsc(:, :, :), depsdrs(:, :, :), &
        zrho_local(:), zvxc_local(:)
   CMPLX                :: dimphase, tmp, zex, zec, zex2
   FLOAT                :: dmin_unused
   integer              :: N, izero, i, j
-
   CMPLX, allocatable   :: vxbuf(:, :, :), rootrs(:, :, :)
-
   type(cube_t)          :: cube
   type(cube_function_t) :: cf
+  logical               :: calc_energy
 
   PUSH_SUB(zxc_complex_lda)
 
   SAFE_ALLOCATE(zrho_local(1:mesh%np))
   zrho_local(:) = rho(:, 1) + M_zI * Imrho(:, 1)
+
+  calc_energy = present(ex)
 
   ! okay, now the cube probably works
   call cube_init(cube, mesh%idx%ll, mesh%sb)
@@ -1222,7 +1222,7 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
   SAFE_ALLOCATE(vxbuf(cube%rs_n_global(1), cube%rs_n_global(2), cube%rs_n_global(3)))
 
 
-  dimphase = exp(-mesh%sb%dim * M_zI * cmplxscl_th)
+  dimphase = exp(-mesh%sb%dim * M_zI * theta)
   
   vxbuf(:, :, :) = Wx * (cf%zRS(:, :, :) * dimphase)**(M_ONE / M_THREE)
   
@@ -1259,20 +1259,21 @@ subroutine zxc_complex_lda(mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmp
 
   zec = sum(epsc(:, :, :) * cf%zRS(:, :, :)) * mesh%volume_element
 
-  ex = real(zex)
-  Imex = aimag(zex)
-  ec = real(zec)
-  Imec = aimag(zec)
-
+  if(calc_energy) then
+    ex = real(zex)
+    Imex = aimag(zex)
+    ec = real(zec)
+    Imec = aimag(zec)
+  end if
   ! okay, now we write the potential back into cf and distribute that
   cf%zRS(:, :, :) = vxbuf(:, :, :) + zvc_arr(:, :, :)
   call zcube_to_mesh(cube, cf, mesh, zvxc_local, .true.)
   call zcube_function_free_rs(cube, cf)
   call cube_end(cube)
-
-  vxc(:, 1) = real(zvxc_local(:))
-  Imvxc(:, 1) = aimag(zvxc_local(:))
-  
+  if(present(vxc)) then
+    vxc(:, 1) = real(zvxc_local(:))
+    Imvxc(:, 1) = aimag(zvxc_local(:))
+  end if
   SAFE_DEALLOCATE_A(vxbuf)
   SAFE_DEALLOCATE_A(rootrs)
 
@@ -1294,7 +1295,7 @@ end subroutine zxc_complex_lda
 !> This is the complex scaled interface for xc functionals.
 !! It will eventually be merged with the other one dxc_get_vxc after some test
 !! -----------------------------------------------------------------------------
-subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec, Imvxc, cmplxscl_th)
+subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec, Imvxc, theta)
   type(derivatives_t),  intent(in)    :: der             !< Discretization and the derivative operators and details
   type(xc_t), target,   intent(in)    :: xcs             !< Details about the xc functional used
   FLOAT,                intent(in)    :: rho(:, :)       !< Electronic density 
@@ -1306,7 +1307,7 @@ subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec
   FLOAT, optional,      intent(inout) :: Imex            !< cmplxscl: Exchange energy.
   FLOAT, optional,      intent(inout) :: Imec            !< cmplxscl: Correlation energy
   FLOAT, optional,      intent(inout) :: Imvxc(:,:)      !< cmplxscl: XC potential
-  FLOAT,                intent(in)    :: cmplxscl_th     !< complex scaling angle
+  FLOAT,                intent(in)    :: theta           !< complex scaling angle
 
   
   CMPLX, pointer :: zpot(:), zrho_tot(:)
@@ -1319,6 +1320,10 @@ subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec
 
   ASSERT(present(ex) .eqv. present(ec))
   calc_energy = present(ex)
+  
+  ASSERT(present(vxc) .eqv. present(Imvxc))
+  ASSERT(present(ex) .eqv. present(Imex))
+  ASSERT(present(ec) .eqv. present(Imec))
 
   !Pointer-shortcut for xcs%functl
   !It helps to remember that for xcs%functl(:,:)
@@ -1334,10 +1339,20 @@ subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec
   
   if(functl(1)%id == XC_LDA_XC_CMPLX) then
     
-    call zxc_complex_lda(der%mesh, rho, vxc, ex, ec, Imrho, Imvxc, Imex, Imec, cmplxscl_th)
-
+    if(calc_energy) then
+      if(present(vxc)) then
+        call zxc_complex_lda(der%mesh, rho, Imrho, theta, ex, Imex, ec, Imec, vxc, Imvxc)
+      else
+        call zxc_complex_lda(der%mesh, rho, Imrho, theta, ex, Imex, ec, Imec)
+      end if
+    else
+      if(present(vxc)) then
+        call zxc_complex_lda(der%mesh, rho, Imrho, theta, vxc=vxc, Imvxc=Imvxc)
+      else
+        call zxc_complex_lda(der%mesh, rho, Imrho, theta)
+      end if    
+    end if
   else if(functl(1)%id == XC_HALF_HARTREE) then
-
     ! Exact exchange for 2 particles [vxc(r) = 1/2 * vh(r)]
     ! we keep it here for debug purposes
     !print*, 'half hartree exchange'
@@ -1349,7 +1364,7 @@ subroutine xc_get_vxc_cmplx(der, xcs, rho, ispin, ex, ec, vxc, Imrho, Imex, Imec
       zrho_tot(:) = zrho_tot(:)+ rho(:,isp) +M_zI * Imrho(:,isp)
     end do
 
-    call zpoisson_solve(psolver, zpot, zrho_tot, theta = cmplxscl_th)
+    call zpoisson_solve(psolver, zpot, zrho_tot, theta = theta)
 
     zpot = - zpot /CNST(2.0)
     vxc(:,1) = real(zpot(:)) 

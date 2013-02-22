@@ -53,7 +53,11 @@ contains
 
     write(message(1), '(a)')        "States"
     write(message(2), '(a,f10.1,a)') "  real    ", wfns,       " [Mb] (par_kpoints + par_states + par_domains)"
-    write(message(3), '(a,f10.1,a)') "  complex ", M_TWO*wfns, " [Mb] (par_kpoints + par_states + par_domains)"
+    if(.not. sys%st%have_left_states) then
+      write(message(3), '(a,f10.1,a)') "  complex ", M_TWO*wfns, " [Mb] (par_kpoints + par_states + par_domains)"
+    else
+      write(message(3), '(a,f10.1,a)') "  complex ", M_TWO*M_TWO*wfns, " [Mb] (par_kpoints + par_states + par_domains) * 2"
+    end if
     call messages_info(3)
 
   end subroutine memory_run

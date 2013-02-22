@@ -1,9 +1,9 @@
 CalculationMode = gs
 
 ExperimentalFeatures = yes
-ComplexScaling = yes
+ComplexScaling = space
 
-ComplexScalingAngle = 0.4
+ComplexScalingTheta = 0.4
 
 Dimensions = 1
 ForceComplex = true # arpack solver works only if ForceComplex
@@ -24,7 +24,7 @@ TheoryLevel = independent_particles
 
 Eigensolver = arpack
 
-eith = exp(i * ComplexScalingAngle)
+eith = exp(i * ComplexScalingTheta)
 
 %Species
  'HARMONIC' | 1 | spec_user_defined | 2 | "2*(r*eith)^2"
