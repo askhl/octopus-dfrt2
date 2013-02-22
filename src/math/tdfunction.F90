@@ -232,7 +232,7 @@ module tdfunction_m
       call parse_block_string(blk, i-1, 0, row_name)
       if(trim(row_name).eq.trim(function_name)) then
 
-        call parse_block_integer  (blk, i-1, 1, function_type)
+        call parse_block_integer(blk, i-1, 1, function_type)
 
         a0 = M_ZERO; tau0 = M_ZERO; t0 = M_ZERO; tau1 = M_ZERO
         select case(function_type)
@@ -887,7 +887,7 @@ module tdfunction_m
       y = TOCMPLX(fre, fim)
 
     case default
-      y = M_z0
+      y = M_ZERO
 
     end select
 
@@ -1078,7 +1078,7 @@ module tdfunction_m
 
     PUSH_SUB(tdf_dot_product)
 
-    fg = M_z0
+    fg = M_ZERO
 
     ! For the moment, we will just assume that f and g are of the same type.
     ASSERT(f%mode .eq. g%mode)

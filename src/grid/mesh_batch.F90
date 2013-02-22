@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_batch.F90 8966 2012-04-02 21:21:04Z xavier $
+!! $Id: mesh_batch.F90 10060 2013-02-22 01:07:35Z dstrubbe $
 
 #include "global.h"
 
@@ -82,7 +82,7 @@ subroutine mesh_batch_nrm2(mesh, aa, nrm2, reduce)
   
   if(mesh%parallel_in_domains .and. optional_default(reduce, .true.)) then
     nrm2(1:aa%nst) = nrm2(1:aa%nst)**2
-    call comm_allreduce(mesh%mpi_grp%comm, nrm2, aa%nst)
+    call comm_allreduce(mesh%mpi_grp%comm, nrm2, dim = aa%nst)
     nrm2(1:aa%nst) = sqrt(nrm2(1:aa%nst))
   end if
 

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 06-restart.test 9618 2012-11-13 20:03:09Z dstrubbe $
+# $Id: 06-restart.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : Restart
 Programs   : octopus; octopus_mpi
-TestGroups : short-run
+TestGroups : short-run, finite_systems_3d
 Enabled    : Yes
 
 

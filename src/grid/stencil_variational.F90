@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: stencil_variational.F90 8805 2012-01-25 12:38:37Z joseba $
+!! $Id: stencil_variational.F90 9701 2012-12-01 19:32:19Z dstrubbe $
 
 #include "global.h"
 ! ---------------------------------------------------------
@@ -57,11 +57,11 @@ contains
 
   ! ---------------------------------------------------------
   subroutine stencil_variational_coeff_lapl(dim, order, h, lapl, alpha)
-    integer,                intent(in)    :: dim
-    integer,                intent(in)    :: order
-    FLOAT,                  intent(in)    :: h(:)   ! h(dim)
+    integer,             intent(in)    :: dim
+    integer,             intent(in)    :: order
+    FLOAT,               intent(in)    :: h(:)   !< h(dim)
     type(nl_operator_t), intent(inout) :: lapl
-    FLOAT, optional,        intent(in)    :: alpha
+    FLOAT, optional,     intent(in)    :: alpha
 
     integer :: i, j, k
     FLOAT :: alpha_, kmax

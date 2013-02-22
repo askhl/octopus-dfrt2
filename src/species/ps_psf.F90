@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: ps_psf.F90 8158 2011-08-09 01:14:08Z dstrubbe $
+!! $Id: ps_psf.F90 10044 2013-02-21 00:15:35Z dstrubbe $
 
 #include "global.h"
 
@@ -185,10 +185,12 @@ contains
   subroutine file_to_grid(psf_file, ps_grid)
     type(ps_psf_file_t), intent(in)  :: psf_file
     type(ps_in_grid_t),  intent(out) :: ps_grid
+
     integer :: nrval
+
     PUSH_SUB(file_to_grid)
 
-    ! Initializes the pseudo in the logaritmic grid.
+    ! Initializes the pseudo in the logarithmic grid.
     call ps_in_grid_init(ps_grid,                      &
       LOGRID_PSF, psf_file%a, psf_file%b, psf_file%nr,  &
       psf_file%npotd, psf_file%npotu)
@@ -212,7 +214,7 @@ contains
   ! ---------------------------------------------------------
   subroutine ps_psf_process(ps_psf, lmax, lloc)
     type(ps_psf_t), intent(inout) :: ps_psf
-    integer,       intent(in)    :: lmax, lloc
+    integer,        intent(in)    :: lmax, lloc
 
     PUSH_SUB(psf_process)
 
@@ -245,7 +247,7 @@ contains
 
   ! ---------------------------------------------------------
   subroutine solve_schroedinger(psf_file, g, conf, ispin, rphi, eigen)
-    type(ps_psf_file_t), intent(inout) :: psf_file ! WARNING: should be intent(in)
+    type(ps_psf_file_t), intent(inout) :: psf_file
     type(logrid_t),      intent(in)    :: g
     type(valconf_t),     intent(in)    :: conf
     integer,             intent(in)    :: ispin

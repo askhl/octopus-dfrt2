@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: curv_modine.F90 8805 2012-01-25 12:38:37Z joseba $
+!! $Id: curv_modine.F90 9706 2012-12-01 22:58:17Z dstrubbe $
 
 #include "global.h"
 
@@ -31,7 +31,7 @@ module curv_modine_m
   use geometry_m
   use geometry_m
   use global_m
-  use loct_m
+  use loct_pointer_m
   use parser_m
   use messages_m
   use root_solver_m

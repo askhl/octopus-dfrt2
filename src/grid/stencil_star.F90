@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: stencil_star.F90 8805 2012-01-25 12:38:37Z joseba $
+!! $Id: stencil_star.F90 9701 2012-12-01 19:32:19Z dstrubbe $
 
 #include "global.h"
 
@@ -113,7 +113,7 @@ contains
   subroutine stencil_star_polynomials_lapl(dim, order, pol)
     integer, intent(in)  :: dim
     integer, intent(in)  :: order
-    integer, intent(out) :: pol(:,:) ! pol(dim, order)
+    integer, intent(out) :: pol(:,:) !< pol(dim, order)
 
     integer :: i, j, n
 
@@ -136,7 +136,7 @@ contains
   subroutine stencil_star_coeff_lapl(dim, order, h, lapl)
     integer,                intent(in)    :: dim
     integer,                intent(in)    :: order
-    FLOAT,                  intent(in)    :: h(:)   ! h(dim)
+    FLOAT,                  intent(in)    :: h(:)   !< h(dim)
     type(nl_operator_t),    intent(inout) :: lapl
 
     integer :: k, i, j, morder
@@ -212,7 +212,7 @@ contains
   subroutine stencil_star_polynomials_grad(dir, order, pol)
     integer, intent(in)  :: dir
     integer, intent(in)  :: order
-    integer, intent(out) :: pol(:,:) ! pol(dim, order)
+    integer, intent(out) :: pol(:,:) !< pol(dim, order)
 
     integer :: j
 
@@ -229,8 +229,8 @@ contains
 
   ! ---------------------------------------------------------
   subroutine stencil_star_coeff_grad(order, h, grad)
-    integer,                intent(in)    :: order
-    FLOAT,                  intent(in)    :: h
+    integer,             intent(in)    :: order
+    FLOAT,               intent(in)    :: h
     type(nl_operator_t), intent(inout) :: grad
 
     integer :: j, k, morder

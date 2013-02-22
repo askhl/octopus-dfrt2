@@ -17,12 +17,12 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: Makefile.am 6360 2010-03-21 00:37:36Z xavier $
+## $Id: Makefile.am 10025 2013-02-20 03:17:08Z dstrubbe $
 
 ACLOCAL_AMFLAGS = -I m4
 
 if ENABLE_PERL
-  PERL_DIR = perl
+  PERL_DIR = scripts
 endif
 
 SUBDIRS =        \

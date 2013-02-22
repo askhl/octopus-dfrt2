@@ -1,13 +1,14 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 02-curvilinear_coordinates.test 8321 2011-09-25 00:10:12Z xavier $
+# $Id: 02-curvilinear_coordinates.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : Curvilinear Coordinates
-Programs   : octopus
-TestGroups : short-run
+Programs   : octopus; octopus_mpi
+TestGroups : short-run, finite_systems_3d
 Enabled    : Yes
 
-
+Processors : 1
+# curvilinear not compatible with domain parallelization
+# there is only one state, so we cannot use state parallelization
 Input: 02-curvilinear_coordinates.01-gygi.inp
 match ; Total energy ; GREP(static/info, 'Total       =', 20) ; -2.86805481
 match ; Eigenvalue   ; GREP(static/info, '1   --', 13) ; -0.576032
-

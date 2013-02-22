@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian.F90 9631 2012-11-15 04:57:06Z dstrubbe $
+!! $Id: hamiltonian.F90 10067 2013-02-22 12:24:12Z acastro $
 
 #include "global.h"
 
@@ -203,7 +203,7 @@ contains
   ! ---------------------------------------------------------
   subroutine hamiltonian_init(hm, gr, geo, st, theory_level, xc_family)
     type(hamiltonian_t),    intent(out)   :: hm
-    type(grid_t),           intent(inout) :: gr
+    type(grid_t),   target, intent(inout) :: gr
     type(geometry_t),       intent(inout) :: geo
     type(states_t), target, intent(inout) :: st
     integer,                intent(in)    :: theory_level
@@ -242,7 +242,7 @@ contains
     SAFE_ALLOCATE(hm%vhxc(1:gr%mesh%np, 1:hm%d%nspin))
     hm%vhxc(1:gr%mesh%np, 1:hm%d%nspin) = M_ZERO
 
-    nullify(hm%vxc, hm%vtau, hm%axc)
+    nullify(hm%vhartree, hm%vxc, hm%vtau, hm%axc)
     if(hm%theory_level .ne. INDEPENDENT_PARTICLES) then
 
       SAFE_ALLOCATE(hm%vhartree(1:gr%mesh%np))
@@ -262,13 +262,14 @@ contains
       end if
 
     end if
-    
+
+    nullify(hm%Imvhxc, hm%Imvhartree, hm%Imvxc, hm%Imvtau)
+
     if(hm%cmplxscl%space) then
       
       SAFE_ALLOCATE(hm%Imvhxc(1:gr%mesh%np, 1:hm%d%nspin))
       hm%Imvhxc(1:gr%mesh%np, 1:hm%d%nspin) = M_ZERO
 
-      nullify(hm%Imvxc, hm%Imvtau)
       if(hm%theory_level .ne. INDEPENDENT_PARTICLES) then
 
         SAFE_ALLOCATE(hm%Imvhartree(1:gr%mesh%np))
@@ -939,7 +940,7 @@ contains
       do ilaser = 1, this%ep%no_lasers
         select case(laser_kind(this%ep%lasers(ilaser)))
         case(E_FIELD_SCALAR_POTENTIAL, E_FIELD_ELECTRIC)
-          do ispin = 1, this%d%nspin
+          do ispin = 1, this%d%spin_channels
             call laser_potential(this%ep%lasers(ilaser), mesh,  this%hm_base%potential(:, ispin), time)
           end do
         case(E_FIELD_MAGNETIC)

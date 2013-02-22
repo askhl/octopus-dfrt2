@@ -42,7 +42,8 @@ module symmetries_m
        symmetries_number,             &
        symmetries_apply_kpoint,       &
        symmetries_space_group_number, &
-       symmetries_have_break_dir
+       symmetries_have_break_dir,     &
+       symmetries_identity_index
 
   type symmetries_t
     type(symm_op_t), pointer :: ops(:)
@@ -115,7 +116,7 @@ contains
     character(len=6) :: group_name
     character(len=30) :: group_elements
     integer :: natoms
-    logical :: any_non_spherical
+    logical :: any_non_spherical, symmetries_compute
 
     interface
       subroutine symmetries_finite_init(atoms_count, typs, position, verbosity, point_group)
@@ -156,10 +157,27 @@ contains
         .or. species_type(geo%atom(iatom)%spec) == SPEC_FROM_FILE
     enddo
     if(any_non_spherical) then
-      message(1) = "Symmetries are disabled since non-spherically symmetric species are present."
+      message(1) = "Symmetries are disabled since non-spherically symmetric species may be present."
       call messages_info(1)
       call messages_print_stress(stdout)
+    endif
 
+    !%Variable SymmetriesCompute
+    !%Type logical
+    !%Default (natoms < 100) ? true : false
+    !%Section Execution::Symmetries
+    !%Description
+    !% If disabled, <tt>Octopus</tt> will not compute
+    !% nor print the symmetries.
+    !%End
+    call parse_logical(datasets_check('SymmetriesCompute'), (geo%natoms < 100), symmetries_compute)
+    if(.not. symmetries_compute) then
+      message(1) = "Symmetries have been disabled by SymmetriesCompute = false."
+      call messages_info(1)
+      call messages_print_stress(stdout)
+    endif
+
+    if(any_non_spherical .or. .not. symmetries_compute) then
       ! we only use the identity
       SAFE_ALLOCATE(this%ops(1:1))
       this%nops = 1
@@ -197,14 +215,17 @@ contains
         end forall
 
         verbosity = -1
-        call symmetries_finite_init(geo%natoms, typs(1), position(1, 1), verbosity, point_group)
-        call symmetries_finite_get_group_name(point_group, group_name)
-        call symmetries_finite_get_group_elements(point_group, group_elements)
-        call symmetries_finite_end()
+        
+        if (symmetries_compute) then
+          call symmetries_finite_init(geo%natoms, typs(1), position(1, 1), verbosity, point_group)
+          call symmetries_finite_get_group_name(point_group, group_name)
+          call symmetries_finite_get_group_elements(point_group, group_elements)
+          call symmetries_finite_end()
 
-        call messages_write('Symmetry elements : '//trim(group_elements), new_line = .true.)
-        call messages_write('Symmetry group    : '//trim(group_name))
-        call messages_info()
+          call messages_write('Symmetry elements : '//trim(group_elements), new_line = .true.)
+          call messages_write('Symmetry group    : '//trim(group_name))
+          call messages_info()
+        end if
       end if
 
       SAFE_DEALLOCATE_A(position)
@@ -376,6 +397,22 @@ contains
 
     have = any(abs(this%breakdir(1:3)) > M_EPSILON)
   end function symmetries_have_break_dir
+
+  ! -------------------------------------------------------------------------------
+
+  integer pure function symmetries_identity_index(this) result(index)
+    type(symmetries_t),  intent(in)  :: this
+
+    integer :: iop
+    
+    do iop = 1, this%nops
+      if(symm_op_is_identity(this%ops(iop))) then
+        index = iop
+        cycle
+      end if
+    end do
+
+  end function symmetries_identity_index
 
 end module symmetries_m
 

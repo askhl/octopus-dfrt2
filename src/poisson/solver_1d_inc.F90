@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: solver_1d_inc.F90 9149 2012-06-20 22:37:34Z umberto $
+!! $Id: solver_1d_inc.F90 9854 2013-01-19 23:28:12Z dstrubbe $
 
 
 !-----------------------------------------------------------------
@@ -24,8 +24,16 @@ subroutine poisson1d_init(this)
 
   PUSH_SUB(poisson1d_init)
 
+  !%Variable Poisson1DSoftCoulomParam
+  !%Type float
+  !%Default 1.0 bohr
+  !%Section Hamiltonian::Poisson
+  !%Description
+  !% When <tt>Dimensions = 1</tt>, to prevent divergence, the Coulomb interaction treated by the Poisson
+  !% solver is not 1/r but 1/sqrt(a^2 + r^2), where this variable sets the value of "a".
+  !%End
   call parse_float(datasets_check('Poisson1DSoftCoulombParam'), &
-    M_ONE, this%poisson_soft_coulomb_param)
+    M_ONE, this%poisson_soft_coulomb_param, units_inp%length)
 
   if(this%method == POISSON_FFT) then
     call poisson_fft_init(this%fft_solver, this%der%mesh, this%cube, this%kernel, &
@@ -80,77 +88,20 @@ subroutine poisson1D_solve(this, pot, rho)
       xx = this%der%mesh%x(ip, 1)
       do jp = 1, this%der%mesh%np
         yy = this%der%mesh%x(jp, 1)
-        pot(ip) = pot(ip) + rho(jp)/sqrt(this%poisson_soft_coulomb_param**2 + &
-	         (xx-yy)**2)*this%der%mesh%vol_pp(1)
+        if(this%der%mesh%use_curvilinear) then
+          pot(ip) = pot(ip) + rho(jp)/sqrt(this%poisson_soft_coulomb_param**2 + (xx-yy)**2)*this%der%mesh%vol_pp(jp)
+        else
+          pot(ip) = pot(ip) + rho(jp)/sqrt(this%poisson_soft_coulomb_param**2 + (xx-yy)**2)
+        endif
       end do
     end do
+    if(.not. this%der%mesh%use_curvilinear) pot(:) = pot(:) * this%der%mesh%volume_element
 #ifdef HAVE_MPI
   end if
 #endif
 
   POP_SUB(poisson1D_solve)
 end subroutine poisson1D_solve
-!-----------------------------------------------------------------
-
-!
-! Complex scaled soft Coulomb Hartree Solver
-!
-subroutine zpoisson1D_solve(this, pot, rho, theta)
-  type(poisson_t), intent(in)  :: this
-  CMPLX,           intent(out) :: pot(:)
-  CMPLX,           intent(in)  :: rho(:)
-  FLOAT,           intent(in)  :: theta !< complex scaling angle
-
-  integer  :: ip, jp
-  CMPLX    :: xx, yy
-#ifdef HAVE_MPI
-  CMPLX    :: tmp, xg(1:MAX_DIM)
-  CMPLX, allocatable :: pvec(:)
-#endif
-
-  ASSERT(this%method == -1)
-
-  PUSH_SUB(zpoisson1D_solve)
-
-#ifdef HAVE_MPI
-  if(this%der%mesh%parallel_in_domains) then
-    SAFE_ALLOCATE(pvec(1:this%der%mesh%np))
-
-    pot = M_z0
-    do ip = 1, this%der%mesh%np_global
-      xg = mesh_x_global(this%der%mesh, ip)
-      xx = xg(1)
-      do jp = 1, this%der%mesh%np
-        yy = this%der%mesh%x(jp, 1)
-        pvec(jp) = rho(jp)/sqrt(this%poisson_soft_coulomb_param**2 +&
-         (xx-yy)**2 * exp(M_zI*M_TWO*theta))
-      end do
-      tmp = zmf_integrate(this%der%mesh, pvec)
-      if (this%der%mesh%vp%part(ip).eq.this%der%mesh%vp%partno) then
-        pot(vec_global2local(this%der%mesh%vp, ip, this%der%mesh%vp%partno)) = tmp
-      end if
-    end do
-
-    SAFE_DEALLOCATE_A(pvec)
-
-  else  ! running in serial
-#endif
-    pot = M_z0
-    do ip = 1, this%der%mesh%np
-      xx = this%der%mesh%x(ip, 1)
-      do jp = 1, this%der%mesh%np
-        yy = this%der%mesh%x(jp, 1)
-        pot(ip) = pot(ip) + rho(jp)/sqrt(this%poisson_soft_coulomb_param**2 + &
-	         (xx-yy)**2 * exp(M_zI*M_TWO*theta))*this%der%mesh%vol_pp(1)
-      end do
-    end do
-#ifdef HAVE_MPI
-  end if
-#endif
-
-  POP_SUB(zpoisson1D_solve)
-end subroutine zpoisson1D_solve
-!-----------------------------------------------------------------
 
 
 !! Local Variables:

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson_multigrid.F90 8513 2011-11-06 06:21:47Z dstrubbe $
+!! $Id: poisson_multigrid.F90 9717 2012-12-02 19:17:21Z dstrubbe $
 
 #include "global.h"
 
@@ -31,6 +31,7 @@ module poisson_multigrid_m
   use mesh_function_m
   use messages_m
   use multigrid_m
+  use operate_f_m
   use par_vec_m
   use poisson_corrections_m
   use profiling_m

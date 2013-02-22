@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: io.F90 9346 2012-09-06 00:01:45Z dstrubbe $
+!! $Id: io.F90 9749 2012-12-07 19:49:37Z xavier $
 
 #include "global.h"
 
@@ -649,6 +649,10 @@ contains
     if(grp%size > 1) then
       call MPI_Bcast(ierr, 1, MPI_INTEGER, 0, grp%comm, mpi_err)
       call MPI_Bcast(line, len(line), MPI_CHARACTER, 0, grp%comm, mpi_err)
+      ! MPI_Bcast is not a synchronization point, this can cause
+      ! problems when iopar_read is called several times (in a loop,
+      ! for example). So we add a barrier to make sure the calls are properly synchronized.
+      call MPI_Barrier(grp%comm, mpi_err)
     end if
 #endif
 

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: multicomm.F90 9346 2012-09-06 00:01:45Z dstrubbe $
+!! $Id: multicomm.F90 10034 2013-02-20 17:03:12Z dstrubbe $
 
 #include "global.h"
 
@@ -83,7 +83,7 @@ module multicomm_m
     multicomm_is_slave,              &
     multicomm_have_slaves
 
-  ! possible parallelization strategies
+  !> possible parallelization strategies
   integer, public, parameter ::      &
     P_STRATEGY_SERIAL  = 0,          & !< single domain, all states, k-points on a single processor
     P_STRATEGY_DOMAINS = 1,          & !< parallelization in domains
@@ -198,12 +198,15 @@ contains
       !%Section Execution::Parallelization
       !%Description
       !% Specifies the size of the groups used for the
-      !% parallelization. For example (n_d, n_s, n_k) means we have
-      !% <i>n_p*n_s*n_k</i> processors and that the <i>k</i>-points should be
-      !% divided in <i>n_k</i> groups, the states in <i>n_s</i> groups, and each
-      !% state in <i>n_d</i> domains. You can pass the value <tt>fill</tt> to one
+      !% parallelization, as one number each for domain, states, <i>k</i>-points, and other.
+      !% For example (n_d, n_s, n_k, n_o) means we have
+      !% <i>n_d*n_s*n_k*n_o</i> processors and that electron-hole pairs (only for <tt>CalculationMode = casida</tt>)
+      !% will be divided into <i>n_o</i> groups, the <i>k</i>-points should be
+      !% divided into <i>n_k</i> groups, the states into <i>n_s</i> groups, and the grid
+      !% points into <i>n_d</i> domains. You can pass the value <tt>fill</tt> to one
       !% field: it will be replaced by the value required to complete
-      !% the number of processors in the run.
+      !% the number of processors in the run. Any value for the column corresponding to
+      !% a parallelization strategy unavailable for the current <tt>CalculationMode</tt> will be ignored.
       !%Option fill -1
       !% Replaced by the value required to complete the number of processors.
       !%End
@@ -267,7 +270,6 @@ contains
       !% The values can be combined: for example, <tt>par_domains + par_states</tt>
       !% means a combined parallelization in domains and states.
       !% Default: <tt>par_domains + par_states</tt> for <tt>CalculationMode = td</tt>,
-      !% <tt>par_domains + par_other</tt> for <tt>CalculationMode = casida</tt>,
       !% otherwise <tt>par_domains</tt>.
       !%Option serial 0
       !% <tt>Octopus</tt> will run in serial.
@@ -278,10 +280,10 @@ contains
       !%Option par_kpoints 4
       !% <tt>Octopus</tt> will run parallel in <i>k</i>-points/spin.
       !%Option par_other   8
-      !% Run-mode-dependent. For example, in <tt>casida</tt>, it means parallelization in <i>e-h</i> pairs.
+      !% For <tt>CalculationMode = casida</tt>, it means parallelization in electron-hole pairs.
       !%End
 
-      ! default is set in calc_mode_default_parallel_mask()
+      ! defaults are set ultimately by calc_mode_init, modified with calc_mode_set_parallelization by some calculation modes
 
      if(base_grp%size > 1) then
 
@@ -341,7 +343,7 @@ contains
     subroutine read_block(blk)
       type(block_t), intent(inout) :: blk
 
-      integer :: ii, nn
+      integer :: ii, nn, temp
       logical :: fill_used
 
       PUSH_SUB(multicomm_init.read_block)
@@ -350,9 +352,10 @@ contains
 
       mc%group_sizes = 1
       do ii = 1, min(nn, mc%n_index)
+        call parse_block_integer(blk, 0, ii - 1, temp)
         if(multicomm_strategy_is_parallel(mc, ii)) then
-          call parse_block_integer(blk, 0, ii - 1, mc%group_sizes(ii))
-        else
+          mc%group_sizes(ii) = temp
+        else if(temp /= 1) then
           message(1) = 'In ParallelizationGroupRanks, ignoring specification for ' // par_types(ii)
           message(2) = 'This parallelization strategy is not available.'
           call messages_warning(2)

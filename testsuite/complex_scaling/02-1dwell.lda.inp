@@ -14,7 +14,7 @@ Radius = 4
 ExtraStates = 8
 XCFunctional=lda_xc_cmplx
 #XCFunctional=None
-PoissonSolver=direct1d
+PoissonSolver=direct_sum
 
 # recommended 2 * nstates + 1 or more
 EigenSolverArnoldiVectors = 50

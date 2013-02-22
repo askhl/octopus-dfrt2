@@ -1,0 +1,24 @@
+# -*- coding: utf-8 mode: shell-script -*-
+# $Id: 28-carbon_big_box.01-ground_state.inp 9763 2012-12-12 16:48:28Z xavier $
+#
+
+CalculationMode = gs
+
+FromScratch = yes
+
+%Coordinates
+"C" | 20.0 | 0 | 0
+%
+
+spacing = 10.0
+radius = 180.0
+
+ExtraStates = 2
+
+SpinComponents = spin_polarized
+
+%Occupations
+ 2/3 | 2/3 | 2/3
+ 0   | 0   | 0
+%
+

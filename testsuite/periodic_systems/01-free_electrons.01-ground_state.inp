@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 01-free_electrons.01-ground_state.inp 6937 2010-08-17 06:27:58Z dstrubbe $
+# $Id: 01-free_electrons.01-ground_state.inp 9841 2013-01-18 18:46:01Z dstrubbe $
 
 CalculationMode = gs
 
@@ -8,7 +8,6 @@ FromScratch = yes
 Dimensions = 1
 PeriodicDimensions = 1
 
-OnlyUserDef = yes
 TheoryLevel = independent_particles
 
 %Species

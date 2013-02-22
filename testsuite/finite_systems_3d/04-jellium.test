@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 04-jellium.test 8321 2011-09-25 00:10:12Z xavier $
+# $Id: 04-jellium.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : Jellium
 Programs   : octopus; octopus_mpi
-TestGroups : long-run
+TestGroups : long-run, finite_systems_3d
 Enabled    : Yes
 
 # This test calculates the ground-state of a Na8 cluster, described by

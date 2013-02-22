@@ -1,4 +1,5 @@
-!! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio, G. Bertsch, M. Oliveira, J. Alberdi
+!! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio,
+!! G. Bertsch, M. Oliveira, J. Alberdi-Rodriguez
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -15,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube.F90 9541 2012-10-30 16:48:24Z joseba $
+!! $Id: cube.F90 10049 2013-02-21 10:34:00Z joseba $
 
 #include "global.h"
 
@@ -323,7 +324,7 @@ contains
 
   !!> Given a x, y, z point of the cube, it returns the corresponding process
   !!
-  !! lasf_found is used to speed-up the search
+  !! last_found is used to speed-up the search
   integer pure function cube_point_to_process(xx, yy, zz, part, last_found) result(process)
     integer, intent(in)   :: xx
     integer, intent(in)   :: yy
@@ -331,18 +332,18 @@ contains
     type(dimensions_t), intent(in) :: part(:)
     integer, intent(in) :: last_found
     
-    integer :: ix, iy, iz, proc
+    integer :: proc
     logical :: found
 
     ! No PUSH/POP because it is a PURE function
     
-    do proc = last_found, mpi_world%size
-      !Compare X index
-      if ( xx >= part(proc)%start_x .and. xx < part(proc)%end_x ) then
+    do proc = 1, mpi_world%size
+      !Compare Z index
+      if ( zz >= part(proc)%start_z .and. zz < part(proc)%end_z ) then
         !Compare Y index
         if ( yy >= part(proc)%start_y .and. yy < part(proc)%end_y ) then
-          !Compare Z index
-          if ( zz >= part(proc)%start_z .and. zz < part(proc)%end_z ) then
+          !Compare X index
+          if ( xx >= part(proc)%start_x .and. xx < part(proc)%end_x ) then
             process = proc
             found = .true.
             exit
@@ -350,23 +351,6 @@ contains
         end if
       end if
     end do
-    
-    if (.not. found) then
-      do proc = 1, last_found-1
-        !Compare X index
-        if ( xx >= part(proc)%start_x .and. xx < part(proc)%end_x ) then
-          !Compare Y index
-          if ( yy >= part(proc)%start_y .and. yy < part(proc)%end_y ) then
-            !Compare Z index
-            if ( zz >= part(proc)%start_z .and. zz < part(proc)%end_z ) then
-              process = proc
-              found = .true.
-              exit
-            end if
-          end if
-        end if
-      end do
-    end if
       
     ! An error message should be raised, if this point is reached
     if (.not. found) then
@@ -377,10 +361,10 @@ contains
 
   ! ---------------------------------------------------------
   subroutine cube_partition(cube, part)
-    type(cube_t),            intent(in)  :: cube
-    type(dimensions_t), intent(out) :: part(:)
+    type(cube_t), intent(in)  :: cube
+    integer,      intent(out) :: part(:,:,:)
 
-    integer :: tmp_local(6), position, process
+    integer :: tmp_local(6), position, process, ix, iy, iz
     integer, allocatable :: local_sizes(:)
 
     PUSH_SUB(cube_partition)
@@ -406,14 +390,14 @@ contains
 
     do process = 1, cube%mpi_grp%size
       position = ((process-1)*6)+1
-      
-      part(process)%start_x = local_sizes(position)
-      part(process)%start_y = local_sizes(position+1) 
-      part(process)%start_z = local_sizes(position+2) 
-      part(process)%end_x   = local_sizes(position)+local_sizes(position+3)
-      part(process)%end_y   = local_sizes(position+1)+local_sizes(position+4)
-      part(process)%end_z   = local_sizes(position+2)+local_sizes(position+5)
-      
+
+      do iz = local_sizes(position+2), local_sizes(position+2)+local_sizes(position+5)-1
+        do iy = local_sizes(position+1), local_sizes(position+1)+local_sizes(position+4)-1
+          do ix = local_sizes(position), local_sizes(position)+local_sizes(position+3)-1
+            part(ix, iy, iz) = process
+          end do
+        end do
+      end do
     end do
 
     POP_SUB(cube_partition)
@@ -427,14 +411,12 @@ contains
     integer          :: npart
     integer          :: iunit          ! For debug output to files.
     character(len=3) :: filenum
-    type(dimensions_t), allocatable :: part(:)
-    integer :: last_found_proc
-    
+    integer, allocatable :: part(:,:,:)
+
     PUSH_SUB(cube_partition_messages_debug)
 
-    last_found_proc = 1
     if(in_debug_mode) then
-      SAFE_ALLOCATE(part(1:cube%mpi_grp%size))
+      SAFE_ALLOCATE(part(1:cube%rs_n_global(1), 1:cube%rs_n_global(2), 1:cube%rs_n_global(3)))
       call cube_partition(cube, part)
   
       if(mpi_grp_is_root(mpi_world)) then
@@ -451,10 +433,7 @@ contains
           do kk = 1, cube%rs_n_global(3)
             do jj = 1, cube%rs_n_global(2)
               do ii = 1, cube%rs_n_global(1)
-                if(cube_point_to_process(ii, jj, kk, part, last_found_proc) == nn) then
-                  write(iunit, '(3i8)') ii, jj, kk
-                  last_found_proc = nn
-                end if
+                if(part(ii, jj, kk) == nn) write(iunit, '(3i8)') ii, jj, kk
               end do
             end do
           end do

@@ -1,5 +1,5 @@
 !! Copyright (C) 2002-2006 M. Marques, A. Castro, A. Rubio, G. Bertsch, 
-!! J. Alberdi, P. Garcia RisueÃ±o, M. Oliveira
+!! J. Alberdi-Rodriguez, P. Garcia Risueño, M. Oliveira
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson_fmm.F90 9268 2012-08-27 21:08:59Z dstrubbe $
+!! $Id: poisson_fmm.F90 9888 2013-01-24 17:39:22Z joseba $
 
 #include "global.h"
 #ifdef HAVE_LIBFM
@@ -71,8 +71,6 @@ module poisson_fmm_m
 
   type poisson_fmm_t
     FLOAT   :: delta_E_fmm
-    integer :: abs_rel_fmm
-    integer :: dipole_correction
     FLOAT   :: alpha_fmm  !< Alpha for the correction of the FMM
     type(mpi_grp_t) :: all_nodes_grp !< The communicator for all nodes.
     type(mpi_grp_t) :: perp_grp      !< The communicator perpendicular to the mesh communicator.
@@ -105,11 +103,10 @@ contains
     type(c_ptr) ::  ret
     type(mesh_t), pointer :: mesh
 
-    real(kind = fcs_real_kind), parameter           ::  BOX_SIZE = 1.00d0
     logical ::  short_range_flag = .true.
-    real(kind = fcs_real_kind_isoc), dimension(3)   ::  box_a !! = (/BOX_SIZE,0.0d0,0.0d0/)
-    real(kind = fcs_real_kind_isoc), dimension(3)   ::  box_b !!= (/0.0d0,BOX_SIZE,0.0d0/)
-    real(kind = fcs_real_kind_isoc), dimension(3)   ::  box_c !! = (/0.0d0,0.0d0,BOX_SIZE/)
+    real(kind = fcs_real_kind_isoc), dimension(3)   ::  box_a 
+    real(kind = fcs_real_kind_isoc), dimension(3)   ::  box_b 
+    real(kind = fcs_real_kind_isoc), dimension(3)   ::  box_c 
     real(kind = fcs_real_kind_isoc), dimension(3)   ::  offset = (/M_ZERO,M_ZERO,M_ZERO/)
     logical, dimension(3)                           ::  periodicity = (/.false.,.false.,.false./)
     integer(kind = fcs_integer_kind_isoc)           ::  total_particles
@@ -117,10 +114,6 @@ contains
     integer(kind = fcs_integer_kind_isoc)           ::  local_particle_count = -1
     real(kind = fcs_real_kind_isoc), dimension(8)   ::  local_charges
     real(kind = fcs_real_kind_isoc), dimension(24)  ::  local_coordinates
-
-    integer(8) :: periodic
-    integer(8) :: periodicaxes  !< is always 1
-    real(8) :: periodic_length
 
     PUSH_SUB(poisson_fmm_init)
 
@@ -130,68 +123,54 @@ contains
     !%Default 0.0001 
     !%Section Hamiltonian::Poisson 
     !%Description
-    !% Parameter for absolute or relative convergence of FMM.
+    !% Dimensionless parameter for relative convergence of FMM.
     !% Sets energy error bound.
     !% Strong inhomogeneous systems may violate the error bound.
     !% For inhomogeneous systems we have an error-controlled sequential version available
     !% (from Ivo Kabadshow).
+    !%
+    !% Our implementation of FMM (based on H. Dachsel, J. Chem. Phys. 131,
+    !% 244102 (2009)) can keep the error of the Hartree energy below an
+    !% arbitrary bound. The quotient of the value chosen for the maximum
+    !% error in the Hartree energy and the value of the Hartree energy is
+    !% DeltaEFMM.
+    !%
     !%End
     call parse_float(datasets_check('DeltaEFMM'), CNST(1e-4), this%delta_E_fmm)
-
-    !%Variable AbsRelFMM 
-    !%Type integer
-    !%Default 2
-    !%Section Hamiltonian::Poisson 
-    !%Description
-    !% Sets type of error bound.
-    !% 0 = 10^-3 relative error.
-    !% 1 = absolute delta_E error. The error (delta_E) is a fraction of the unity of energy
-    !% 2 = relative delta_E error. The error is the given ratio (delta_E) of the total energy
-    !% > - Could you explain me what is the difference between considering relative
-    !% > or absolute error in the calculations, and why you choose your default as
-    !%  > delta_E=E-3, absrel=relative?
-    !% The default is just standard error, which fits most situations. It
-    !% means, your energy has three significant digits. Lets say the energy of
-    !% your system is 1000.0, then the FMM will compute results with a
-    !% precision of +-1.
-    !% So the result will be
-    !% energy=999 ... 1001.
-    !% If you change delta_E to 10^-6 it would be something in between
-    !% energy=999.999 ... 1000.001
-    !% If you do know the magnitude of your energy and set absrel to an
-    !% absolute error the situation is different. Setting delta_E to 10^-2 means
-    !% you will an energy=999.99..1000.01 which corresponds to 10^5 as
-    !% relative error.
-    !% Which one you choose is up to you. Since you want to calculate periodic
-    !% systems, you may experience very precise results even if you set delta_E
-    !% very low. It is a side effect from the periodicity (totalcharge=0), but
-    !% should not bother you at all. You get this kind of extra precision for free.
-    !%End
-    call parse_integer(datasets_check('AbsRelFMM'), 2, this%abs_rel_fmm)
-
-    !%Variable DipoleCorrection 
-    !%Type integer
-    !%Default 0
-    !%Section Hamiltonian::Poisson 
-    !%Description
-    !% Extrinsic/Intrinsic potential.
-    !% If you want to compare to classical Ewald use 0 or 1.
-    !%Option 0
-    !% FMM decides whether correction should be applied.
-    !%Option 1
-    !% Apply dipole correction.
-    !%Option -1
-    !% Disables dipole correction.
-    !%End
-    call parse_integer(datasets_check('DipoleCorrection'), 0, this%dipole_correction)
 
     !%Variable AlphaFMM
     !%Type float
     !%Default 0.291262136
     !%Section Hamiltonian::Poisson 
     !%Description
-    !% Parameter for the correction of the self-interaction of the
-    !% electrostatic Hartree potential. The default value is 0.291262136.
+    !% Dimensionless parameter for the correction of the self-interaction of the
+    !% electrostatic Hartree potential. 
+    !% 
+    !% Octopus represents charge density in real space grids, each
+    !% point containing a value $\rho$ corresponding to the charge
+    !% density in the cell centered in such point. Therefore, the
+    !% integral for the Hartree potential at point $i$, this is
+    !% $V_H(i)$, can be reduced to a summation:
+    !%
+    !% $V_H(i) = (1/4\pi\epsilon_0) \Omega \sum_{i \neq j} \frac{\rho(\vec{r}(j))}{|\vec{r}(j) - \vec{r}(i)|} + V_{self.int.}(i)$
+    !% where $\Omega$ is the volume of the cell, and $\vec{r}(j)$ is the
+    !% position of the point $j$. The $V_{self.int.}(i)$ corresponds to
+    !% the integral over the cell centered on the point $i$ that is necessary to
+    !% calculate the Hartree potential at point $i$:
+    !%
+    !% $V_{self.int.}(i):=\int_{\Omega(i)}d\vec{r} \frac{\rho(\vec{r}(i))}{|\vec{r}-\vec{r}(i)|}$
+    !%
+    !% In the FMM version implemented into Octopus, a correction method
+    !% for $V_H(i)$ is used (see "A survey of the parallel performance and
+    !% the accuracy of Poisson solvers for electronic structure
+    !% calculations", by Pablo García-Risueño, Joseba Alberdi-Rodriguez, et al.)
+    !% This method defines cells neighbouring cell $i$, which
+    !% have volume $\Omega(i)/8$ (in 3D) and charge density obtained by
+    !% interpolation. In the calculation of $V_H(i)$, in order to avoid
+    !% double counting of charge, and to cancel part of the errors arising
+    !% from considering the distances constant in the summation above, a
+    !% term $-\alpha_{FMM}V_{self.int.}(i)$ is added to the summation (see
+    !% the referred paper for the explicit formulae).
     !%End
     call parse_float(datasets_check('AlphaFMM'), CNST(0.291262136), this%alpha_fmm)
 
@@ -247,21 +226,17 @@ contains
     end if
 
     mesh => der%mesh
-    periodic = mesh%sb%periodic_dim
 
-    if(periodic /= 0) then
-      if ((mesh%sb%box_shape == PARALLELEPIPED) .and. ((mesh%sb%lsize(1) == mesh%sb%lsize(2)) .and. &
+    if(mesh%sb%periodic_dim /= 0) then
+      if (.not.((mesh%sb%box_shape == PARALLELEPIPED) .and. ((mesh%sb%lsize(1) == mesh%sb%lsize(2)) .and. &
         (mesh%sb%lsize(1) == mesh%sb%lsize(3)) .and. &
-        (mesh%sb%lsize(2) == mesh%sb%lsize(3)))) then
-        periodic_length = mesh%sb%lsize(1)
-      else
+        (mesh%sb%lsize(2) == mesh%sb%lsize(3))))) then
         message(1) = "At present, FMM solver for Hartree potential can only deal with cubic boxes. "
         message(2) = " Please, change your Poisson solver or the size or dimensions of your box. "
         call messages_fatal(2)
       end if
     end if
 
-    total_particles = mesh%np_part_global !! mesh%np_globla
     total_particles = mesh%np_global
     ret = fcs_init(this%handle, trim(adjustl(method)) // c_null_char, subcomm)
 
@@ -332,25 +307,17 @@ contains
 
 #ifdef HAVE_LIBFM
     integer(8) :: totalcharges
-    integer(8) :: periodic
-    integer(8) :: periodicaxes  !< is always 1
-    integer(8) :: dipolecorrection
-    integer(8) :: abs_rel
 
     real(kind = fcs_real_kind_isoc), allocatable :: q(:)  
     real(kind = fcs_real_kind_isoc), allocatable :: pot_lib_fmm(:)
     real(kind = fcs_real_kind_isoc), allocatable :: xyz(:)
+    real(kind = fcs_real_kind_isoc), allocatable :: fields(:)
+    integer(kind = fcs_integer_kind_isoc)        :: index
     FLOAT,   allocatable :: rho_tmp(:), pot_tmp(:)
-    real(8) :: delta_E 
-    real(8) :: energy_fmm   !< We don`t use it, but we cannot remove energy_fmm for the moment
-    real(8) :: periodic_length
     real(8) :: aux
     integer :: ii, jj, ip, gip
     type(c_ptr) ::  ret
-    real(kind = fcs_real_kind_isoc), allocatable         ::  fields(:)
-    integer(kind = fcs_integer_kind_isoc)           ::  index
     integer, allocatable :: ix(:)
-    FLOAT :: aux1
     type(mesh_t), pointer :: mesh
 
     type(profile_t), save :: poisson_prof, prof_fmm_lib, prof_fmm_corr, prof_fmm_gat
@@ -388,21 +355,13 @@ contains
       end do
     end do
 
-    abs_rel = this%abs_rel_fmm
-    delta_E = this%delta_E_fmm
     pot_lib_fmm = M_ZERO 
     fields = M_ZERO
-    periodic_length = CNST(2.0)*mesh%sb%lsize(1)
-    periodicaxes = 1
-    dipolecorrection = this%dipole_correction
 
     call profiling_in(prof_fmm_lib, "FMM_LIB")
-
     ret = fcs_tune(this%handle, this%nlocalcharges, this%nlocalcharges, xyz(1), q(this%sp))
-
     ret = fcs_run(this%handle, this%nlocalcharges, this%nlocalcharges, xyz(1), q(this%sp), fields(1), &
          pot_lib_fmm(this%sp))
-
     call profiling_out(prof_fmm_lib)
 
     call profiling_in(prof_fmm_gat, "FMM_GATHER")
@@ -437,9 +396,11 @@ contains
 
     call lalg_copy(mesh%np, rho, rho_tmp)
 
-    ! FMM just calculates contributions from other cells. for self-interaction cell integration, we include 
-    ! (as traditional in octopus) an approximate integration using a spherical cell whose volume is the volume of the actual cell
-    ! Next line is only valid for 3D
+    ! FMM just calculates contributions from other cells. for
+    ! self-interaction cell integration, we include (as traditional in
+    ! octopus) an approximate integration using a spherical cell whose
+    ! volume is the volume of the actual cell Next line is only valid
+    ! for 3D
     if (mesh%sb%dim == 3) then
       if (.not. mesh%use_curvilinear .and. (mesh%spacing(1) == mesh%spacing(2)) .and. &
         (mesh%spacing(2) == mesh%spacing(3)) .and. &

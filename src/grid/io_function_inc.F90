@@ -1,4 +1,4 @@
- !! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio, G. Bertsch, M. Oliveira
+!! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio, G. Bertsch, M. Oliveira
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: io_function_inc.F90 9541 2012-10-30 16:48:24Z joseba $
+!! $Id: io_function_inc.F90 9837 2013-01-17 23:19:38Z dstrubbe $
 
 ! ---------------------------------------------------------
 !
@@ -437,19 +437,20 @@ end subroutine X(io_function_input_global)
 ! ---------------------------------------------------------
 subroutine X(io_function_output) (how, dir, fname, mesh, ff, unit, ierr, is_tmp, geo, grp)
   integer,                    intent(in)  :: how
-  character(len=*),           intent(in)  :: dir, fname
+  character(len=*),           intent(in)  :: dir
+  character(len=*),           intent(in)  :: fname
   type(mesh_t),               intent(in)  :: mesh
-  R_TYPE,                     intent(in)  :: ff(:)
+  R_TYPE,           target,   intent(in)  :: ff(:)
   type(unit_t),               intent(in)  :: unit
   integer,                    intent(out) :: ierr
   logical,          optional, intent(in)  :: is_tmp
   type(geometry_t), optional, intent(in)  :: geo
-  type(mpi_grp_t),  optional, intent(in)  :: grp
+  type(mpi_grp_t),  optional, intent(in)  :: grp !< the group that shares the same data, must contain the domains group
   !
-  logical :: is_tmp_
-
+  logical :: is_tmp_, i_am_root
+  integer :: comm
 #if defined(HAVE_MPI)
-  R_TYPE, allocatable :: ff_global(:)
+  R_TYPE, pointer :: ff_global(:)
 #endif
   !
   PUSH_SUB(X(io_function_output))
@@ -460,57 +461,53 @@ subroutine X(io_function_output) (how, dir, fname, mesh, ff, unit, ierr, is_tmp,
   if(present(is_tmp)) is_tmp_ = is_tmp
 
 #if defined(HAVE_MPI)
+
+  i_am_root = .true.
+  comm = MPI_COMM_NULL
+
   if(mesh%parallel_in_domains) then
     SAFE_ALLOCATE(ff_global(1:mesh%np_global))
 
-    call X(vec_gather)(mesh%vp, mesh%vp%root, ff_global, ff)
+    !note: here we are gathering data that we won`t write if grp is
+    !present, but to avoid it we will have to find out all if the
+    !processes are members of the domain line where the root of grp
+    !lives
+    call X(vec_gather)(mesh%vp, 0, ff_global, ff)
 
-    if(mesh%vp%rank.eq.mesh%vp%root) then
-      call X(io_function_output_global)(how, dir, fname, mesh, ff_global, unit, ierr, is_tmp = is_tmp_, geo = geo)
-    end if
-
-    ! I have to broadcast the error code
-    call MPI_Bcast(ierr, 1, MPI_INTEGER, mesh%vp%root, mesh%vp%comm, mpi_err)
-
-    if(in_debug_mode) call messages_debug_newlines(2)
-
-    SAFE_DEALLOCATE_A(ff_global)
-
+    i_am_root = (mesh%vp%rank == 0)
+    comm = mesh%vp%comm
   else
+    ff_global => ff
+  end if
 
-    if(present(grp)) then ! only root writes output
-      if(grp%rank.eq.0) then
-        call X(io_function_output_global)(how, dir, fname, mesh, ff, unit, ierr, is_tmp = is_tmp_, geo = geo)
-      end if
-      ! I have to broadcast the error code
-      if(grp%size > 1) then
-        call MPI_Bcast(ierr, 1, MPI_INTEGER, 0, grp%comm, mpi_err)
-      end if
+  if(present(grp)) then
+    i_am_root = i_am_root .and. (grp%rank == 0)
+    comm = grp%comm
+  end if
 
-      if(in_debug_mode) call messages_debug_newlines(2)
+  if(i_am_root) then
+    call X(io_function_output_global)(how, dir, fname, mesh, ff_global, unit, ierr, is_tmp = is_tmp_, geo = geo)
+  end if
 
-    else ! all nodes write output
+  if(comm /= MPI_COMM_NULL) then
+    ! I have to broadcast the error code
+    call MPI_Bcast(ierr, 1, MPI_INTEGER, 0, comm, mpi_err)
+    ! Add a barrier to ensure that the process are synchronized
+    call MPI_Barrier(comm, mpi_err)
+  end if
 
-      if (present(geo)) then
-        call X(io_function_output_global)(how, dir, fname, mesh, ff, unit, ierr, is_tmp = is_tmp_, geo = geo)
-      else
-        call X(io_function_output_global)(how, dir, fname, mesh, ff, unit, ierr, is_tmp = is_tmp_)
-      end if !present(geo)
-    end if !present(grp)
-
-  end if !mesh%parallel_in_domains
+  if(mesh%parallel_in_domains) then
+    SAFE_DEALLOCATE_P(ff_global)
+  else
+    nullify(ff_global)
+  end if
 
 #else
 
   ! serial mode
-  if(mesh%parallel_in_domains) then
-    ASSERT(.false.)
-  end if
-   if (present(geo)) then
-     call X(io_function_output_global)(how, dir, fname, mesh, ff, unit, ierr, is_tmp = is_tmp_, geo = geo)
-   else
-     call X(io_function_output_global)(how, dir, fname, mesh, ff, unit, ierr, is_tmp = is_tmp_)
-   endif
+  ASSERT(.not. mesh%parallel_in_domains)
+  call X(io_function_output_global)(how, dir, fname, mesh, ff, unit, ierr, is_tmp = is_tmp_, geo = geo)
+
 #endif
 
   POP_SUB(X(io_function_output))
@@ -976,15 +973,25 @@ contains
     FLOAT :: offset(3)
     type(cube_t) :: cube
     type(cube_function_t) :: cf
-    character*80 :: fname_ext
+    character(len=80) :: fname_ext
+
+    PUSH_SUB(X(io_function_output_global).out_xcrysden)
+
+#ifdef R_TCOMPLEX
+    if(write_real) then
+      fname_ext = trim(fname) // '.real'
+    else
+      fname_ext = trim(fname) // '.imag'
+    endif
+#else
+    fname_ext = trim(fname)
+#endif
 
     if(mesh%sb%dim .ne. 3) then
-      write(message(1), '(a)') 'Cannot output function in XCrySDen format except in 3D.'
+      write(message(1), '(a)') 'Cannot output function '//trim(fname_ext)//' in XCrySDen format except in 3D.'
       call messages_warning(1)
       return
     endif
-
-    PUSH_SUB(X(io_function_output_global).out_xcrysden)
 
     ! put values in a nice cube
     call cube_init(cube, mesh%idx%ll, mesh%sb)
@@ -1006,15 +1013,6 @@ contains
       enddo
     enddo
     
-#ifdef R_TCOMPLEX
-    if(write_real) then
-      fname_ext = trim(fname) // '.real'
-    else
-      fname_ext = trim(fname) // '.imag'
-    endif
-#else
-    fname_ext = trim(fname)
-#endif
     iunit = io_open(trim(dir)//'/'//trim(fname_ext)//".xsf", action='write', is_tmp=is_tmp)
 
     ASSERT(present(geo))

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: epot.F90 9329 2012-09-05 16:15:01Z dstrubbe $
+!! $Id: epot.F90 9812 2013-01-06 12:22:29Z xavier $
 
 #include "global.h"
 
@@ -178,6 +178,9 @@ contains
     ! Local part of the pseudopotentials
     SAFE_ALLOCATE(ep%vpsl(1:gr%mesh%np))
     ep%vpsl(1:gr%mesh%np) = M_ZERO
+
+    nullify(ep%Imvpsl)
+
     if(cmplxscl) then
       SAFE_ALLOCATE(ep%Imvpsl(1:gr%mesh%np))
       ep%Imvpsl(1:gr%mesh%np) = M_ZERO
@@ -539,11 +542,11 @@ contains
 
   ! ---------------------------------------------------------
   subroutine epot_generate(ep, gr, geo, st, cmplxscl)
-    type(epot_t),          intent(inout) :: ep
-    type(grid_t), target,  intent(in)    :: gr
-    type(geometry_t),      intent(in)    :: geo
-    type(states_t),        intent(inout) :: st
-    logical,               intent(in)    :: cmplxscl  
+    type(epot_t),             intent(inout) :: ep
+    type(grid_t),     target, intent(in)    :: gr
+    type(geometry_t), target, intent(in)    :: geo
+    type(states_t),           intent(inout) :: st
+    logical,                  intent(in)    :: cmplxscl  
 
     integer :: ia, ip
     type(atom_t),      pointer :: atm
@@ -892,6 +895,8 @@ contains
   end subroutine epot_precalc_local_potential
 
   ! ---------------------------------------------------------
+  !> For details about this routine, see
+  !! http://www.tddft.org/programs/octopus/wiki/index.php/Developers:Ion-Ion_interaction
   subroutine ion_interaction_calculate(geo, sb, gr, ep, energy, force)
     type(geometry_t), target, intent(in)    :: geo
     type(simul_box_t),        intent(in)    :: sb
@@ -911,10 +916,6 @@ contains
 
     call profiling_in(ion_ion_prof, "ION_ION_INTERACTION")
     PUSH_SUB(ion_interaction_calculate)
-
-    ! see
-    ! http://www.tddft.org/programs/octopus/wiki/index.php/Developers:Ion-Ion_interaction
-    ! for details about this routine.
 
     energy = M_ZERO
     force(1:sb%dim,1:geo%natoms) = M_ZERO
@@ -1030,7 +1031,7 @@ contains
     type(geometry_t),  target, intent(in)    :: geo
     type(simul_box_t),         intent(in)    :: sb
     FLOAT,                     intent(out)   :: energy
-    FLOAT,                     intent(out)   :: force(:, :) ! sb%dim, geo%natoms
+    FLOAT,                     intent(out)   :: force(:, :) !< sb%dim, geo%natoms
 
     type(species_t), pointer :: spec
     FLOAT :: rr, xi(1:MAX_DIM), zi, zj, ereal, efourier, eself, erfc, rcut
@@ -1263,7 +1264,7 @@ contains
      !Add off-diagonal, self-interaction and its correction
      ep%eii=ep%eii+sicn2-sicn
 
-    write(68,*) "ep%eii values very bottom", ep%eii * CNST(2.0*13.60569193)
+    write(68,*) "ep%eii values very bottom", ep%eii * CNST(2.0)*CNST(13.60569193)
 
     do iatom = 1, geo%natoms
       zi = species_zval(geo%atom(iatom)%spec)

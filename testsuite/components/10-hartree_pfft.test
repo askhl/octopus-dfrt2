@@ -1,10 +1,10 @@
 # -*- coding: utf-8 mode: shell-script -*-
 # $Id: oct-run_regression_test.pl 2423 2006-09-24 21:25:52Z acastro $
 
-Test       : Hartree
+Test       : Hartree pfft
 Options    : pfft
 Programs   : oct-test_mpi
-TestGroups : short-run
+TestGroups : short-run, components
 Enabled    : Yes
 
 Precision : 0.005

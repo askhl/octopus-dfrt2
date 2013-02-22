@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson_cg.F90 9339 2012-09-05 22:01:37Z dstrubbe $
+!! $Id: poisson_cg.F90 9890 2013-01-25 17:35:48Z dstrubbe $
 
 #include "global.h"
 
@@ -83,7 +83,7 @@ contains
 
     ! build initial guess for the potential
     wk(1:der%mesh%np) = pot(1:der%mesh%np)
-    call boundary_conditions(corrector, der%mesh, rho, wk)
+    call poisson_boundary_conditions(corrector, der%mesh, rho, wk)
     call dderivatives_lapl(der, wk, lwk, .true.)
 
     zk(1:der%mesh%np) = -M_FOUR*M_PI*rho(1:der%mesh%np) - lwk(1:der%mesh%np)

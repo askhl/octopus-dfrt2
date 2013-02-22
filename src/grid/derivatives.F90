@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: derivatives.F90 9287 2012-08-30 18:33:53Z xavier $
+!! $Id: derivatives.F90 9654 2012-11-20 17:29:30Z dstrubbe $
 
 #include "global.h"
 
@@ -152,9 +152,9 @@ contains
 
   ! ---------------------------------------------------------
   subroutine derivatives_init(der, sb, use_curvilinear)
-    type(derivatives_t), intent(out) :: der
-    type(simul_box_t),   intent(in)  :: sb
-    logical,             intent(in)  :: use_curvilinear
+    type(derivatives_t), target, intent(out) :: der
+    type(simul_box_t),           intent(in)  :: sb
+    logical,                     intent(in)  :: use_curvilinear
 
     integer :: idir
 

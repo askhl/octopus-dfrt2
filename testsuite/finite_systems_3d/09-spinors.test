@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 09-spinors.test 8321 2011-09-25 00:10:12Z xavier $
+# $Id: 09-spinors.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test     : Spinors
 Programs : octopus; octopus_mpi
-TestGroups  : short-run
+TestGroups  : short-run, finite_systems_3d
 Enabled  : Yes
 
 Input: 09-spinors.01-ground_state.inp
@@ -26,4 +26,5 @@ Precision : 0.00021
 match ; mx           ; GREP(static/info, 'Local Magnetic Moments', 20, 2) ; 0.394958
 match ; my           ; GREP(static/info, 'Local Magnetic Moments', 33, 2) ; 0.394958
 match ; mz           ; GREP(static/info, 'Local Magnetic Moments', 46, 2) ; 0.829468
-
+# This differs significantly from the initial magnetization.
+# It is due to the small radius and large spacing.

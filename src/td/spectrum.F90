@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: spectrum.F90 9613 2012-11-13 17:32:49Z micael $
+!! $Id: spectrum.F90 9937 2013-02-06 00:33:17Z acastro $
 
 #include "global.h"
 
@@ -132,7 +132,7 @@ contains
     !% Dynamic structure factor (also known as energy-loss function or spectrum).
     !%End
 
-    call parse_integer  (datasets_check('PropagationSpectrumType'), SPECTRUM_ABSORPTION, spectrum%spectype)
+    call parse_integer(datasets_check('PropagationSpectrumType'), SPECTRUM_ABSORPTION, spectrum%spectype)
     if(.not.varinfo_valid_option('PropagationSpectrumType', spectrum%spectype)) call input_error('PropagationSpectrumType')
 
     !%Variable SpectrumMethod
@@ -147,7 +147,7 @@ contains
     !%Option compressed_sensing 2
     !% (Experimental) Uses the compressed sensing technique.
     !%End
-    call parse_integer  (datasets_check('SpectrumMethod'), SPECTRUM_FOURIER, spectrum%method)
+    call parse_integer(datasets_check('SpectrumMethod'), SPECTRUM_FOURIER, spectrum%method)
     if(.not.varinfo_valid_option('SpectrumMethod', spectrum%method)) then
       call input_error('SpectrumMethod')
     endif
@@ -188,7 +188,7 @@ contains
     default = SPECTRUM_DAMP_POLYNOMIAL
     if(spectrum%method == SPECTRUM_COMPRESSED_SENSING) default = SPECTRUM_DAMP_NONE
 
-    call parse_integer  (datasets_check('PropagationSpectrumDampMode'), default, spectrum%damp)
+    call parse_integer(datasets_check('PropagationSpectrumDampMode'), default, spectrum%damp)
     if(.not.varinfo_valid_option('PropagationSpectrumDampMode', spectrum%damp)) call input_error('PropagationSpectrumDampMode')
 
     if(spectrum%method == SPECTRUM_COMPRESSED_SENSING .and. spectrum%damp /= SPECTRUM_DAMP_NONE) then
@@ -600,6 +600,7 @@ contains
 
     SAFE_ALLOCATE(sf(0:no_e, nspin))
 
+    if (abs(kick%delta_strength) < 1.d-12) kick%delta_strength = M_ONE
     do ie = 0, no_e
       energy = ie * spectrum%energy_step
       print * , ie, energy, sigma(ie, 1:3, 1), kick%delta_strength
@@ -857,6 +858,7 @@ contains
     end do
 
     ! Fourier transformation from time to frequency
+    if (abs(kick%delta_strength) < 1.d-12) kick%delta_strength = M_ONE
     do ie = 0, no_e
       energy = ie * spectrum%energy_step
       do it = istart, iend
@@ -974,6 +976,7 @@ contains
     
     sum1 = M_Z0
     sum2 = M_Z0
+    if (abs(kick%delta_strength) < 1.d-12) kick%delta_strength = M_ONE
     do ie = 0, no_e
       energy = ie * spectrum%energy_step
 
@@ -1091,12 +1094,15 @@ contains
     !xx = omega
     !call hsfunction(xx, minhsval)
 
+    ierr = 0
+
     ie = int(aa/energy_step_)
     ww = ie * energy_step_
     if(ww < aa) then
       ie = ie + 1
       ww = ie * energy_step_
     end if
+    xx = ie * energy_step_
     minhsval = real(funcw_(ie))
     do while(ww <= bb)
       hsval = real(funcw_(ie))
@@ -1131,7 +1137,7 @@ contains
 
     if(ierr .ne. 0) then
       write(message(1),'(a,f14.6,a)') 'spectrum_hsfunction_min: The maximum at', xx,' was not properly converged.'
-      write(message(2),'(a,i5)')      'Error code: ierr'
+      write(message(2),'(a,i12)')      'Error code: ', ierr
       call messages_warning(2)
     end if
     call hsfunction(xx, hsval)

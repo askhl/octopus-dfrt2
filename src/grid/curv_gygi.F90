@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: curv_gygi.F90 9506 2012-10-17 22:35:40Z dstrubbe $
+!! $Id: curv_gygi.F90 9706 2012-12-01 22:58:17Z dstrubbe $
 
 #include "global.h"
 
@@ -26,7 +26,7 @@ module curv_gygi_m
   use datasets_m
   use geometry_m
   use global_m
-  use loct_m
+  use loct_pointer_m
   use parser_m
   use messages_m
   use profiling_m

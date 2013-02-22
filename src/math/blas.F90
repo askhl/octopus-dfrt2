@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: blas.F90 9588 2012-11-09 11:31:08Z joseba $
+!! $Id: blas.F90 9757 2012-12-11 17:36:19Z dstrubbe $
 
 #include "global.h"
 
@@ -207,7 +207,7 @@ module blas_m
   !! Returns the euclidean norm of a vector via the function
   !! name, so that
   !! \f[
-  !! SNRM2 := sqrt( x'*x )
+  !! SNRM2 := sqrt( x`*x )
   !! \f]
   interface blas_nrm2
     real(4) function snrm2(n, dx, incx)

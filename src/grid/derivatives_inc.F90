@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: derivatives_inc.F90 9443 2012-09-17 20:18:46Z dstrubbe $
+!! $Id: derivatives_inc.F90 10030 2013-02-20 14:58:40Z dstrubbe $
 
 ! This module calculates the derivatives (gradients, Laplacians, etc.) 
 ! of a function. Note that the function whose derivative is to be calculated
@@ -29,8 +29,8 @@
 !! boundary conditions for the derivatives, in finite system;
 !! or set according to periodic boundary conditions.
 subroutine X(derivatives_batch_set_bc)(der, ffb)
-  type(derivatives_t), intent(in)    :: der
-  type(batch_t),       intent(inout) :: ffb
+  type(derivatives_t),   intent(in)    :: der
+  type(batch_t), target, intent(inout) :: ffb
 
   integer :: pp, bndry_start, bndry_end
 
@@ -225,7 +225,7 @@ end subroutine X(derivatives_batch_set_bc)
 ! ---------------------------------------------------------
 subroutine X(derivatives_set_bc)(der, ff)
   type(derivatives_t), intent(in)    :: der
-  R_TYPE,              intent(inout) :: ff(:)
+  R_TYPE, target,      intent(inout) :: ff(:) ! target for batch_add_state
 
   type(batch_t) :: batch_ff
 

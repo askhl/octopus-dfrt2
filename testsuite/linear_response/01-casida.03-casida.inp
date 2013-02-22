@@ -1,7 +1,8 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 01-casida.03-casida.inp 9630 2012-11-15 02:31:55Z dstrubbe $
+# $Id: 01-casida.03-casida.inp 10026 2013-02-20 03:36:21Z dstrubbe $
 
 CalculationMode = casida
+ExperimentalFeatures = yes
 
 FromScratch = yes
 
@@ -22,6 +23,12 @@ Radius = 12.0
 Spacing = 0.36
 
 XCFunctional = lda_x + lda_c_vwn
+CasidaTheoryLevel = eps_diff + petersilka + lrtddft_casida + tamm_dancoff + variational
 
 PoissonSolver = fft
 PoissonFFTKernel = multipole_correction
+
+ParallelizationStrategy = par_domains + par_other
+%ParallelizationGroupRanks
+ 2 | 1 | 1 | 2
+%

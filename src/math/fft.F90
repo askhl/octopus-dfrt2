@@ -1,5 +1,5 @@
 !! Copyright (C) 2002-2006 M. Marques, A. Castro, A. Rubio, G. Bertsch
-!! Copyright (C) 2011 J. Alberdi, P. Garcia Risueño, M. Oliveira
+!! Copyright (C) 2011 J. Alberdi-Rodriguez, P. Garcia Risueño, M. Oliveira
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fft.F90 9488 2012-10-09 15:24:50Z joseba $
+!! $Id: fft.F90 9958 2013-02-10 22:29:45Z xavier $
 
 #include "global.h"
 
@@ -55,6 +55,7 @@ module fft_m
   use pfft_params_m
   use profiling_m
   use types_m
+  use unit_system_m
   use varinfo_m
 
   implicit none
@@ -84,7 +85,7 @@ module fft_m
     zfft_backward1
 
 
-  ! global constants
+  !> global constants
   integer, public, parameter :: &
        FFT_NONE    = 0,         &
        FFT_REAL    = 1,         &
@@ -112,20 +113,22 @@ module fft_m
     integer     :: rs_istart(1:3) !< where does the local portion of the function start in real space
     integer     :: fs_istart(1:3) !< where does the local portion of the function start in fourier space
 
+    integer     :: stride_rs(1:3)
+    integer     :: stride_fs(1:3)
+
     type(c_ptr) :: planf                  !< plan for forward transform
     type(c_ptr) :: planb                  !< plan for backward transform
     integer(ptrdiff_t_kind) :: pfft_planf !< PFFT plan for forward transform
     integer(ptrdiff_t_kind) :: pfft_planb !< PFFT plan for backward transform
 
-    ! The next arrays have to be stored here and allocated in the initialization routine because
-    ! PFFT 
+    !> The following arrays have to be stored here and allocated in the initialization routine because of PFFT 
     FLOAT, pointer :: drs_data(:,:,:) !< array used to store the function in real space that is passed to PFFT.
     CMPLX, pointer :: zrs_data(:,:,:) !< array used to store the function in real space that is passed to PFFT.
     CMPLX, pointer ::  fs_data(:,:,:) !< array used to store the function in fourier space that is passed to PFFT
-    logical        :: cl_use_real
 #ifdef HAVE_CLAMDFFT
-    ! data for clAmdFft
-    type(clAmdFftPlanHandle) :: cl_plan
+    !> data for clAmdFft
+    type(clAmdFftPlanHandle) :: cl_plan_fw 
+    type(clAmdFftPlanHandle) :: cl_plan_bw !< for real transforms we need a different plan, so we always use 2
 #endif
 #ifdef HAVE_NFFT
     type(nfft_t) :: nfft 
@@ -143,6 +146,7 @@ contains
   !> initialize the table
   subroutine fft_all_init()
     integer :: ii, iret
+    FLOAT   :: time_limit
 
     PUSH_SUB(fft_all_init)
 
@@ -193,6 +197,20 @@ contains
     !%End
     call parse_integer(datasets_check('FFTPreparePlan'), FFTW_MEASURE, fft_prepare_plan)
     if(.not. varinfo_valid_option('FFTPreparePlan', fft_prepare_plan)) call input_error('FFTPreparePlan')
+     
+!    !%Variable FFTPlanTimeLimit
+!    !%Type float
+!    !%Default -1
+!    !%Section Mesh::FFTs
+!    !%Description
+!    !% Sometimes the FFTW_MEASURE takes a lot of time to compute
+!    !% many different plans. With this variable is possible to limit
+!    !% the time (in seconds) that has roughly going to use for the
+!    !% creation of the plan. If a negative value (default one) is
+!    !% assigned, there is no restriction.
+!    !%End   
+!    call parse_float(datasets_check('FFTPlanTimeLimit'), -M_ONE, time_limit)    
+!    call fftw_set_timelimit(time_limit)
 
 #if defined(HAVE_OPENMP) && defined(HAVE_FFTW3_THREADS)
     if(omp_get_max_threads() > 1) then
@@ -256,11 +274,9 @@ contains
     integer :: ii, jj, fft_dim, idir, column_size, row_size, alloc_size, ierror, n3
     integer :: n_1, n_2, n_3, nn_temp(3), status
     integer :: library_
-    character(len=100) :: str_tmp
     type(mpi_grp_t) :: mpi_grp_
 
 #ifdef HAVE_CLAMDFFT
-    integer(8), allocatable :: stride_rs(:), stride_fs(:)
     real(8) :: scale
 #endif
 
@@ -292,8 +308,10 @@ contains
     
       nn_temp(1:fft_dim) = nn(1:fft_dim)
       do ii = 1, fft_dim
-        ! the AMD OpenCL FFT only supports sizes 2, 3 and 5
-        nn_temp(ii) = fft_size(nn(ii), (/2, 3, 5/))
+        ! the AMD OpenCL FFT only supports sizes 2, 3 and 5, but size
+        ! 5 gives an fpe error on the Radeon 7970 (APPML 1.8), so we
+        ! only use factors 2 and 3
+        nn_temp(ii) = fft_size(nn(ii), (/2, 3/))
         if(fft_optimize .and. optimize(ii)) nn(ii) = nn_temp(ii)
       end do 
       
@@ -435,8 +453,7 @@ contains
       SAFE_ALLOCATE(fft_array(jj)%fs_data(1:n_3, 1:n_1, 1:n3))
 
     case(FFTLIB_CLAMD)
-      fft_array(jj)%cl_use_real = .false.
-      call fftw_get_dims(fft_array(jj)%rs_n_global, (fft_array(jj)%cl_use_real .and. type == FFT_REAL), fft_array(jj)%fs_n_global)
+      call fftw_get_dims(fft_array(jj)%rs_n_global, (type == FFT_REAL), fft_array(jj)%fs_n_global)
       fft_array(jj)%rs_n = fft_array(jj)%rs_n_global
       fft_array(jj)%fs_n = fft_array(jj)%fs_n_global
       fft_array(jj)%rs_istart = 1
@@ -482,76 +499,140 @@ contains
 #endif
     case(FFTLIB_CLAMD)
 #ifdef HAVE_CLAMDFFT
-      call clAmdFftCreateDefaultPlan(fft_array(jj)%cl_plan, opencl%context, fft_dim, int(fft_array(jj)%rs_n_global, 8), status)
+
+      ! create the plans
+      call clAmdFftCreateDefaultPlan(fft_array(jj)%cl_plan_fw, opencl%context, fft_dim, int(fft_array(jj)%rs_n_global, 8), status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftCreateDefaultPlan')
 
-      call clAmdFftSetPlanPrecision(fft_array(jj)%cl_plan, CLFFT_DOUBLE, status)
+      call clAmdFftCreateDefaultPlan(fft_array(jj)%cl_plan_bw, opencl%context, fft_dim, int(fft_array(jj)%rs_n_global, 8), status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftCreateDefaultPlan')
+
+      ! set precision
+
+      call clAmdFftSetPlanPrecision(fft_array(jj)%cl_plan_fw, CLFFT_DOUBLE, status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanPrecision')
 
-      call clAmdFftSetPlanBatchSize(fft_array(jj)%cl_plan, 1_8, status)
+      call clAmdFftSetPlanPrecision(fft_array(jj)%cl_plan_bw, CLFFT_DOUBLE, status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanPrecision')
+
+      ! set number of transforms to 1
+
+      call clAmdFftSetPlanBatchSize(fft_array(jj)%cl_plan_fw, 1_8, status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanBatchSize')
 
-      if(fft_array(jj)%cl_use_real .and. type == FFT_REAL) then
-        call clAmdFftSetLayout(fft_array(jj)%cl_plan, CLFFT_REAL, CLFFT_HERMITIAN_INTERLEAVED, status)
+      call clAmdFftSetPlanBatchSize(fft_array(jj)%cl_plan_bw, 1_8, status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanBatchSize')
+
+      ! set the type precision to double
+
+      call clAmdFftSetPlanPrecision(fft_array(jj)%cl_plan_fw, CLFFT_DOUBLE, status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanPrecision')
+
+      call clAmdFftSetPlanPrecision(fft_array(jj)%cl_plan_bw, CLFFT_DOUBLE, status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanPrecision')
+
+
+      ! set the layout
+
+      if(type == FFT_REAL) then
+
+        call clAmdFftSetLayout(fft_array(jj)%cl_plan_fw, CLFFT_REAL, CLFFT_HERMITIAN_INTERLEAVED, status)
         if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetLayout')
+
+        call clAmdFftSetLayout(fft_array(jj)%cl_plan_bw, CLFFT_HERMITIAN_INTERLEAVED, CLFFT_REAL, status)
+        if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetLayout')
+
       else
-        call clAmdFftSetLayout(fft_array(jj)%cl_plan, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED, status)
+
+        call clAmdFftSetLayout(fft_array(jj)%cl_plan_fw, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED, status)
         if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetLayout')
+
+        call clAmdFftSetLayout(fft_array(jj)%cl_plan_bw, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED, status)
+        if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetLayout')
+
       end if
 
-      call clAmdFftSetResultLocation(fft_array(jj)%cl_plan, CLFFT_OUTOFPLACE, status)
-      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetResultLocation')
-      
-      ! invert the stride for Fortran arrays
-      SAFE_ALLOCATE(stride_rs(1:fft_dim))
-      SAFE_ALLOCATE(stride_fs(1:fft_dim))
+      ! set the plans as at out of place
 
-!      call clAmdFftGetPlanInStride(fft_array(jj)%cl_plan, fft_dim, stride_rs, status)
+      call clAmdFftSetResultLocation(fft_array(jj)%cl_plan_fw, CLFFT_OUTOFPLACE, status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetResultLocation')
+
+      call clAmdFftSetResultLocation(fft_array(jj)%cl_plan_bw, CLFFT_OUTOFPLACE, status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetResultLocation')
+
+      ! invert the stride for Fortran arrays
+
+!      call clAmdFftGetPlanInStride(fft_array(jj)%cl_plan_bw, fft_dim, stride_rs, status)
 !      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftGetPlanInStride')
 
 
-!      call clAmdFftGetPlanInStride(fft_array(jj)%cl_plan, fft_dim, stride_fs, status)
+!      call clAmdFftGetPlanInStride(fft_array(jj)%cl_plan_fw, fft_dim, stride_fs, status)
 !      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftGetPlanInStride')
 
 !      print*, "STRIDE IN     ", stride_rs
 !      print*, "STRIDE OUT    ", stride_fs
 
-      stride_rs(1) = 1
-      stride_fs(1) = 1
+      fft_array(jj)%stride_rs(1) = 1
+      fft_array(jj)%stride_fs(1) = 1
       do ii = 2, fft_dim
-        stride_rs(ii) = stride_rs(ii - 1)*fft_array(jj)%rs_n(ii - 1)
-        stride_fs(ii) = stride_fs(ii - 1)*fft_array(jj)%fs_n(ii - 1)
+        fft_array(jj)%stride_rs(ii) = fft_array(jj)%stride_rs(ii - 1)*fft_array(jj)%rs_n(ii - 1)
+        fft_array(jj)%stride_fs(ii) = fft_array(jj)%stride_fs(ii - 1)*fft_array(jj)%fs_n(ii - 1)
       end do
 
 !      print*, "STRIDE NEW IN ", stride_rs
 !      print*, "STRIDE NEW OUT", stride_fs
+
+      ! the strides
       
-      call clAmdFftSetPlanInStride(fft_array(jj)%cl_plan, fft_dim, stride_rs, status)
+      call clAmdFftSetPlanInStride(fft_array(jj)%cl_plan_fw, fft_dim, int(fft_array(jj)%stride_rs, 8), status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanInStride')
 
-      call clAmdFftSetPlanOutStride(fft_array(jj)%cl_plan, fft_dim, stride_fs, status)
+      call clAmdFftSetPlanOutStride(fft_array(jj)%cl_plan_fw, fft_dim, int(fft_array(jj)%stride_fs, 8), status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanOutStride')
+
+      call clAmdFftSetPlanInStride(fft_array(jj)%cl_plan_bw, fft_dim, int(fft_array(jj)%stride_fs, 8), status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanInStride')
+
+      call clAmdFftSetPlanOutStride(fft_array(jj)%cl_plan_bw, fft_dim, int(fft_array(jj)%stride_rs, 8), status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanOutStride')
        
-      SAFE_DEALLOCATE_A(stride_rs)
-      SAFE_DEALLOCATE_A(stride_fs)
-
       ! set the scaling factors
-
-      call clAmdFftSetPlanScale(fft_array(jj)%cl_plan, CLFFT_FORWARD, 1.0_8, status)
-      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanScale')
 
       scale = 1.0_8/(product(real(fft_array(jj)%rs_n_global(1:fft_dim), 8)))
 
-      call clAmdFftSetPlanScale(fft_array(jj)%cl_plan, CLFFT_BACKWARD, scale, status)
+      call clAmdFftSetPlanScale(fft_array(jj)%cl_plan_fw, CLFFT_FORWARD, 1.0_8, status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanScale')
 
-      ! now 'bake' the plan, this signals that the plan is ready to use
-      call clAmdFftBakePlan(fft_array(jj)%cl_plan, opencl%command_queue, status)
+      call clAmdFftSetPlanScale(fft_array(jj)%cl_plan_fw, CLFFT_BACKWARD, scale, status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanScale')
+
+      if(type == FFT_REAL) then
+        
+        call clAmdFftSetPlanScale(fft_array(jj)%cl_plan_bw, CLFFT_FORWARD, 1.0_8, status)
+        if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanScale')
+        
+        call clAmdFftSetPlanScale(fft_array(jj)%cl_plan_bw, CLFFT_BACKWARD, scale, status)
+        if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanScale')
+
+      else
+        
+        call clAmdFftSetPlanScale(fft_array(jj)%cl_plan_bw, CLFFT_FORWARD, scale, status)
+        if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanScale')
+        
+        call clAmdFftSetPlanScale(fft_array(jj)%cl_plan_bw, CLFFT_BACKWARD, 1.0_8, status)
+        if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftSetPlanScale')
+
+      end if
+
+      ! now 'bake' the plans, this signals that the plans are ready to use
+
+      call clAmdFftBakePlan(fft_array(jj)%cl_plan_fw, opencl%command_queue, status)
+      if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftBakePlan')
+
+      call clAmdFftBakePlan(fft_array(jj)%cl_plan_bw, opencl%command_queue, status)
       if(status /= CLFFT_SUCCESS) call clfft_print_error(status, 'clAmdFftBakePlan')
 
 #endif
-
-
 
     case default
       call messages_write('Invalid FFT library.')
@@ -561,32 +642,30 @@ contains
     this = fft_array(jj)
     
     ! Write information
-    write(message(1), '(a)') "Info: FFT allocated with size ("
+    call messages_write('Info: FFT grid dimensions       =')
     do idir = 1, dim
-      write(str_tmp, '(i7,a)') fft_array(jj)%rs_n_global(idir)
-      if(idir == dim) then
-        message(1) = trim(message(1)) // trim(str_tmp) // ") in slot "
-      else
-        message(1) = trim(message(1)) // trim(str_tmp) // ","
-      endif
-    enddo
-    write(str_tmp, '(i2)') jj
-    message(1) = trim(message(1)) // trim(str_tmp)
+      call messages_write(fft_array(jj)%rs_n_global(idir))
+      if(idir < dim) call messages_write(" x ")
+    end do
+    call messages_new_line()
+
+    call messages_write('      Total grid size           =')
+    call messages_write(product(fft_array(jj)%rs_n_global(1:dim)))
+    call messages_write(' (')
+    call messages_write(product(fft_array(jj)%rs_n_global(1:dim))*CNST(8.0), units = unit_megabytes, fmt = '(f6.1)')
+    call messages_write(' )')
+    call messages_info()
+
     select case (library_)
-    case (FFTLIB_FFTW)
-      message(2) = "Info: FFT library = FFTW3"
-      call messages_info(2)
     case (FFTLIB_PFFT)
-      write(message(2),'(a)') "Info: FFT library = PFFT"
-      write(message(3),'(a)') "Info: PFFT processor grid"
-      write(message(4),'(a, i9)') " No. of processors                = ", mpi_grp_%size
-      write(message(5),'(a, i9)') " No. of columns in the proc. grid = ", column_size
-      write(message(6),'(a, i9)') " No. of rows    in the proc. grid = ", row_size
-      write(message(7),'(a, i9)') " The size of integer is = ", ptrdiff_t_kind
-      call messages_info(7)
+      write(message(1),'(a)') "Info: FFT library = PFFT"
+      write(message(2),'(a)') "Info: PFFT processor grid"
+      write(message(3),'(a, i9)') " No. of processors                = ", mpi_grp_%size
+      write(message(4),'(a, i9)') " No. of columns in the proc. grid = ", column_size
+      write(message(5),'(a, i9)') " No. of rows    in the proc. grid = ", row_size
+      write(message(6),'(a, i9)') " The size of integer is = ", ptrdiff_t_kind
+      call messages_info(6)
     case (FFTLIB_NFFT)
-      message(2) = "Info: FFT library = NFFT"
-      call messages_info(2)
 #ifdef HAVE_NFFT
       call nfft_write_info(fft_array(jj)%nfft)
 #endif
@@ -596,14 +675,14 @@ contains
   end subroutine fft_init
   
   ! ---------------------------------------------------------
-  ! Some fft-libary (only NFFT for the moment) needs an additional 
-  ! precomputation stage that depends on the spatial grid whose size 
-  ! may change after fft_init
-  ! ---------------------------------------------------------
+  !> Some fft-libraries (only NFFT for the moment) need an additional 
+  !! precomputation stage that depends on the spatial grid whose size 
+  !! may change after fft_init
   subroutine fft_init_stage1(this, XX)
     type(fft_t),       intent(inout) :: this     !< FFT data type
-    FLOAT, optional,   intent(in)    :: XX(:,:)  !< NFFT spatial nodes on x-axis XX(:,1), y-axis XX(:,2),
-                                                 !! and z-axis XX(:,3) 
+    !> NFFT spatial nodes on x-axis XX(:,1), y-axis XX(:,2),
+    !! and z-axis XX(:,3) 
+    FLOAT, optional,   intent(in)    :: XX(:,:)  
  
     integer :: slot
 
@@ -662,7 +741,8 @@ contains
           SAFE_DEALLOCATE_P(fft_array(ii)%fs_data)
 #ifdef HAVE_CLAMDFFT
         case(FFTLIB_CLAMD)
-          call clAmdFftDestroyPlan(fft_array(ii)%cl_plan, status)
+          call clAmdFftDestroyPlan(fft_array(ii)%cl_plan_fw, status)
+          call clAmdFftDestroyPlan(fft_array(ii)%cl_plan_bw, status)
 #endif
 
 #ifdef HAVE_NFFT
@@ -671,8 +751,6 @@ contains
 #endif
         end select
         fft_refs(ii) = FFT_NULL
-        write(message(1), '(a,i4)') "Info: FFT deallocated from slot ", ii
-        call messages_info(1)
       end if
     end if
 

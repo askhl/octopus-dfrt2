@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: projector.F90 9318 2012-09-04 22:37:48Z dstrubbe $
+!! $Id: projector.F90 9647 2012-11-16 20:22:22Z dstrubbe $
 
 #include "global.h"
 
@@ -141,11 +141,11 @@ contains
 
   !---------------------------------------------------------
   subroutine projector_init(p, mesh, atm, dim, reltype)
-    type(projector_t), intent(inout) :: p
-    type(mesh_t),      intent(in)    :: mesh
-    type(atom_t),      intent(in)    :: atm
-    integer,           intent(in)    :: dim
-    integer,           intent(in)    :: reltype
+    type(projector_t),    intent(inout) :: p
+    type(mesh_t),         intent(in)    :: mesh
+    type(atom_t), target, intent(in)    :: atm
+    integer,              intent(in)    :: dim
+    integer,              intent(in)    :: reltype
 
     type(ps_t), pointer :: ps
     

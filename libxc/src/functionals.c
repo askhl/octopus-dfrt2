@@ -28,7 +28,8 @@ extern XC(func_info_type)
   *XC(lda_known_funct)[], 
   *XC(gga_known_funct)[],
   *XC(hyb_gga_known_funct)[],
-  *XC(mgga_known_funct)[];
+  *XC(mgga_known_funct)[],
+  *XC(hyb_mgga_known_funct)[];
 
 
 /*------------------------------------------------------*/
@@ -101,6 +102,15 @@ int XC(family_from_id)(int id, int *family, int *number)
     }
   }
 
+  /* or is it a hybrid meta GGA? */
+  for(ii=0; XC(hyb_mgga_known_funct)[ii]!=NULL; ii++){
+    if(XC(hyb_mgga_known_funct)[ii]->number == id){
+      if(family != NULL) *family = XC_FAMILY_HYB_MGGA;
+      if(number != NULL) *number = ii;
+      return XC_FAMILY_HYB_MGGA;
+    }
+  }
+
   return XC_FAMILY_UNKNOWN;
 }
 
@@ -132,6 +142,10 @@ int XC(func_init)(XC(func_type) *p, int functional, int nspin)
     p->info = XC(mgga_known_funct)[number];
     return XC(mgga_init)(p, p->info, nspin);
 
+  case(XC_FAMILY_HYB_MGGA):
+    p->info = XC(hyb_mgga_known_funct)[number];
+    return XC(mgga_init)(p, p->info, nspin);
+
   default:
     return -2; /* family not found */
   }
@@ -154,6 +168,7 @@ void XC(func_end)(XC(func_type) *p)
     break;
 
   case(XC_FAMILY_MGGA):
+  case(XC_FAMILY_HYB_MGGA):
     XC(mgga_end)(p);
     break;
   }
@@ -164,13 +179,12 @@ void XC(func_end)(XC(func_type) *p)
 /* returns the mixing coefficient for the hybrid GGAs */
 FLOAT XC(hyb_exx_coef)(const XC(func_type) *p)
 {
-   assert(p!=NULL);
+  assert(p!=NULL);
  
   return p->cam_alpha;
 }
 
-
-/* returns the mixing coefficient for the hybrid GGAs */
+/* returns the CAM parameters for screened hybrids */
 void XC(hyb_cam_coef)(const XC(func_type) *p, FLOAT *omega, FLOAT *alpha, FLOAT *beta)
 {
   assert(p!=NULL);

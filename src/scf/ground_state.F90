@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: ground_state.F90 9469 2012-09-26 08:16:32Z helbig $
+!! $Id: ground_state.F90 9915 2013-01-31 23:03:15Z dstrubbe $
 
 #include "global.h"
 
@@ -85,7 +85,7 @@ contains
 
 #ifdef HAVE_MPI
     ! sometimes a deadlock can occur here (if some nodes can allocate and other cannot)
-    call MPI_Barrier(sys%st%dom_st_kpt_mpi_grp%comm, mpi_err)
+    if(sys%st%dom_st_kpt_mpi_grp%comm > 0) call MPI_Barrier(sys%st%dom_st_kpt_mpi_grp%comm, mpi_err)
 #endif
     call messages_write('      done.')
     call messages_info()
@@ -114,6 +114,8 @@ contains
       end if
     end if
 
+    call scf_init(scfv, sys%gr, sys%geo, sys%st, hm)
+
     if(fromScratch) then
       if(sys%ks%theory_level == RDMFT) then
         call messages_write("RDMFT calculations cannot be started FromScratch")
@@ -121,7 +123,7 @@ contains
         call messages_write("Run a DFT or HF calculation first")
         call messages_fatal()
       else
-        call lcao_run(sys, hm)
+        call lcao_run(sys, hm, lmm_r = scfv%lmm_r)
       endif
     else
       ! setup Hamiltonian
@@ -145,8 +147,7 @@ contains
 
     if(sys%st%d%pack_states) call states_pack(sys%st)
 
-    call scf_init(scfv, sys%gr, sys%geo, sys%st, hm)
-    call scf_run(scfv, sys%gr, sys%geo, sys%st, sys%ks, hm, sys%outp)
+    call scf_run(scfv, sys%mc, sys%gr, sys%geo, sys%st, sys%ks, hm, sys%outp)
     call scf_end(scfv)
 
     if(sys%st%d%pack_states) call states_unpack(sys%st)

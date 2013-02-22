@@ -17,11 +17,12 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: Makefile.am 8926 2012-03-22 15:52:51Z micael $
+## $Id: Makefile.am 9690 2012-11-26 13:02:28Z micael $
 
 ACLOCAL_AMFLAGS = -I m4
 SUBDIRS = build src testsuite
 
+include_HEADERS = xc_version.h
 EXTRA_DIST = ChangeLog PACKAGING TODO
 
 DISTCLEANFILES = ChangeLog

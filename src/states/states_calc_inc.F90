@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_calc_inc.F90 9621 2012-11-13 23:52:57Z dstrubbe $
+!! $Id: states_calc_inc.F90 9913 2013-01-31 05:20:48Z dstrubbe $
 
 
 ! ---------------------------------------------------------
@@ -347,7 +347,7 @@ contains
         aa(jst) = X(mf_dotp)(mesh, st%d%dim, st%X(psi)(:, :, jst, ik), st%X(psi)(:, :, ist, ik), reduce = .false.)
       end do
 
-      if(mesh%parallel_in_domains) call comm_allreduce(mesh%mpi_grp%comm, aa, dim = ist - 1)
+      if(mesh%parallel_in_domains .and. ist > 1) call comm_allreduce(mesh%mpi_grp%comm, aa, dim = ist - 1)
 
       ! substract the projections
       do jst = 1, ist - 1
@@ -792,8 +792,9 @@ end subroutine X(states_normalize_orbital)
 FLOAT function X(states_residue)(mesh, dim, hf, ee, ff) result(rr)
   type(mesh_t),      intent(in)  :: mesh
   integer,           intent(in)  :: dim
-  R_TYPE,            intent(in)  :: hf(:,:), ff(:,:)
+  R_TYPE,            intent(in)  :: hf(:,:)
   FLOAT,             intent(in)  :: ee
+  R_TYPE,            intent(in)  :: ff(:,:)
 
   R_TYPE, allocatable :: res(:,:)
   type(profile_t), save :: prof
@@ -1289,6 +1290,8 @@ subroutine X(states_rotate_in_place)(mesh, st, uu, ik)
       call opencl_kernel_run(kernel_ref, (/st%nst, size/), (/1, 1/))
 
 #endif
+
+      call opencl_finish()
 
       do ib = st%block_start, st%block_end
         call batch_set_points(st%psib(ib, ik), sp, sp + size - 1, psinew_buffer, st%nst)

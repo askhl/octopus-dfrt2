@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fourier_space_inc.F90 9197 2012-07-13 03:00:00Z xavier $
+!! $Id: fourier_space_inc.F90 9959 2013-02-10 23:03:55Z xavier $
 
 ! ---------------------------------------------------------
 !> The following routines convert the function between real space and Fourier space
@@ -70,7 +70,9 @@ subroutine X(fourier_space_op_init)(this, cube, op, in_device)
   type(cube_t),             intent(in)  :: cube
   R_TYPE,                   intent(in)  :: op(:, :, :)
   logical, optional,        intent(in)  :: in_device
-  integer :: ii, jj, kk
+
+  integer :: ii, jj, kk, ii_linear, size
+  R_TYPE, allocatable :: op_linear(:)
 
   PUSH_SUB(X(fourier_space_op_init))
 
@@ -88,10 +90,28 @@ subroutine X(fourier_space_op_init)(this, cube, op, in_device)
     end forall
   else
     this%in_device_memory = .true.
+
+    ASSERT(all(cube%fs_n(1:3) == ubound(op)))
+    
+    size = product(cube%fs_n(1:3))
+
+    SAFE_ALLOCATE(op_linear(1:size))
+
+    do kk = 1, cube%fs_n(3)
+      do jj = 1, cube%fs_n(2)
+        do ii = 1, cube%fs_n(1)
+          ii_linear = 1 + (ii - 1)*cube%fft%stride_fs(1) + (jj - 1)*cube%fft%stride_fs(2) + (kk - 1)*cube%fft%stride_fs(3)
+          op_linear(ii_linear) = op(ii, jj, kk)
+        end do
+      end do
+    end do
+
 #ifdef HAVE_OPENCL
-    call opencl_create_buffer(this%op_buffer, CL_MEM_READ_ONLY, R_TYPE_VAL, product(cube%rs_n(1:3)))
-    call opencl_write_buffer(this%op_buffer, product(cube%rs_n(1:3)), op)
+    call opencl_create_buffer(this%op_buffer, CL_MEM_READ_ONLY, R_TYPE_VAL, size)
+    call opencl_write_buffer(this%op_buffer, size, op_linear)
 #endif
+    
+    SAFE_DEALLOCATE_A(op_linear)
   end if
 
   POP_SUB(X(fourier_space_op_init))

@@ -15,21 +15,21 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: modelmb_density_matrix_inc.F90 9606 2012-11-13 07:43:32Z mjv500 $
+!! $Id: modelmb_density_matrix_inc.F90 9716 2012-12-02 17:17:05Z dstrubbe $
 
-!------------------------------------------------------------
-! This routine calculates the one-body density matrix gamma 
-! for particle ikeeppart, used in higher dimensional model
-! hamiltonian calculations (MJV, NH) 
-!------------------------------------------------------------
+!>------------------------------------------------------------
+!! This routine calculates the one-body density matrix gamma 
+!! for particle ikeeppart, used in higher dimensional model
+!! hamiltonian calculations (MJV, NH) 
+!!------------------------------------------------------------
 subroutine X(mf_calculate_gamma)(ikeeppart, mb_1part, nparticles_densmat, &
      mesh, psi, gamma)
-  integer, intent(in)      :: ikeeppart
-  integer, intent(in)      :: nparticles_densmat
-  type(modelmb_1part_t), intent(in) :: mb_1part
-  type(mesh_t), intent(in) :: mesh
-  R_TYPE, intent(in)       :: psi(:)
-  R_TYPE, intent(out)       :: gamma(:, :)
+  integer,               intent(in)  :: ikeeppart
+  integer,               intent(in)  :: nparticles_densmat
+  type(modelmb_1part_t), intent(in)  :: mb_1part
+  type(mesh_t),          intent(in)  :: mesh
+  R_TYPE,                intent(in)  :: psi(:)
+  R_TYPE,                intent(out) :: gamma(:, :)
 
   integer :: icoord, icoordp, icoord_diff
   integer :: jdim, ip_global, ip, ipp_global

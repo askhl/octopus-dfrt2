@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: forces.F90 9363 2012-09-07 00:10:17Z dstrubbe $
+!! $Id: forces.F90 9794 2012-12-23 21:45:58Z xavier $
 
 #include "global.h"
 
@@ -58,6 +58,9 @@ module forces_m
   use spline_filter_m
   use states_m
   use states_dim_m
+  use symm_op_m
+  use symmetries_m
+  use symmetrizer_m
   use submesh_m
   use varinfo_m
 

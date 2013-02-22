@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 02-cosine_potential.02-unocc.inp 7532 2011-03-03 06:42:10Z dstrubbe $
+# $Id: 02-cosine_potential.02-unocc.inp 9841 2013-01-18 18:46:01Z dstrubbe $
 
 CalculationMode = unocc
 
@@ -11,7 +11,6 @@ PeriodicDimensions = 1
 NumberUnoccStates = 4
 ConvAbsDens = 1e-12
 
-OnlyUserDef = yes
 TheoryLevel = independent_particles
 
 %Species

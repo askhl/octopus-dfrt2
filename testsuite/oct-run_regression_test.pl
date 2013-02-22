@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-# Copyright (C) 2005-2008 H. Appel, M. Marques, X. Andrade
+# Copyright (C) 2005-2012 H. Appel, M. Marques, X. Andrade, D. Strubbe
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 # 02111-1307, USA.
 #
-# $Id: oct-run_regression_test.pl 9450 2012-09-19 16:12:57Z dstrubbe $
+# $Id: oct-run_regression_test.pl 10011 2013-02-19 18:48:51Z dstrubbe $
 
 use Getopt::Std;
 use File::Basename;
@@ -278,38 +278,48 @@ foreach my $octopus_exe (@executables){
 	$return_value = 0;
 
 	if ( !$opt_m ) {
-	  if ( !$opt_n ) {
-	    print "\nStarting test run ...\n";
+	  print "\nStarting test run ...\n";
 
-	    $command_suffix = $command;
+	  $command_suffix = $command;
 
-	    print "$command_suffix" . "\n";
-
-	    # serial or MPI run?
-	    if ( $command_suffix =~ /mpi$/) {
-              if("$global_np" ne "") {
-                    $np = $global_np;
-              }
-	      if( -x "$mpiexec_raw") {
-		if ("$mpiexec" =~ /ibrun/) {
-		    $specify_np = "";
-		    $my_nslots = "MY_NSLOTS=$np";
-		} else {
-		    $specify_np = "-n $np";
-		    $my_nslots = "";
-		}
-		$command_line = "cd $workdir; $my_nslots $mpiexec $specify_np $machinelist $aexec $command_suffix > out";
-	      } else {
-		print "No mpiexec found: Skipping parallel test \n";
-		if (!$opt_p && !$opt_m) { system ("rm -rf $workdir"); }
-		exit 255;
-	      }
-	    } else {
-	      $command_line = "cd $workdir; $aexec $command_suffix > out ";
+	  # serial or MPI run?
+	  if ( $octopus_exe =~ /mpi$/) {
+            if("$global_np" ne "") {
+		$np = $global_np;
+            }
+	    # utility runs should be on only one processor
+	    if ( $command_suffix !~ /mpi$/) {
+		$np = 1;
 	    }
+	    if( -x "$mpiexec_raw") {
+	      if ("$mpiexec" =~ /ibrun/) { # used by SGE parallel environment
+		  $specify_np = "";
+		  $my_nslots = "MY_NSLOTS=$np";
+	      } elsif ("$mpiexec" =~ /runjob/) { # used by BlueGene
+		  $specify_np = "--np $np --exe";
+		  $my_nslots = "";
+	      } else { # for mpirun and Cray's aprun
+		  $specify_np = "-n $np";
+		  $my_nslots = "";
+	      }
+	      $command_line = "cd $workdir; $my_nslots $mpiexec $specify_np $machinelist $aexec $command_suffix > out";
+	    } else {
+	      print "No mpiexec found: Skipping parallel test \n";
+	      if (!$opt_p && !$opt_m) { system ("rm -rf $workdir"); }
+	      exit 255;
+	    }
+	  } else {
+	      $command_line = "cd $workdir; $aexec $command_suffix > out ";
+	  }
 
-	    print "Executing: " . $command_line . "\n";
+# MPI implementations generally permit using more tasks than actual cores, and running tests this way makes it likely for developers to find race conditions.
+	  if($np > 4) {
+	      print "Note: this run calls for more than the standard maximum of 4 MPI tasks.\n";
+	  }
 
+	  print "Executing: " . $command_line . "\n";
+
+	  if ( !$opt_n ) {
 	    $test_start = [gettimeofday];
 	    $return_value = system("$command_line");
 	    $test_end   = [gettimeofday];
@@ -329,11 +339,8 @@ foreach my $octopus_exe (@executables){
 	      $failures++;
 	      $test_succeeded = 0;
 	    }
-
-	  } else {
-	    if(!$opt_i) { print "cd $workdir; $command_suffix > out \n"; }
+	    $test{"run"} = 1;
 	  }
-	  $test{"run"} = 1;
 	}
 
 	# copy all files of this run to archive directory with the name of the
@@ -397,7 +404,7 @@ exit $failures;
 sub find_executables(){
   my $name;
 
-  open(TESTSUITE, "<".$opt_f ) or die "cannot open testsuite file\n";
+  open(TESTSUITE, "<".$opt_f ) or die "cannot open testsuite file '$opt_f'.\n";
   while ($_ = <TESTSUITE>) {
 
     if ( $_ =~ /^Test\s*:\s*(.*)\s*$/) {

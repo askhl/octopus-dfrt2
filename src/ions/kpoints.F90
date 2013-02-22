@@ -47,9 +47,11 @@ module kpoints_m
     kpoints_get_weight,      &
     kpoints_get_point,       &
     kpoints_set_point,       &
-    kpoints_set_transport_mode,&
-    kpoints_write_info,      &
-    kpoints_point_is_gamma
+    kpoints_set_transport_mode,   &
+    kpoints_write_info,           &
+    kpoints_point_is_gamma,       &
+    kpoints_get_symmetry_ops,     &
+    kpoints_get_num_symmetry_ops
 
   type kpoints_grid_t
     FLOAT, pointer :: point(:, :)
@@ -71,6 +73,8 @@ module kpoints_m
     ! For the modified Monkhorst-Pack scheme
     integer        :: nik_axis(MAX_DIM)    !< number of MP divisions
     FLOAT          :: shifts(MAX_DIM)      ! 
+    integer, pointer :: symmetry_ops(:, :)
+    integer, pointer :: num_symmetry_ops(:)
   end type kpoints_t
 
   integer, parameter ::                &
@@ -141,6 +145,9 @@ contains
     PUSH_SUB(kpoints_init)
 
     ASSERT(dim <= MAX_DIM)
+
+    nullify(this%symmetry_ops)
+    nullify(this%num_symmetry_ops)
 
     !%Variable KPointsUseSymmetries
     !%Type logical
@@ -244,6 +251,8 @@ contains
       logical       :: gamma_only_
       integer       :: ii, ncols
       type(block_t) :: blk
+      integer, allocatable :: symm_ops(:, :), num_symm_ops(:)
+      
 
       PUSH_SUB(kpoints_init.read_MP)
 
@@ -263,7 +272,7 @@ contains
       !% zone, and the actual number of <i>k</i>-points is usually
       !% reduced exploiting the symmetries of the system.  By default
       !% the grid will always include the Gamma point. An optional
-      !% second row can specify a shift in the <i>k</i>-points.
+      !% second row can specify a shift in the <i>k</i>-points (between 0 and 1).
       !% The number of columns should be equal to <tt>Dimensions</tt>,
       !% but the grid and shift numbers should be 1 and zero in finite directions.
       !%
@@ -320,11 +329,36 @@ contains
 
       call kpoints_grid_copy(this%full, this%reduced)
 
-      if(this%use_symmetries) then
-        call kpoints_grid_reduce(symm, this%use_time_reversal, &
-          this%reduced%npoints, dim, this%reduced%red_point, this%reduced%weight)
-      end if
 
+      if(this%use_symmetries) then
+
+        SAFE_ALLOCATE(num_symm_ops(1:this%full%npoints))
+        SAFE_ALLOCATE(symm_ops(1:this%full%npoints, 1:symmetries_number(symm)))
+        
+        call kpoints_grid_reduce(symm, this%use_time_reversal, &
+          this%reduced%npoints, dim, this%reduced%red_point, this%reduced%weight, symm_ops, num_symm_ops)
+        
+        ! sanity checks
+        ASSERT(maxval(num_symm_ops) >= 1)
+        ASSERT(maxval(num_symm_ops) <= symmetries_number(symm))
+        ! the total number of symmetry operations in the list has to be equal to the number of k-points
+        ASSERT(sum(num_symm_ops(1:this%reduced%npoints)) == this%full%npoints)
+
+        do ik = 1, this%reduced%npoints
+          ASSERT(all(symm_ops(ik, 1:num_symm_ops(ik)) < symm%nops))
+        end do
+
+        SAFE_ALLOCATE(this%num_symmetry_ops(1:this%reduced%npoints))
+        SAFE_ALLOCATE(this%symmetry_ops(1:this%reduced%npoints, 1:maxval(num_symm_ops)))
+        
+        this%num_symmetry_ops(1:this%reduced%npoints) = num_symm_ops(1:this%reduced%npoints)
+        this%symmetry_ops(1:this%reduced%npoints, 1:maxval(num_symm_ops)) = &
+          symm_ops(1:this%reduced%npoints, 1:maxval(num_symm_ops))
+        
+        SAFE_DEALLOCATE_A(num_symm_ops)
+        SAFE_DEALLOCATE_A(symm_ops)
+      end if
+      
       do ik = 1, this%full%npoints
         call kpoints_to_absolute(klattice, this%full%red_point(:, ik), this%full%point(:, ik), dim)
       end do
@@ -433,6 +467,9 @@ contains
 
     call kpoints_grid_end(this%full)
     call kpoints_grid_end(this%reduced)
+
+    SAFE_DEALLOCATE_P(this%symmetry_ops)
+    SAFE_DEALLOCATE_P(this%num_symmetry_ops)
 
     POP_SUB(kpoints_end)
   end subroutine kpoints_end
@@ -625,13 +662,15 @@ contains
 
   
   ! --------------------------------------------------------------------------------------------
-  subroutine kpoints_grid_reduce(symm, time_reversal, nkpoints, dim, kpoints, weights)
+  subroutine kpoints_grid_reduce(symm, time_reversal, nkpoints, dim, kpoints, weights, symm_ops, num_symm_ops)
     type(symmetries_t), intent(in)    :: symm
     logical,            intent(in)    :: time_reversal
     integer,            intent(inout) :: nkpoints
     integer,            intent(in)    :: dim
     FLOAT,              intent(inout) :: kpoints(:, :)
     FLOAT,              intent(out)   :: weights(:)
+    integer,            intent(out)   :: symm_ops(:, :)
+    integer,            intent(out)   :: num_symm_ops(:)
 
     integer :: nreduced
     FLOAT, allocatable :: reduced(:, :)
@@ -657,11 +696,14 @@ contains
 
     nreduced = 0
 
+    num_symm_ops = 1
+    symm_ops(:, 1) = symmetries_identity_index(symm)
+
     do ik = 1, nkpoints
       if (kmap(ik) /= ik) cycle
       
       ! new irreducible point
-      ! mareduced with negative kmap
+      ! mark reduced with negative kmap
       
       nreduced = nreduced + 1
       reduced(1:dim, nreduced) = kpoints(1:dim, ik)
@@ -686,6 +728,8 @@ contains
           if (all( abs(tran(1:dim) - kpoints(1:dim, ik2)) <= CNST(1.0e-5))) then
             weights(nreduced) = weights(nreduced) + dw
             kmap(ik2) = nreduced
+            INCR(num_symm_ops(nreduced), 1)
+            symm_ops(nreduced, num_symm_ops(nreduced)) = iop
             cycle
           end if
 
@@ -693,6 +737,8 @@ contains
           if (time_reversal .and. all(abs(tran_inv(1:dim) - kpoints(1:dim, ik2)) <= CNST(1.0e-5)) ) then
             weights(nreduced) = weights(nreduced) + dw
             kmap(ik2) = nreduced
+            INCR(num_symm_ops(nreduced), 1)
+            symm_ops(nreduced, num_symm_ops(nreduced)) = iop
           end if
           
         end do
@@ -766,6 +812,34 @@ contains
     is_gamma = (maxval(abs(kpoints_get_point(this, ik))) < M_EPSILON)
     
   end function kpoints_point_is_gamma
+
+  !--------------------------------------------------------
+
+  integer pure function kpoints_get_num_symmetry_ops(this, ik) result(num)
+    type(kpoints_t),    intent(in) :: this
+    integer,            intent(in) :: ik
+
+   if(this%use_symmetries) then
+     num = this%num_symmetry_ops(ik)
+   else
+     num = 1
+   end if
+
+  end function kpoints_get_num_symmetry_ops
+  !--------------------------------------------------------
+
+  integer pure function kpoints_get_symmetry_ops(this, ik, index) result(iop)
+    type(kpoints_t),    intent(in) :: this
+    integer,            intent(in) :: ik
+    integer,            intent(in) :: index
+
+    if(this%use_symmetries) then
+      iop = this%symmetry_ops(ik, index)
+    else
+      iop = 1
+    end if
+
+  end function kpoints_get_symmetry_ops
 
 end module kpoints_m
 

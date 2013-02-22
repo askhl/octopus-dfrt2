@@ -74,6 +74,8 @@ while($_ = <IN>){
     $number  = $2;
     $comment = $3;
 
+    next if($option =~ /^XC_\S+_K_/);
+
     if($option =~ /^XC_\S+_C_/ || $option =~ /^XC_\S+_XC_/){
       $number *= 1000;
     }
@@ -85,10 +87,14 @@ while($_ = <IN>){
 print OUT <<EOF;
 !%Option oep_x                    901
 !% OEP: Exact exchange
+!%Option ks_inversion             801 
+!% Inversion of KS potential
 !%Option lda_xc_cmplx             701
 !% LDA complex scaled exchange-correlation.
 !%Option xc_half_hartree          917
 !% Half-Hartree exchange for two electrons (supports complex scaling)
+!%Option rdmft_xc_m               601
+!% RDMFT Mueller functional
 !%Option none                       0
 !% Exchange and correlation set to zero.
 !%End

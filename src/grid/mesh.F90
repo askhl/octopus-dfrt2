@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh.F90 9539 2012-10-29 17:20:10Z joseba $
+!! $Id: mesh.F90 10062 2013-02-22 01:19:07Z dstrubbe $
 
 #include "global.h"
 
@@ -189,7 +189,7 @@ contains
       if(ii > 1) write(message(1), '(2a)') trim(message(1)), ','
       write(message(1), '(a,f6.3)') trim(message(1)), units_from_atomic(units_out%length, mesh%spacing(ii))
     end do
-    write(message(1), '(5a,f8.5)') trim(message(1)), ') ', &
+    write(message(1), '(5a,f12.5)') trim(message(1)), ') ', &
          '   volume/point [', trim(units_abbrev(units_out%length**mesh%sb%dim)), '] = ',      &
          units_from_atomic(units_out%length**mesh%sb%dim, mesh%vol_pp(1))
     
@@ -210,8 +210,8 @@ contains
     type(mesh_t), intent(in)  :: mesh
     integer,      intent(in)  :: ip
     FLOAT,        intent(out) :: rr
-    FLOAT,        intent(in),  optional :: origin(:) ! origin(sb%dim)
-    FLOAT,        intent(out), optional :: coords(:) ! coords(sb%dim)
+    FLOAT,        intent(in),  optional :: origin(:) !< origin(sb%dim)
+    FLOAT,        intent(out), optional :: coords(:) !< coords(sb%dim)
    
     FLOAT :: xx(MAX_DIM)
 
@@ -235,23 +235,20 @@ contains
   !! to any of the walls of the mesh. The criterion is set by input
   !! parameter "width".
   !!
-  !! mesh  : the mesh.
-  !! ip    : the point in the mesh.
   !! n     : on output, the number (0<=n<=3) of "walls" of the mesh that
   !!         the point is too close to, in order to consider it belonging
   !!         to a mesh.
-  !! dist  : the distances of the point to the walls, for each of the walls
-  !!         that the point is too close to.
-  !! width : the width of the border.
   !!
   !! So, if n > 0, the point is in the border.
   ! ----------------------------------------------------------------------
   logical function mesh_inborder(mesh, geo, ip, dist, width) result(is_on_border)
-    type(mesh_t),     intent(in)  :: mesh
+    type(mesh_t),     intent(in)  :: mesh   !< the mesh
     type(geometry_t), intent(in)  :: geo
-    integer,          intent(in)  :: ip
-    FLOAT,            intent(in)  :: width
-    FLOAT,            intent(out) :: dist ! distance from border
+    integer,          intent(in)  :: ip     !< the point in the mesh
+    FLOAT,            intent(in)  :: width  !< the width of the border
+    !> distance from border. The distances of the point to the walls,
+    !! for each of the walls that the point is too close to.
+    FLOAT,            intent(out) :: dist   
     
     integer :: iatom, jatom, idir
     FLOAT   :: xx(MAX_DIM), rr, dd, radius
@@ -431,11 +428,13 @@ contains
     type(mesh_t), intent(in) :: mesh
     integer,      intent(in) :: iunit
     
+    integer :: idir
+
     PUSH_SUB(mesh_dump)
     
     write(iunit, '(a)')         dump_tag
-    write(iunit, '(a20,7i8)')   'nr(1, :)=           ', mesh%idx%nr(1, 1:mesh%sb%dim)
-    write(iunit, '(a20,7i8)')   'nr(2, :)=           ', mesh%idx%nr(2, 1:mesh%sb%dim)
+    write(iunit, '(a20,7i8)')   'nr(1, :)=           ', (mesh%idx%nr(1, idir), idir = 1, mesh%sb%dim)
+    write(iunit, '(a20,7i8)')   'nr(2, :)=           ', (mesh%idx%nr(2, idir), idir = 1, mesh%sb%dim)
     write(iunit, '(a20,7i8)')   'l(:)=               ', mesh%idx%ll(1:mesh%sb%dim)
     write(iunit, '(a20,7i8)')   'enlarge(:)=         ', mesh%idx%enlarge(1:mesh%sb%dim)
     write(iunit, '(a20,1i10)')  'np=                 ', mesh%np
@@ -510,10 +509,10 @@ contains
   end subroutine mesh_write_fingerprint
 
   ! -----------------------------------------------------------------------
-  ! This function reads the fingerprint of a mesh written in
-  ! filename. If the mesh are equal (same fingerprint) return values
-  ! are 0, otherwise it returns the size of the mesh stored. If the
-  ! fingerprint cannot be read, it returns -1.
+  !> This function reads the fingerprint of a mesh written in
+  !! filename. If the meshes are equal (same fingerprint) return values
+  !! are 0, otherwise it returns the size of the mesh stored. If the
+  !! fingerprint cannot be read, it returns -1.
 
   subroutine mesh_read_fingerprint(mesh, filename, read_np_part, read_np)
     type(mesh_t),     intent(in)  :: mesh
@@ -698,11 +697,11 @@ contains
   end subroutine mesh_end
 
   
-  ! This function returns the point inside the grid corresponding to
-  ! a boundary point when PBCs are used. In case the point does not
-  ! have a correspondence (i.e. other BCs are used in that direction),
-  ! the same point is returned. Note that this function returns a
-  ! global point number when parallelization in domains is used.
+  !> This function returns the point inside the grid corresponding to
+  !! a boundary point when PBCs are used. In case the point does not
+  !! have a correspondence (i.e. other BCs are used in that direction),
+  !! the same point is returned. Note that this function returns a
+  !! global point number when parallelization in domains is used.
   ! ---------------------------------------------------------  
   integer function mesh_periodic_point(mesh, ip) result(ipp)
     type(mesh_t), intent(in)    :: mesh

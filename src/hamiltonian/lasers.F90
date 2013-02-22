@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: lasers.F90 8919 2012-03-15 20:25:41Z acastro $
+!! $Id: lasers.F90 10031 2013-02-20 15:02:03Z dstrubbe $
 
 #include "global.h"
 
@@ -296,7 +296,7 @@ contains
     !%
     !% The three (possibly complex) numbers (<i>nx</i>, <i>ny</i>, <i>nz</i>) mark the polarization 
     !% direction of the field. The float <tt>omega</tt> will be the carrier frequency of the
-    !% pulse. The envelope of the field is a time-dependent function whose definition
+    !% pulse (in energy units). The envelope of the field is a time-dependent function whose definition
     !% must be given in a <tt>TDFunctions</tt> block. <tt>envelope_function_name</tt> is a string (and therefore
     !% it must be surrounded by quotation marks) that must match one of the function names
     !% given in the first column of the <tt>TDFunctions</tt> block.

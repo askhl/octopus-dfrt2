@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson_corrections.F90 9285 2012-08-30 17:38:23Z xavier $
+!! $Id: poisson_corrections.F90 9891 2013-01-25 18:24:40Z dstrubbe $
 
 #include "global.h"
 
@@ -41,10 +41,8 @@ module poisson_corrections_m
     poisson_corrections_init, &
     poisson_corrections_end,  &
     correct_rho,              &
-    boundary_conditions,      &
-    poisson_corr_t
-
-  public ::                   &
+    poisson_boundary_conditions, &
+    poisson_corr_t,           &
     internal_laplacian_op,    &
     internal_dotp,            &
     der_pointer,              &
@@ -80,18 +78,23 @@ contains
 
     PUSH_SUB(poisson_corrections_init)
 
+    if(simul_box_is_periodic(mesh%sb)) &
+      call messages_not_implemented("Poisson boundary corrections for periodic systems")
+
     !%Variable PoissonSolverBoundaries
     !%Type integer
     !%Section Hamiltonian::Poisson
+    !%Default multipole
     !%Description
     !% For finite systems, some Poisson solvers (<tt>multigrid</tt>,
-    !% <tt>cg_corrected</tt> and <tt>fft_corrected</tt>) require the calculation of the
-    !% boundary conditions with an auxiliary method. This variable
-    !% selects that method. The default is <tt>multipole</tt>.
+    !% <tt>cg_corrected</tt>, and <tt>fft</tt> with <tt>PoissonFFTKernel = multipole_correction</tt>)
+    !% require the calculation of the
+    !% boundary conditions with an auxiliary method. This variable selects that method.
     !%Option multipole 1
     !% A multipole expansion of the density is used to approximate the potential on the boundaries.
     !%Option exact 3
-    !% An exact integration of the Poisson equation is done over the boundaries.
+    !% An exact integration of the Poisson equation is done over the boundaries. This option is
+    !% experimental, and not implemented for domain parallelization.
     !%End
     call parse_integer(datasets_check('PoissonSolverBoundaries'), CORR_MULTIPOLE, this%method)
 
@@ -266,7 +269,7 @@ contains
   subroutine get_multipoles(this, mesh, rho, ml, mult)
     type(poisson_corr_t), intent(in)  :: this
     type(mesh_t),         intent(in)  :: mesh
-    FLOAT,                intent(in)  :: rho(:)  ! rho(mesh%np)
+    FLOAT,                intent(in)  :: rho(:)  !< rho(mesh%np)
     integer,              intent(in)  :: ml
     FLOAT,                intent(out) :: mult((ml+1)**2)
 
@@ -311,17 +314,17 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine boundary_conditions(this, mesh, rho, pot)
+  subroutine poisson_boundary_conditions(this, mesh, rho, pot)
     type(poisson_corr_t), intent(in)    :: this    
     type(mesh_t),         intent(in)    :: mesh
-    FLOAT,                intent(in)    :: rho(:)  ! rho(mesh%np)
-    FLOAT,                intent(inout) :: pot(:)  ! pot(mesh%np_part)
+    FLOAT,                intent(in)    :: rho(:)  !< rho(mesh%np)
+    FLOAT,                intent(inout) :: pot(:)  !< pot(mesh%np_part)
 
     integer :: ip, add_lm, ll, mm, bp_lower
     FLOAT   :: xx(MAX_DIM), rr, s1, sa, gylm(1:MAX_DIM)
     FLOAT, allocatable :: mult(:)
 
-    PUSH_SUB(boundary_conditions)
+    PUSH_SUB(poisson_boundary_conditions)
 
     SAFE_ALLOCATE(mult(1:(this%maxl+1)**2))
 
@@ -347,8 +350,8 @@ contains
     end do
 
     SAFE_DEALLOCATE_A(mult)
-    POP_SUB(boundary_conditions)
-  end subroutine boundary_conditions
+    POP_SUB(poisson_boundary_conditions)
+  end subroutine poisson_boundary_conditions
 
 end module poisson_corrections_m
 

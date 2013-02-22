@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_partition.F90 9555 2012-11-06 09:07:31Z joseba $
+!! $Id: mesh_partition.F90 9908 2013-01-30 03:51:19Z dstrubbe $
 
 #include "global.h"
 
@@ -122,7 +122,8 @@ contains
     !%Section Execution::Parallelization
     !%Description
     !% Decides which library to use to perform the mesh partition. By
-    !% default, METIS is used (if available).
+    !% default, METIS is used (if available); otherwise, Zoltan is used.
+    !% METIS is faster than Zoltan but uses more memory since it is serial.
     !%Option metis 2
     !% METIS library.
     !%Option zoltan 3

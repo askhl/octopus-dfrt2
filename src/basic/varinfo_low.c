@@ -16,7 +16,7 @@
  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  02111-1307, USA.
 
- $Id: varinfo_low.c 6722 2010-06-13 12:44:43Z acastro $
+ $Id: varinfo_low.c 9818 2013-01-14 19:25:29Z dstrubbe $
 */
 
 #include <config.h>
@@ -283,9 +283,9 @@ void FC_FUNC_(varinfo_opt_getinfo, VARINFO_OPT_GETINFO)
 
 /* --------------------------------------------------------- 
 
-This function searches for a substring in the name of a variable, if
-var is set to NULL it starts from the beginning of the list, if it is
-different from NULL it asumes is the result of a previous search and
+This function searches for a substring in the name of a variable. If
+var is set to NULL, it starts from the beginning of the list. If it is
+different from NULL, it assumes it is the result of a previous search and
 it starts searching from that point. It returns NULL if nothing is
 found.
 

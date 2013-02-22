@@ -22,12 +22,14 @@
 #include <cl_global.h>
 
 __kernel void density_real(const int nst,
+			   const int np,
 			   const int offset,
 			   __constant double * weights,
 			   const __global double * psi, const int ldpsi,
 			   __global double * density){
   
   int ip  = get_global_id(0);
+  if(ip >= np) return;
 
   double dd = 0.0;
 
@@ -41,22 +43,24 @@ __kernel void density_real(const int nst,
 }
 
 __kernel void density_complex(const int nst,
+			      const int np,
 			      const int offset,
 			      __constant double * weights,
 			      const __global double2 * psi, const int ldpsi,
 			      __global double * density){
   
   int ip  = get_global_id(0);
+  if(ip >= np) return;
 
   double dd = 0.0;
 
   for(int ist = 0; ist < nst; ist ++){
     double2 ff = psi[(ip<<ldpsi) + ist];
     ff = ff*ff;
-    dd += weights[offset + ist]*(ff.x + ff.y);
+    dd += weights[ist]*(ff.x + ff.y);
   }
 
-  density[ip] += dd;
+  density[offset + ip] += dd;
 
 }
 

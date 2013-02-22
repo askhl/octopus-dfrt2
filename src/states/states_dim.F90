@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states_dim.F90 9343 2012-09-05 23:07:49Z dstrubbe $
+!! $Id: states_dim.F90 9706 2012-12-01 22:58:17Z dstrubbe $
 
 #include "global.h"
 
@@ -30,7 +30,7 @@ module states_dim_m
   use io_m
   use kpoints_m
   use lalg_basic_m
-  use loct_m
+  use loct_pointer_m
   use math_m
   use messages_m
   use mesh_m

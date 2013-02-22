@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td_write.F90 9367 2012-09-07 16:31:57Z dstrubbe $
+!! $Id: td_write.F90 9748 2012-12-07 15:36:59Z micael $
 
 #include "global.h"
 
@@ -133,17 +133,17 @@ contains
 
   ! ---------------------------------------------------------
   subroutine td_write_init(writ, gr, st, hm, geo, ions_move, with_gauge_field, kick, iter, max_iter, dt)
-    type(td_write_t),    intent(out)   :: writ
-    type(grid_t),        intent(in)    :: gr
-    type(states_t),      intent(in)    :: st
-    type(hamiltonian_t), intent(inout) :: hm
-    type(geometry_t),    intent(in)    :: geo
-    logical,             intent(in)    :: ions_move
-    logical,             intent(in)    :: with_gauge_field
-    type(kick_t),        intent(in)    :: kick
-    integer,             intent(in)    :: iter
-    integer,             intent(in)    :: max_iter
-    FLOAT,               intent(in)    :: dt
+    type(td_write_t), target, intent(out)   :: writ
+    type(grid_t),             intent(in)    :: gr
+    type(states_t),           intent(in)    :: st
+    type(hamiltonian_t),      intent(inout) :: hm
+    type(geometry_t),         intent(in)    :: geo
+    logical,                  intent(in)    :: ions_move
+    logical,                  intent(in)    :: with_gauge_field
+    type(kick_t),             intent(in)    :: kick
+    integer,                  intent(in)    :: iter
+    integer,                  intent(in)    :: max_iter
+    FLOAT,                    intent(in)    :: dt
 
     FLOAT :: rmin
     integer :: ierr, first, ii, ist, jj, flags, iout, default
@@ -190,7 +190,7 @@ contains
     !% in the file <tt>td.general/acceleration</tt>. This file can then be
     !% processed by the utility <tt>oct-harmonic-spectrum</tt> in order to obtain the harmonic spectrum.
     !%Option laser 64
-    !% If set, and if there are lasers defined in <tt>TDLasers</tt>,
+    !% If set, and if there are lasers defined in <tt>TDExternalFields</tt>,
     !% <tt>octopus</tt> outputs the laser field to the file <tt>td.general/laser</tt>.
     !%Option energy 128
     !% If <tt>set</tt>, <tt>octopus</tt> outputs the different components of the energy

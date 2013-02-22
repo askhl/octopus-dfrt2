@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: unocc.F90 9584 2012-11-09 00:50:24Z dstrubbe $
+!! $Id: unocc.F90 10042 2013-02-20 23:04:47Z dstrubbe $
 
 #include "global.h"
 
@@ -69,8 +69,8 @@ contains
 
     type(eigensolver_t) :: eigens
     integer :: iunit, ierr, occupied_states, total_states, iter
-    logical :: converged
-    integer :: max_iter, nst_calculated
+    logical :: converged, forced_finish, showoccstates
+    integer :: max_iter, nst_calculated, showstart
     integer, allocatable :: states_read(:, :)
     character(len=50) :: str
 
@@ -87,9 +87,25 @@ contains
     call parse_integer(datasets_check('UnoccMaximumIter'), 50, max_iter)
     if(max_iter < 0) max_iter = huge(max_iter)
 
+    !%Variable UnoccShowOccStates
+    !%Type logical
+    !%Default false
+    !%Section Calculation Modes::Unoccupied States
+    !%Description
+    !% If true, the convergence for the occupied states will be shown too in the output.
+    !% This is useful only for testing.
+    !%End
+    call parse_logical(datasets_check('UnoccShowOccStates'), .false., showoccstates)
+
     occupied_states = sys%st%nst
     call init_(sys%gr%mesh, sys%st)
     total_states = sys%st%nst
+
+    if(showoccstates) then
+      showstart = 1
+    else
+      showstart = occupied_states + 1
+    endif
 
     ASSERT(total_states >= occupied_states)
 
@@ -108,6 +124,12 @@ contains
       message(1) = "Info:  Could not load all wavefunctions from '"//trim(restart_dir)//GS_DIR//"'"
       call messages_info(1)
     end if
+
+    if(sys%st%d%ispin == SPINORS) then
+      message(1) = "Try gs with ExtraStates instead of unocc mode for spinors."
+      call messages_warning(1)
+      call messages_experimental("unocc for spinors")
+    endif
 
     call density_calc(sys%st, sys%gr, sys%st%rho)
 
@@ -135,18 +157,22 @@ contains
 
       write(str, '(a,i5)') 'Unoccupied states iteration #', iter
       call messages_print_stress(stdout, trim(str))
-      call states_write_eigenvalues(stdout, sys%st%nst, sys%st, sys%gr%sb, eigens%diff, st_start = occupied_states + 1)
+      call states_write_eigenvalues(stdout, sys%st%nst, sys%st, sys%gr%sb, eigens%diff, st_start = showstart)
       call messages_print_stress(stdout)
 
-      if(converged .or. clean_stop()) exit
-    end do
+      forced_finish = clean_stop(sys%mc%master_comm)
+      
+      ! write restart information.
+      if(converged .or. (modulo(iter, sys%outp%iter) == 0) .or. iter == max_iter .or. forced_finish) then
+        call restart_write(trim(tmpdir)//GS_DIR, sys%st, sys%gr, sys%geo, ierr, iter=iter)
+        if(ierr .ne. 0) then
+          message(1) = 'Unsuccessful write of "'//trim(tmpdir)//GS_DIR//'"'
+          call messages_fatal(1)
+        end if
+      end if
 
-    ! write restart information.
-    call restart_write (trim(tmpdir)//GS_DIR, sys%st, sys%gr, sys%geo, ierr)
-    if(ierr .ne. 0) then
-      message(1) = 'Unsuccessful write of "'//trim(tmpdir)//GS_DIR//'"'
-      call messages_fatal(1)
-    end if
+      if(converged .or. forced_finish) exit
+    end do
 
     if(.not. converged) then
       write(message(1),'(a)') 'Some of the unoccupied states are not fully converged!'

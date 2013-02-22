@@ -12,9 +12,7 @@ fromScratch = yes
 Spacing = 0.05
 Radius = 7
 ExtraStates = 8
-XCFunctional=lda_xc_cmplx
-#XCFunctional=None
-PoissonSolver=direct1d
+XCFunctional = lda_xc_cmplx
 
 # recommended 2 * nstates + 1 or more
 EigenSolverArnoldiVectors = 50

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: td.F90 9605 2012-11-13 01:08:45Z dstrubbe $
+!! $Id: td.F90 9915 2013-01-31 23:03:15Z dstrubbe $
 
 #include "global.h"
 
@@ -213,14 +213,13 @@ contains
     if(st%d%pack_states .and. hamiltonian_apply_packed(hm, gr%mesh)) call states_pack(st)
 
     ii = 1
-    stopping = .false.
     etime = loct_clock()
     ! This is the time-propagation loop. It starts at t=0 and finishes
     ! at td%max_iter*dt. The index i runs from 1 to td%max_iter, and
     ! step "iter" means propagation from (iter-1)*dt to iter*dt.
     propagation: do iter = td%iter, td%max_iter
 
-      if(clean_stop()) stopping = .true.
+      stopping = clean_stop(sys%mc%master_comm)
       call profiling_in(prof, "TIME_STEP")
 
       if(iter > 1) then
@@ -252,7 +251,7 @@ contains
         call ion_dynamics_propagate(td%ions, sys%gr%sb, sys%geo, iter*td%dt, td%dt)
         call hamiltonian_epot_generate(hm, gr, sys%geo, st, time = iter*td%dt)
         ! now calculate the eigenfunctions
-        call scf_run(td%scf, sys%gr, geo, st, sys%ks, hm, sys%outp, &
+        call scf_run(td%scf, sys%mc, sys%gr, geo, st, sys%ks, hm, sys%outp, &
           gs_run = .false., verbosity = VERB_COMPACT, iters_done = scsteps)
       case(CP)
         if(states_are_real(st)) then
@@ -829,11 +828,11 @@ contains
             zv_old = td%tr%v_old(1:gr%mesh%np, is, ii) + M_zI * td%tr%Imv_old(1:gr%mesh%np, is, ii)
             call zio_function_output(restart_format, trim(tmpdir)//"td", &
               filename, gr%mesh, zv_old, unit_one, ierr, &
-              is_tmp = .true., grp = st%mpi_grp)
+              is_tmp = .true., grp = st%dom_st_kpt_mpi_grp)
           else
             call dio_function_output(restart_format, trim(tmpdir)//"td", &
               filename, gr%mesh, td%tr%v_old(1:gr%mesh%np, is, ii), unit_one, ierr, &
-              is_tmp = .true., grp = st%mpi_grp)
+              is_tmp = .true., grp = st%dom_st_kpt_mpi_grp)
           end if
           ! the unit is energy actually, but this only for restart, and can be kept in atomic units
           ! for simplicity

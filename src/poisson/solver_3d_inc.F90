@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: solver_3d_inc.F90 9339 2012-09-05 22:01:37Z dstrubbe $
+!! $Id: solver_3d_inc.F90 10068 2013-02-22 16:10:44Z dstrubbe $
 
 ! ---------------------------------------------------------
 subroutine poisson3D_init(this, geo, all_nodes_comm)
@@ -32,9 +32,9 @@ subroutine poisson3D_init(this, geo, all_nodes_comm)
   PUSH_SUB(poisson3D_init)
 
   select case(this%method)
-  case(POISSON_DIRECT_SUM_3D, POISSON_FMM, POISSON_FFT, POISSON_CG, POISSON_CG_CORRECTED)
-      valid_solver = .true.
-  case(POISSON_MULTIGRID, POISSON_ISF, POISSON_SETE)
+  case(POISSON_DIRECT_SUM, POISSON_FMM, POISSON_FFT, POISSON_CG, POISSON_CG_CORRECTED)
+    valid_solver = .true.
+  case(POISSON_MULTIGRID, POISSON_ISF, POISSON_SETE, POISSON_LIBISF)
     valid_solver = .true.
   case default
     valid_solver = .false.
@@ -47,8 +47,18 @@ subroutine poisson3D_init(this, geo, all_nodes_comm)
   !%Section Hamiltonian::Poisson
   !%Description
   !% Order of the multipolar expansion for boundary
-  !% corrections. Default is 4 for <tt>PoissonSolver = cg_corrected</tt> and <tt>multigrid</tt> and 2
-  !% for <tt>fft_corrected</tt>.
+  !% corrections. 
+  !%
+  !% The versions of <tt>multigrid</tt> and <tt>cg_corrected</tt>
+  !% implemented in Octopus do a multipolar expansion of the given
+  !% charge density, such that $\rho = \rho_{multip.expansion}+\Delta
+  !% \rho$. The Hartree potential due to the \rho_{multip.expansion} is
+  !% calculated analytically, while the Hartree potential due to $\Delta
+  !% \rho$ is calculated with either a multigrid or cg solver.
+  !% The order of the multipolar expansion is set by this variable.
+  !%
+  !% Default is 4 for <tt>PoissonSolver = cg_corrected</tt> and <tt>multigrid</tt>, and 2
+  !% for <tt>fft</tt> with <tt>PoissonFFTKernel = multipole_correction</tt>.
   !%End
 
   !%Variable PoissonSolverMaxIter
@@ -65,8 +75,8 @@ subroutine poisson3D_init(this, geo, all_nodes_comm)
   !%Section Hamiltonian::Poisson
   !%Default 1e-5
   !%Description
-  !% The tolerance for the Poisson solution, used by the <tt>cg</tt> and
-  !% <tt>multigrid</tt> solvers.
+  !% The tolerance for the Poisson solution, used by the <tt>cg</tt>,
+  !% <tt>cg_corrected</tt>, and <tt>multigrid</tt> solvers.
   !%End
 
   !! This variable is disabled for the moment
@@ -128,7 +138,17 @@ subroutine poisson3D_init(this, geo, all_nodes_comm)
      
   case(POISSON_ISF)
     call poisson_isf_init(this%isf_solver, this%der%mesh, this%cube, all_nodes_comm, init_world = this%all_nodes_default)
-
+    
+  case(POISSON_LIBISF)
+    call poisson_libisf_init(this%libisf_solver, this%der%mesh, this%cube)
+    call poisson_libisf_get_dims(this%libisf_solver, this%cube)
+    this%cube%parallel_in_domains = this%libisf_solver%datacode == "D"
+    !! At the beginning we`ll use the MPI_WORLD_COMM
+    this%cube%mpi_grp = mpi_world
+    if (this%der%mesh%parallel_in_domains .and. this%cube%parallel_in_domains) then
+      call mesh_cube_parallel_map_init(this%mesh_cube_map, this%der%mesh, this%cube)
+    end if
+    
   case(POISSON_FFT)
 
     call poisson_fft_init(this%fft_solver, this%der%mesh, this%cube, this%kernel)
@@ -156,21 +176,39 @@ subroutine poisson3D_init(this, geo, all_nodes_comm)
 end subroutine poisson3D_init
 
 
-subroutine poisson3D_solve_direct(this, pot, rho)
+subroutine poisson_solve_direct(this, pot, rho)
   type(poisson_t), intent(in)  :: this
   FLOAT,           intent(out) :: pot(:)
   FLOAT,           intent(in)  :: rho(:)
 
-  integer  :: ip, jp
-  FLOAT    :: xx(3), yy(3)
+  FLOAT :: prefactor
+  integer  :: ip, jp, dim
+  FLOAT    :: xx(1:this%der%mesh%sb%dim), yy(1:this%der%mesh%sb%dim)
 #ifdef HAVE_MPI
-  FLOAT    :: tmp, xg(1:MAX_DIM)
+  FLOAT    :: tmp, xg(MAX_DIM)
   FLOAT, allocatable :: pvec(:) 
 #endif
 
-  ASSERT(this%method == POISSON_DIRECT_SUM_3D)
+  PUSH_SUB(poisson_solve_direct)
 
-  PUSH_SUB(poisson3D_solve_direct)
+  dim = this%der%mesh%sb%dim
+  ASSERT(this%method == POISSON_DIRECT_SUM)
+
+  select case(dim)
+  case(3)
+    prefactor = M_TWO*M_PI*(M_THREE/(M_PI*M_FOUR))**(M_TWOTHIRD)
+  case(2)
+    prefactor = M_TWO*sqrt(M_PI)
+  case default
+    message(1) = "Internal error: poisson_solve_direct can only be called for 2D or 3D."
+    ! why not? all that is needed is the appropriate prefactors to be defined above, actually. then 1D, 4D etc. can be done
+    call messages_fatal(1)
+  end select
+
+  if(.not. this%der%mesh%use_curvilinear) then
+    prefactor = prefactor / (this%der%mesh%volume_element**(M_ONE/this%der%mesh%sb%dim))
+  endif
+
 #ifdef HAVE_MPI
   if(this%der%mesh%parallel_in_domains) then
     SAFE_ALLOCATE(pvec(1:this%der%mesh%np))
@@ -178,24 +216,28 @@ subroutine poisson3D_solve_direct(this, pot, rho)
     pot = M_ZERO
     do ip = 1, this%der%mesh%np_global
       xg = mesh_x_global(this%der%mesh, ip)
-      xx(1:3) = xg(1:3) 
-      do jp = 1, this%der%mesh%np
-        if(vec_global2local(this%der%mesh%vp, ip, this%der%mesh%vp%partno) == jp) then
-          if((this%der%mesh%use_curvilinear .eqv. .false.) .and. (this%der%mesh%spacing(1)==this%der%mesh%spacing(2)) .and. &
-               (this%der%mesh%spacing(2)==this%der%mesh%spacing(3)) .and.&
-               (this%der%mesh%spacing(1)==this%der%mesh%spacing(3))) then
-             pvec(jp) = rho(jp)*2.380077363979553356918/(this%der%mesh%spacing(1)) 
+      xx(1:dim) = xg(1:dim)
+      if(this%der%mesh%use_curvilinear) then
+        do jp = 1, this%der%mesh%np
+          if(vec_global2local(this%der%mesh%vp, ip, this%der%mesh%vp%partno) == jp) then
+            pvec(jp) = rho(jp)*prefactor**(M_ONE - M_ONE/this%der%mesh%sb%dim)
           else
-             pvec(jp) = (1.0/(this%der%mesh%spacing(1)*this%der%mesh%spacing(2)*&
-                  this%der%mesh%spacing(3))**(1./3.))*rho(jp)*M_TWO*M_PI*(3./(M_PI*4.))**(2./3.) 
-          end if 
-       else
-          yy(:) = this%der%mesh%x(jp,1:3)
-          pvec(jp) = rho(jp)/sqrt(sum((xx-yy)**2))
-        end if
-      end do
+            yy(1:dim) = this%der%mesh%x(jp, 1:dim)
+            pvec(jp) = rho(jp)/sqrt(sum((xx(1:dim) - yy(1:dim))**2))
+          end if
+        end do
+      else
+        do jp = 1, this%der%mesh%np
+          if(vec_global2local(this%der%mesh%vp, ip, this%der%mesh%vp%partno) == jp) then
+            pvec(jp) = rho(jp)*prefactor
+          else
+            yy(1:dim) = this%der%mesh%x(jp, 1:dim)
+            pvec(jp) = rho(jp)/sqrt(sum((xx(1:dim) - yy(1:dim))**2))
+          endif
+        enddo
+      endif
       tmp = dmf_integrate(this%der%mesh, pvec)
-      if (this%der%mesh%vp%part(ip).eq.this%der%mesh%vp%partno) then
+      if (this%der%mesh%vp%part(ip) == this%der%mesh%vp%partno) then
         pot(vec_global2local(this%der%mesh%vp, ip, this%der%mesh%vp%partno)) = tmp
       end if
     end do
@@ -206,24 +248,36 @@ subroutine poisson3D_solve_direct(this, pot, rho)
 #endif
     pot = M_ZERO
     do ip = 1, this%der%mesh%np
-      xx(:) = this%der%mesh%x(ip,1:3)
-      do jp = 1, this%der%mesh%np
-        if(ip == jp) then
-          pot(ip) = pot(ip) + M_TWO*sqrt(M_PI)*rho(ip)/this%der%mesh%spacing(1)*this%der%mesh%vol_pp(jp)
-        else
-          yy(:) = this%der%mesh%x(jp,1:3)
-          pot(ip) = pot(ip) + rho(jp)/sqrt(sum((xx-yy)**2))*this%der%mesh%vol_pp(jp)
-        end if
-      end do
+      xx(1:dim) = this%der%mesh%x(ip,1:dim)
+      if(this%der%mesh%use_curvilinear) then
+        do jp = 1, this%der%mesh%np
+          if(ip == jp) then
+            pot(ip) = pot(ip) + prefactor*rho(ip)*this%der%mesh%vol_pp(jp)**(M_ONE - M_ONE/this%der%mesh%sb%dim)
+          else
+            yy(1:dim) = this%der%mesh%x(jp, 1:dim)
+            pot(ip) = pot(ip) + rho(jp)/sqrt(sum((xx(1:dim) - yy(1:dim))**2))*this%der%mesh%vol_pp(jp)
+          endif
+        end do
+      else
+        do jp = 1, this%der%mesh%np
+          if(ip == jp) then
+            pot(ip) = pot(ip) + prefactor*rho(ip)
+          else
+            yy(1:dim) = this%der%mesh%x(jp, 1:dim)
+            pot(ip) = pot(ip) + rho(jp)/sqrt(sum((xx(1:dim) - yy(1:dim))**2))
+          endif
+        end do
+      end if
     end do
+    if(.not. this%der%mesh%use_curvilinear) then
+      pot(1:this%der%mesh%np) = pot(1:this%der%mesh%np)*this%der%mesh%volume_element
+    endif
 #ifdef HAVE_MPI
   end if
 #endif
 
-  POP_SUB(poisson3D_solve_direct) 
-end subroutine poisson3D_solve_direct
-
-
+  POP_SUB(poisson_solve_direct) 
+end subroutine poisson_solve_direct
 
 !! Local Variables:
 !! mode: f90

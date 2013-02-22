@@ -3,7 +3,7 @@
 
 Test       : Absorption spectrum (spin polarized)
 Programs   : octopus_mpi; octopus
-TestGroups : short-run
+TestGroups : short-run, real_time
 Enabled    : Yes
 
 #This test checks the time propagation
@@ -104,7 +104,6 @@ Input      : 13-absorption-spin.05-spectrum_compressed_sensing.inp
 #match ; Energy      5 ; LINE(cross_section_tensor, 119, 1) ; 0.10700000E+02
 #match ; Sigma       5 ; LINE(cross_section_tensor, 119, 21); 0.69774277E-01
 #match ; Anisotropy  5 ; LINE(cross_section_tensor, 119, 41); 0.13511731E+00
-0.79512520E-01
 
 #match ; Energy      6 ; LINE(cross_section_tensor, 163, 1) ; 0.15100000E+02
 #match ; Sigma       6 ; LINE(cross_section_tensor, 163, 21); 0.72994915E-01

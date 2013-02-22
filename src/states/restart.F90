@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: restart.F90 9583 2012-11-08 23:02:46Z dstrubbe $
+!! $Id: restart.F90 9915 2013-01-31 23:03:15Z dstrubbe $
 
 #include "global.h"
 
@@ -29,7 +29,6 @@ module restart_m
   use io_m
   use io_binary_m
   use io_function_m
-  use json_m
   use kpoints_m
   use lalg_basic_m
   use linear_response_m
@@ -92,20 +91,32 @@ module restart_m
 contains
 
   !> returns true if a file named stop exists
-  function clean_stop()
-    logical clean_stop, file_exists
+  function clean_stop(comm)
+    integer, intent(in) :: comm !< communicator spanning all nodes that will call this function, i.e. not any slaves
+
+    logical :: clean_stop, file_exists
 
     PUSH_SUB(clean_stop)
 
     clean_stop = .false.
-    inquire(file='stop', exist=file_exists)
-    if(file_exists) then
+
+    if(mpi_grp_is_root(mpi_world)) then
+      inquire(file='stop', exist=file_exists)
+      if(file_exists) then
+        call loct_rm('stop')
+        clean_stop = .true.
+      endif
+    end if
+
+#ifdef HAVE_MPI
+    ! make sure all nodes agree on whether this condition occurred
+    call MPI_Bcast(clean_stop, 1, MPI_LOGICAL, 0, comm, mpi_err)
+#endif
+
+    if(clean_stop) then
       message(1) = 'Clean STOP'
       call messages_warning(1)
-      clean_stop = .true.
-
-      if(mpi_grp_is_root(mpi_world)) call loct_rm('stop')
-    end if
+    endif
 
     POP_SUB(clean_stop)
   end function clean_stop
@@ -160,9 +171,9 @@ contains
 
   ! ---------------------------------------------------------
   subroutine restart_look_and_read(st, gr, is_complex, specify_dir, exact)
-    type(states_t),             intent(inout) :: st
+    type(states_t),     target, intent(inout) :: st
     type(grid_t),               intent(in)    :: gr
-    logical, optional,          intent(in)    :: is_complex
+    logical,          optional, intent(in)    :: is_complex
     character(len=*), optional, intent(in)    :: specify_dir
     logical,          optional, intent(in)    :: exact !< if .true. we need all the wavefunctions and on the exact grid
 
@@ -238,7 +249,6 @@ contains
     integer :: err, ik, idir, ist, idim, isp, itot
     character(len=80) :: filename, filename1 
     logical :: lr_wfns_are_associated, should_write, cmplxscl
-    type(json_object_t) :: json
     FLOAT   :: kpoint(1:MAX_DIM)
     FLOAT,  allocatable :: dpsi(:)
     CMPLX,  allocatable :: zpsi(:)
@@ -273,8 +283,8 @@ contains
     end if
 
 #ifdef HAVE_MPI
-    !we need a barrier to wait for the directory to be created
-    call MPI_Barrier(st%dom_st_kpt_mpi_grp%comm, mpi_err)
+    !we need a barrier to wait for the directory to be created, only if we are in parallel
+    if(st%dom_st_kpt_mpi_grp%comm > 0) call MPI_Barrier(st%dom_st_kpt_mpi_grp%comm, mpi_err)
 #endif
 
     if(mpi_grp_is_root(st%dom_st_kpt_mpi_grp)) then
@@ -306,12 +316,6 @@ contains
       iunit_states = io_open(trim(dir)//'/states', action='write', is_tmp=.true.)
       call states_dump(st, iunit_states)
       call io_close(iunit_states)
-
-      iunit_geo = io_open(trim(dir)//'/geometry.json', action='write', is_tmp=.true.)
-      call geometry_create_data_object(geo, json)
-      call json_write(json, iunit_geo)
-      call json_end(json)
-      call io_close(iunit_geo)
 
     end if
 

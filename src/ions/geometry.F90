@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: geometry.F90 9095 2012-06-02 02:39:35Z xavier $
+!! $Id: geometry.F90 10054 2013-02-21 19:52:21Z dstrubbe $
 
 #include "global.h"
 
@@ -27,7 +27,7 @@ module geometry_m
   use global_m
   use io_m
   use json_m
-  use loct_m
+  use loct_pointer_m
   use loct_math_m
   use messages_m
   use multicomm_m
@@ -214,6 +214,11 @@ contains
 
     call xyz_file_read('Coordinates', xyz, geo%space)
 
+    if(xyz%n < 1) then
+      message(1) = "Coordinates have not been defined."
+      call messages_fatal(1)
+    endif
+
     ! copy information from xyz to geo
     geo%natoms = xyz%n
     nullify(geo%atom)
@@ -303,7 +308,10 @@ contains
       call species_set_label(geo%species(k), atom_get_label(geo%atom(j)))
       call species_set_index(geo%species(k), k)
       call species_read(geo%species(k))
-      geo%only_user_def = (geo%only_user_def .and. (species_type(geo%species(k)) == SPEC_USDEF))
+      ! these are the species which do not represent atoms
+      geo%only_user_def = (geo%only_user_def .and. &
+        (species_type(geo%species(k)) == SPEC_USDEF .or. species_type(geo%species(k)) == SPEC_CHARGE_DENSITY .or. &
+        species_type(geo%species(k)) == SPEC_FROM_FILE .or. species_type(geo%species(k)) == SPEC_JELLI_SLAB))
     end do atoms2
 
     ! Reads the spin components. This is read here, as well as in states_init,

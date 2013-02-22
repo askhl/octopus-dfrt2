@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: curvilinear.F90 8805 2012-01-25 12:38:37Z joseba $
+!! $Id: curvilinear.F90 9672 2012-11-21 22:31:51Z dstrubbe $
 
 #include "global.h"
 
@@ -85,7 +85,7 @@ contains
     !% or else an *adaptive* or *curvilinear grid*. We have implemented
     !% three kinds of adaptive meshes, although only one is currently working,
     !% the one invented by F. Gygi (<tt>curv_gygi</tt>). The code will stop if any of
-    !% the other two is invoked.
+    !% the other two is invoked. All are experimental with domain parallelization.
     !%Option curv_uniform 1
     !% Regular, uniform rectangular grid. The default.
     !%Option curv_gygi 2

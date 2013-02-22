@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: blacs_proc_grid.F90 8829 2012-01-31 17:28:45Z joseba $
+!! $Id: blacs_proc_grid.F90 9964 2013-02-13 21:05:01Z dstrubbe $
 
 #include "global.h"
 
@@ -75,7 +75,7 @@ contains
     type(mpi_grp_t),         intent(in)  :: mpi_grp
 
     integer, parameter :: maxdims = 2
-    integer :: dims(1:2), topo, coords(1:2), ix, iy, id
+    integer :: dims(1:2), topo, coords(1:2), ix, iy, id, xy(2)
     logical :: periods(1:2)
     integer :: mpi_err
     integer :: comm
@@ -115,8 +115,10 @@ contains
     SAFE_ALLOCATE(this%usermap(1:dims(1), 1:dims(2)))
     
     do ix = 1, dims(1)
+      xy(1) = ix - 1
       do iy = 1, dims(2)
-        call MPI_Cart_rank(comm, (/ix - 1, iy - 1/), id, mpi_err)
+        xy(2) = iy - 1
+        call MPI_Cart_rank(comm, xy, id, mpi_err)
         this%usermap(ix, iy) = procmap(id)
       end do
     end do

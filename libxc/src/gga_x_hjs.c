@@ -198,9 +198,11 @@ func(const XC(func_type) *p, int order, FLOAT x, FLOAT ds,
     EG = -(2.0/5.0)*CC*F*lambda - (4.0/15.0)*BB*lambda2 - (6.0/5.0)*AA*lambda3
       - lambda3*sqrtl*((4.0/5.0)*M_SQRTPI + (12.0/5.0)*(sqrtz - sqrte));
 
-    dEGds = -(2.0/5.0)*CC*(dFds*lambda + F*dzeta) - (8.0/15.0)*BB*lambda*dzeta - (18.0/5.0)*AA*lambda2*dzeta
-      - (14.0/5.0)*M_SQRTPI*lambda2*sqrtl*dzeta
-      - (42.0/5.0)*lambda2*sqrtl*dzeta*((sqrtz - sqrte) + (1.0/7.0)*lambda*(1.0/sqrtz - 1.0/sqrte));
+    if(order >= 1){
+      dEGds = -(2.0/5.0)*CC*(dFds*lambda + F*dzeta) - (8.0/15.0)*BB*lambda*dzeta - (18.0/5.0)*AA*lambda2*dzeta
+	- (14.0/5.0)*M_SQRTPI*lambda2*sqrtl*dzeta
+	- (42.0/5.0)*lambda2*sqrtl*dzeta*((sqrtz - sqrte) + (1.0/7.0)*lambda*(1.0/sqrtz - 1.0/sqrte));
+    }
   }
 
   sqzpn2 = sqrt(zeta + nu*nu);
@@ -240,11 +242,11 @@ func(const XC(func_type) *p, int order, FLOAT x, FLOAT ds,
     dterm6dnu =-2.0*eta*(1.0/sqepn2 - 1.0/sqlpn2);
 
     *lvrho = dterm1dnu + dterm2dnu + dterm3dnu + dterm4dnu + dterm5dnu + dterm6dnu;
-  }
 
-  /* scale and convert to the right variables */
-  *dfdx  *= dssdx;
-  *lvrho *= dnudrho;
+    /* scale and convert to the right variables */
+    *dfdx  *= dssdx;
+    *lvrho *= dnudrho;
+  }
 }
 
 #include "work_gga_x.c"
@@ -282,7 +284,7 @@ const XC(func_info_type) XC(func_info_gga_x_hjs_b88) = {
   XC_FAMILY_GGA,
   "TM Henderson, BG Janesko, and GE Scuseria, J. Chem. Phys. 128, 194105 (2008)",
   XC_FLAGS_3D | XC_FLAGS_HAVE_EXC | XC_FLAGS_HAVE_VXC,
-  1e-32, 1e-32, 0.0, 1e-32,
+  1e-6, 1e-11, 0.0, 0.0, /* densities smaller than 1e-6 yield NaNs */
   gga_x_hjs_init,
   NULL, NULL, 
   work_gga_x

@@ -16,7 +16,7 @@
  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
  02111-1307, USA.
 
- $Id: varia.c 9195 2012-07-13 02:11:33Z xavier $
+ $Id: varia.c 9802 2012-12-28 21:25:51Z xavier $
 */
 
 
@@ -78,7 +78,7 @@ static int foreground_proc(void)
   
 #if defined(HAVE_TCGETPGRP)
   return ((ctty_pgrp = tcgetpgrp(STDOUT_FILENO)) != -1 && ctty_pgrp == pgrp);
-#else defined(HAVE_IOCTL)
+#elif defined(HAVE_IOCTL)
   return ((ioctl(STDOUT_FILENO, TIOCGPGRP, &ctty_pgrp) != -1 && ctty_pgrp == pgrp));
 #endif
 

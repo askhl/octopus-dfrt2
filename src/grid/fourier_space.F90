@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fourier_space.F90 9401 2012-09-12 12:55:48Z joseba $
+!! $Id: fourier_space.F90 9654 2012-11-20 17:29:30Z dstrubbe $
 
 #include "global.h"
 
@@ -75,7 +75,7 @@ contains
   !! Otherwise, it assigns the PFFT Fourier space grid to the cube Fourier space grid,
   !! via pointer.
   subroutine cube_function_alloc_fs(cube, cf, force_alloc)
-    type(cube_t),          intent(in)    :: cube
+    type(cube_t), target,  intent(in)    :: cube
     type(cube_function_t), intent(inout) :: cf
     logical, optional,     intent(in)    :: force_alloc  
       

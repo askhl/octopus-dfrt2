@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: fftw.F90 9483 2012-10-05 16:19:43Z dstrubbe $
+!! $Id: fftw.F90 9665 2012-11-21 09:54:40Z joseba $
 
 #include "global.h"
 
@@ -45,7 +45,8 @@ module fftw_m
     fftw_cleanup_threads,    &
     fftw_prepare_plan_r2c,   &
     fftw_prepare_plan,       &
-    fftw_get_dims
+    fftw_get_dims,           &
+    fftw_set_timelimit
 
   !> fftw constants. this is just a copy from file fftw3.f,
   !! distributed with fftw package.
@@ -167,7 +168,13 @@ module fftw_m
     end subroutine DFFTW(plan_dft_3d)
   end interface
 
-
+  interface fftw_set_timelimit
+    subroutine DFFTW(set_timelimit)(time)
+      use c_pointer_m
+      FLOAT, intent(in) :: time
+    end subroutine DFFTW(set_timelimit)
+  end interface fftw_set_timelimit
+  
   ! ----------------- execute_dft ------------------
   interface fftw_execute_dft
     subroutine DFFTW(execute_dft_r2c)(plan, in, out)

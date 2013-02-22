@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: v_ks.F90 9538 2012-10-29 14:42:00Z dstrubbe $
+!! $Id: v_ks.F90 9802 2012-12-28 21:25:51Z xavier $
 
 #include "global.h"
  
@@ -429,14 +429,13 @@ contains
   !! can be modified after the function have been used.
 
   subroutine v_ks_calc_start(ks, hm, st, geo, time, calc_berry, calc_energy) 
-    type(v_ks_t),                      intent(inout) :: ks 
+    type(v_ks_t),            target,   intent(inout) :: ks 
     type(hamiltonian_t),     target,   intent(in)    :: hm !< This MUST be intent(in), changes to hm are done in v_ks_calc_finish.
     type(states_t),                    intent(inout) :: st
     type(geometry_t) ,       optional, intent(in)    :: geo
     FLOAT,                   optional, intent(in)    :: time 
     logical,                 optional, intent(in)    :: calc_berry !< Use this before wfns initialized.
     logical,                 optional, intent(in)    :: calc_energy
-
     
     type(profile_t), save :: prof
     type(energy_t), pointer :: energy
@@ -589,7 +588,9 @@ contains
 
       type(profile_t), save :: prof
       logical :: cmplxscl
+      FLOAT :: factor
       CMPLX :: ctmp
+      integer :: ispin
       
       PUSH_SUB(v_ks_calc_start.v_a_xc)
       call profiling_in(prof, "XC")
@@ -629,18 +630,17 @@ contains
         if(iand(hm%xc_family, XC_FAMILY_MGGA) .ne. 0) then
           if (cmplxscl) call messages_not_implemented('Complex Scaling with XC_FAMILY_MGGA')
           call xc_get_vxc(ks%gr%fine%der, ks%xc, st, &
-            ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-            ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc, vtau = ks%calc%vtau)
+            ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, ks%calc%vxc, &
+            ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vtau = ks%calc%vtau)
         else
           if(.not. cmplxscl) then
             call xc_get_vxc(ks%gr%fine%der, ks%xc, &
-              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-              ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc, vxc = ks%calc%vxc)
+              st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, ks%calc%vxc, &
+              ex = energy%exchange, ec = energy%correlation, deltaxc = energy%delta_xc)
           else
-            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, ks%calc%density, st%d%ispin, &
-              ex = energy%exchange, ec = energy%correlation, vxc = ks%calc%vxc, & 
-              Imrho = ks%calc%Imdensity, Imex = energy%Imexchange, Imec = energy%Imcorrelation, &
-              Imvxc = ks%calc%Imvxc, theta = hm%cmplxscl%theta)
+            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, st%d%ispin, ks%calc%density, ks%calc%Imdensity, &
+                 ks%calc%vxc, ks%calc%Imvxc, hm%cmplxscl%theta, ex = energy%exchange, ec = energy%correlation, &
+                 Imex = energy%Imexchange, Imec = energy%Imcorrelation)
           end if
         end if
       else
@@ -648,16 +648,15 @@ contains
           if (cmplxscl) call messages_not_implemented('Complex Scaling with XC_FAMILY_MGGA')
           call xc_get_vxc(ks%gr%fine%der, ks%xc, &
             st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-            vxc = ks%calc%vxc, vtau = ks%calc%vtau)
+            ks%calc%vxc, vtau = ks%calc%vtau)
         else
           if(.not. cmplxscl) then
             call xc_get_vxc(ks%gr%fine%der, ks%xc, &
               st, ks%calc%density, st%d%ispin, -minval(st%eigenval(st%nst,:)), st%qtot, &
-              vxc = ks%calc%vxc)
+              ks%calc%vxc)
           else
-            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, ks%calc%density, st%d%ispin, &
-              vxc = ks%calc%vxc, Imrho = ks%calc%Imdensity, Imvxc = ks%calc%Imvxc,&
-              theta = hm%cmplxscl%theta )
+            call xc_get_vxc_cmplx(ks%gr%fine%der, ks%xc, st%d%ispin, ks%calc%density, ks%calc%Imdensity, &
+                 ks%calc%vxc, ks%calc%Imvxc, hm%cmplxscl%theta)
           end if
         end if
       end if
@@ -694,35 +693,26 @@ contains
       
       if(ks%calc%calc_energy) then
         ! Now we calculate Int[n vxc] = energy%intnvxc
-        select case(hm%d%ispin)
-        case(UNPOLARIZED)
-          if (.not. cmplxscl) then
-            energy%intnvxc = energy%intnvxc + dmf_dotp(ks%gr%fine%mesh, st%rho(:, 1), ks%calc%vxc(:, 1))
+        energy%intnvxc = M_ZERO
+        energy%Imintnvxc = M_ZERO !cmplxscl
+
+        if(hm%d%ispin == SPINORS .and. cmplxscl) &
+          call messages_not_implemented('Complex Scaling with SPINORS')
+        do ispin = 1, hm%d%nspin
+          if(ispin <= 2) then
+            factor = M_ONE
           else
-            ctmp = zmf_dotp(ks%gr%fine%mesh, st%zrho%Re(:, 1) + M_zI * st%zrho%Im(:, 1) , &
-              ks%calc%vxc(:, 1) + M_zI * ks%calc%Imvxc(:, 1)  , dotu = .true.)
+            factor = M_TWO
+          endif
+          if (.not. cmplxscl) then
+            energy%intnvxc = energy%intnvxc + factor * dmf_dotp(ks%gr%fine%mesh, st%rho(:, ispin), ks%calc%vxc(:, ispin))
+          else
+            ctmp = factor * zmf_dotp(ks%gr%fine%mesh, st%zrho%Re(:, ispin) + M_zI * st%zrho%Im(:, ispin), &
+              ks%calc%vxc(:, ispin) + M_zI * ks%calc%Imvxc(:, ispin), dotu = .true.)
             energy%intnvxc = energy%intnvxc + real(ctmp)
             energy%Imintnvxc = energy%Imintnvxc + aimag(ctmp)          
           end if
-        case(SPIN_POLARIZED)
-          if(.not. cmplxscl) then
-            energy%intnvxc = energy%intnvxc + dmf_dotp(ks%gr%fine%mesh, st%rho(:, 1), ks%calc%vxc(:, 1)) &
-              + dmf_dotp(ks%gr%fine%mesh, st%rho(:, 2), ks%calc%vxc(:, 2))
-          else
-            ctmp  = ctmp + zmf_dotp(ks%gr%fine%mesh, st%zrho%Re(:, 1) + M_zI * st%zrho%Im(:, 1), &
-                             ks%calc%vxc(:, 1) + M_zI * ks%calc%Imvxc(:, 1), dotu = .true.) &
-                         + zmf_dotp(ks%gr%fine%mesh, st%zrho%Re(:, 2) + M_zI * st%zrho%Im(:, 2), &
-                             ks%calc%vxc(:, 2) + M_zI * ks%calc%Imvxc(:, 2), dotu = .true. )
-            energy%intnvxc = energy%intnvxc + real(ctmp)
-            energy%Imintnvxc = energy%Imintnvxc + aimag(ctmp)        
-          end if
-        case(SPINORS)
-          if (cmplxscl) call messages_not_implemented('Complex Scaling with SPINORS')
-          energy%intnvxc = energy%intnvxc + dmf_dotp(ks%gr%fine%mesh, st%rho(:, 1), ks%calc%vxc(:, 1)) &
-            + dmf_dotp(ks%gr%fine%mesh, st%rho(:, 2), ks%calc%vxc(:, 2)) &
-            + M_TWO*dmf_dotp(ks%gr%fine%mesh, st%rho(:, 3), ks%calc%vxc(:, 3)) &
-            + M_TWO*dmf_dotp(ks%gr%fine%mesh, st%rho(:, 4), ks%calc%vxc(:, 4))
-        end select
+        enddo
       end if
 
       call profiling_out(prof)
@@ -734,14 +724,12 @@ contains
       FLOAT,            intent(inout) :: vxc(:, :) 
       type(geometry_t), intent(in)    :: geo
       
-      FLOAT :: pos(MAX_DIM), distance_origin, distance_cm
+      FLOAT :: pos(MAX_DIM), distance_cm
       FLOAT, allocatable :: vxcc(:)
       FLOAT ::  s_dens,vnew 
       FLOAT  :: smooth_ratio
       integer :: nspin, is, ip, idim, ik, ist, ik_tmp  
-      integer :: ierr, itmp
       integer , save :: counter = 0
-      character(len=10) :: vxc_name
       logical :: to_calc   
 
       PUSH_SUB(v_ks_calc_start.tail_correction)
@@ -833,8 +821,8 @@ contains
   ! ---------------------------------------------------------
 
   subroutine v_ks_calc_finish(ks, hm)
-    type(v_ks_t),        intent(inout) :: ks
-    type(hamiltonian_t), intent(inout) :: hm
+    type(v_ks_t), target, intent(inout) :: ks
+    type(hamiltonian_t),  intent(inout) :: hm
 
     integer :: ip, ispin
 
@@ -988,8 +976,8 @@ contains
   !! directly.
   !
   subroutine v_ks_hartree(ks, hm)
-    type(v_ks_t),        intent(inout) :: ks
-    type(hamiltonian_t), intent(inout) :: hm
+    type(v_ks_t),                intent(inout) :: ks
+    type(hamiltonian_t), target, intent(inout) :: hm
 
     FLOAT, pointer :: pot(:), Impot(:), aux(:)
     CMPLX, pointer :: zpot(:)

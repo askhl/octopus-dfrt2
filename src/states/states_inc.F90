@@ -20,8 +20,8 @@
 subroutine X(states_get_state2)(st, mesh, ist, iqn, psi, left)
   type(states_t),    intent(in)    :: st
   type(mesh_t),      intent(in)    :: mesh
-  integer,           intent(in)    :: ist
-  integer,           intent(in)    :: iqn
+  integer,           intent(in)    :: ist       !< current state
+  integer,           intent(in)    :: iqn       !< current k-point
   R_TYPE,            intent(out)   :: psi(:, :)
   logical, optional, intent (in)   :: left
   
@@ -41,8 +41,8 @@ end subroutine X(states_get_state2)
 subroutine X(states_get_state1)(st, mesh, idim, ist, iqn, psi, left)
   type(states_t),    intent(in)    :: st
   type(mesh_t),      intent(in)    :: mesh
-  integer,           intent(in)    :: idim
-  integer,           intent(in)    :: ist
+  integer,           intent(in)    :: idim   !< current dimension
+  integer,           intent(in)    :: ist    !< current k-point
   integer,           intent(in)    :: iqn
   R_TYPE,            intent(out)   :: psi(:)
   logical, optional, intent(in)    :: left 
@@ -65,8 +65,8 @@ end subroutine X(states_get_state1)
 subroutine X(states_set_state2)(st, mesh, ist, iqn, psi, left)
   type(states_t),    intent(inout) :: st
   type(mesh_t),      intent(in)    :: mesh
-  integer,           intent(in)    :: ist
-  integer,           intent(in)    :: iqn
+  integer,           intent(in)    :: ist       !< current dimension
+  integer,           intent(in)    :: iqn       !< current k-point
   R_TYPE,            intent(in)    :: psi(:, :)
   logical, optional, intent(in)    :: left
   
@@ -86,9 +86,9 @@ end subroutine X(states_set_state2)
 subroutine X(states_set_state1)(st, mesh, idim, ist, iqn, psi, left)
   type(states_t),    intent(inout) :: st
   type(mesh_t),      intent(in)    :: mesh
-  integer,           intent(in)    :: idim
-  integer,           intent(in)    :: ist
-  integer,           intent(in)    :: iqn
+  integer,           intent(in)    :: idim   !< current dimension
+  integer,           intent(in)    :: ist    !< current state
+  integer,           intent(in)    :: iqn    !< current k-point
   R_TYPE,            intent(in)    :: psi(:)
   logical, optional, intent(in)    :: left
 

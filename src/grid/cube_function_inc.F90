@@ -1,5 +1,5 @@
 !! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio,
-!! G. Bertsch, M. Oliveira, J. Alberdi, P. Garcia Risueño
+!! G. Bertsch, M. Oliveira, J. Alberdi-Rodriguez, P. Garcia Risueño
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: cube_function_inc.F90 9496 2012-10-11 15:08:25Z joseba $
+!! $Id: cube_function_inc.F90 9958 2013-02-10 22:29:45Z xavier $
 
 
 ! ---------------------------------------------------------
@@ -24,7 +24,7 @@
 !! Otherwise, it assigns the PFFT real space grid to the cube real space grid,
 !! via pointer.
 subroutine X(cube_function_alloc_rs)(cube, cf, in_device, force_alloc)
-  type(cube_t),          intent(in)    :: cube
+  type(cube_t), target,  intent(in)    :: cube
   type(cube_function_t), intent(inout) :: cf
   logical, optional,     intent(in)    :: in_device
   logical, optional,     intent(in)    :: force_alloc
@@ -55,7 +55,7 @@ subroutine X(cube_function_alloc_rs)(cube, cf, in_device, force_alloc)
         allocated = .true.
         cf%in_device_memory = .true.
 #ifdef HAVE_OPENCL
-        call opencl_create_buffer(cf%real_space_buffer, CL_MEM_READ_WRITE, TYPE_CMPLX, product(cube%rs_n(1:3)))
+        call opencl_create_buffer(cf%real_space_buffer, CL_MEM_READ_WRITE, R_TYPE_VAL, product(cube%rs_n(1:3)))
 #endif
       end if
     end select
@@ -223,7 +223,7 @@ subroutine X(mesh_to_cube)(mesh, mf, cube, cf, local)
   else
 #ifdef HAVE_OPENCL
 
-    call opencl_set_buffer_to_zero(cf%real_space_buffer, TYPE_CMPLX, product(cube%rs_n(1:3)))
+    call opencl_set_buffer_to_zero(cf%real_space_buffer, R_TYPE_VAL, product(cube%rs_n(1:3)))
 
     call opencl_create_buffer(mf_buffer, CL_MEM_READ_ONLY, R_TYPE_VAL, mesh%np_global)
     call opencl_write_buffer(mf_buffer, mesh%np_global, gmf)
@@ -232,9 +232,9 @@ subroutine X(mesh_to_cube)(mesh, mf, cube, cf, local)
     kernel_ref = octcl_kernel_get_ref(kernel)
     
     call opencl_set_kernel_arg(kernel_ref, 0, mesh%cube_map%nmap)
-    call opencl_set_kernel_arg(kernel_ref, 1, cube%rs_n(3)*cube%rs_n(2))
-    call opencl_set_kernel_arg(kernel_ref, 2, cube%rs_n(3))
-    call opencl_set_kernel_arg(kernel_ref, 3, 1)
+    call opencl_set_kernel_arg(kernel_ref, 1, cube%fft%stride_rs(1))
+    call opencl_set_kernel_arg(kernel_ref, 2, cube%fft%stride_rs(2))
+    call opencl_set_kernel_arg(kernel_ref, 3, cube%fft%stride_rs(3))
     call opencl_set_kernel_arg(kernel_ref, 4, cube%center(1))
     call opencl_set_kernel_arg(kernel_ref, 5, cube%center(2))
     call opencl_set_kernel_arg(kernel_ref, 6, cube%center(3))
@@ -323,11 +323,11 @@ subroutine X(cube_to_mesh) (cube, cf, mesh, mf, local)
 
     call octcl_kernel_start_call(kernel, 'mesh_to_cube.cl', TOSTRING(X(cube_to_mesh)))
     kernel_ref = octcl_kernel_get_ref(kernel)
-    
+   
     call opencl_set_kernel_arg(kernel_ref, 0, mesh%cube_map%nmap)
-    call opencl_set_kernel_arg(kernel_ref, 1, cube%rs_n(3)*cube%rs_n(2))
-    call opencl_set_kernel_arg(kernel_ref, 2, cube%rs_n(3))
-    call opencl_set_kernel_arg(kernel_ref, 3, 1)
+    call opencl_set_kernel_arg(kernel_ref, 1, cube%fft%stride_rs(1))
+    call opencl_set_kernel_arg(kernel_ref, 2, cube%fft%stride_rs(2))
+    call opencl_set_kernel_arg(kernel_ref, 3, cube%fft%stride_rs(3))
     call opencl_set_kernel_arg(kernel_ref, 4, cube%center(1))
     call opencl_set_kernel_arg(kernel_ref, 5, cube%center(2))
     call opencl_set_kernel_arg(kernel_ref, 6, cube%center(3))

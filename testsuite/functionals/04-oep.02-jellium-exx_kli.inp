@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 04-oep.02-jellium-exx_kli.inp 9012 2012-04-14 04:16:37Z xavier $
+# $Id: 04-oep.02-jellium-exx_kli.inp 10055 2013-02-21 22:18:28Z dstrubbe $
 
 # Now, EXX/KLI for Li, 8 electrons (restarting from the previous run)
 
@@ -24,10 +24,7 @@ Spacing = 0.35
 XCFunctional = oep_x
 OEPLevel = oep_kli
 
-
 ConvRelDens = 8e-6
-
-LCAOStart = lcao_none
 
 EigenSolverTolerance = 1e-5
 

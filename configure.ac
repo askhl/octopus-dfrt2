@@ -15,10 +15,10 @@
 ## Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 ## 02111-1307, USA.
 ##
-## $Id: configure.ac 9413 2012-09-14 17:10:39Z micael $
+## $Id: configure.ac 10048 2013-02-21 04:41:20Z dstrubbe $
 
 AC_PREREQ(2.59)
-AC_INIT([Octopus],[nocturnus],[octopus-devel@tddft.org],[octopus])
+AC_INIT([Octopus],[superciliosus],[octopus-devel@tddft.org],[octopus])
 AC_CONFIG_SRCDIR([src/basic/global.F90])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE
@@ -263,11 +263,11 @@ AC_SUBST(DEBUG)
 dnl set the default extension for the programs
 EXEEXT="${MYEXT}${EXEEXT}"
 
-dnl can force build of utilties even with mpi
-AC_ARG_ENABLE(utils, AS_HELP_STRING([--enable-utils], [Build utilities (may sometimes work even with mpi)]))
+dnl can turn off build of utilities
+AC_ARG_ENABLE(utils, AS_HELP_STRING([--disable-utils], [Build utilities]))
 
-dnl we only generate the utilities if single precision and MPI are off
-if test \( x"$enable_mpi" = x"no" -a -z "${SINGLE_PRECISION}" \) -o \( x"$enable_utils" = x"yes" \); then
+dnl we only generate the utilities if single precision is off
+if test \( -z "${SINGLE_PRECISION}" \) -a \( x"$enable_utils" != x"no" \); then
   UTILITY_PROGRAMS='$(EXTRA_PROGRAMS)'
   msg="+ utilities"
 else
@@ -404,7 +404,7 @@ AC_CONFIG_FILES([Makefile
   src/sternheimer/Makefile
   src/main/Makefile
   src/utils/Makefile
-  perl/Makefile
+  scripts/Makefile
   doc/Makefile
   doc/pdf/Makefile
   doc/html/Makefile

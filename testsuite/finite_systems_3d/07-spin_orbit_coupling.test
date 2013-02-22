@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 07-spin_orbit_coupling.test 9012 2012-04-14 04:16:37Z xavier $
+# $Id: 07-spin_orbit_coupling.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : Spin-orbit coupling
 Programs   : octopus; octopus_mpi
-TestGroups : short-run
+TestGroups : short-run, finite_systems_3d
 Enabled    : Yes
 
 

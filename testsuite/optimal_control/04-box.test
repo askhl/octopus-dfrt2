@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 04-box.test 9601 2012-11-12 23:24:24Z dstrubbe $
+# $Id: 04-box.test 9820 2013-01-14 22:16:51Z dstrubbe $
 
 Test       : 1D Box
 Programs   : octopus; octopus_mpi
-TestGroups : long-run, oct
+TestGroups : long-run, optimal_control
 Enabled    : Yes
 
 # The test checks the optimal-control algorithm ZR98/WG05. It calculates the optimal laser field that transfers the ground state to the first excited state. 

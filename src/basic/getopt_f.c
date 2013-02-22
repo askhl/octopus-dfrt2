@@ -58,7 +58,7 @@ void FC_FUNC_(clean_clarg, CLEAR_CLARG)()
 
 void print_config(){
 #ifdef HAVE_OPENMP
-  printf("openmp");
+  printf("openmp ");
 #endif
 #ifdef HAVE_MPI
   printf("mpi ");
@@ -111,6 +111,12 @@ void print_config(){
 #ifdef HAVE_PARPACK
   printf("parpack ");
 #endif    
+#ifdef HAVE_CLAMDFFT
+  printf("clamdfft ");
+#endif  
+#ifdef HAVE_CLAMDBLAS
+  printf("clamdblas ");
+#endif  
   printf("\n");
 }
 
@@ -833,13 +839,14 @@ void FC_FUNC_(getopt_photoelectron_spectrum, GETOPT_PHOTOELECTRON_SPECTRUM)
   char *tok = NULL;
 
 
-  // *interp = 1;
-  // *estep  = -1.;
-  // espan[0]  = -1.;
-  // espan[1]  = -1.;
-  // pol[0] = 1;
-  // pol[1] = 0;
-  // pol[2] = 0;
+  /* *interp = 1;
+   *estep  = -1.;
+   espan[0]  = -1.;
+   espan[1]  = -1.;
+   pol[0] = 1;
+   pol[1] = 0;
+   pol[2] = 0;
+  */
 
 #if defined(HAVE_GETOPT_LONG)
   static struct option long_options[] =

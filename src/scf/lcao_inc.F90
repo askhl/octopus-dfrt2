@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: lcao_inc.F90 9617 2012-11-13 19:55:25Z dstrubbe $
+!! $Id: lcao_inc.F90 10047 2013-02-21 03:55:16Z dstrubbe $
 
 
 ! ---------------------------------------------------------
@@ -79,7 +79,7 @@ subroutine X(lcao_wf)(this, st, gr, geo, hm, start)
   R_TYPE, allocatable :: hpsi(:, :, :), overlap(:, :, :)
   FLOAT, allocatable :: ev(:)
   R_TYPE, allocatable :: hamilt(:, :, :), lcaopsi(:, :, :), lcaopsi2(:, :)
-  integer :: kstart, kend, ispin, iunit_h, iunit_s, iunit_e
+  integer :: kstart, kend, ispin, iunit_h, iunit_s, iunit_e, iunit_o, ii, ll, mm
 
 #ifdef HAVE_MPI
   FLOAT, allocatable :: tmp(:, :)
@@ -115,24 +115,36 @@ subroutine X(lcao_wf)(this, st, gr, geo, hm, start)
 
   if(mpi_grp_is_root(mpi_world)) call loct_progress_bar(-1, max)
 
+#ifdef LCAO_DEBUG
 ! This code (and related below) is commented out because it causes mysterious optimization
 ! problems with PGI 12.4.0 -- LAPACK fails in diagonalization, only if mesh partition from scratch!
-  !if(this%write_matrices) then
-  !  iunit_h = io_open(file=trim(STATIC_DIR)//'lcao_hamiltonian', action='write')
-  !  iunit_s = io_open(file=trim(STATIC_DIR)//'lcao_overlap', action='write')
-  !  iunit_e = io_open(file=trim(STATIC_DIR)//'lcao_eigenvectors', action='write')
-  !  if(mpi_grp_is_root(mpi_world)) then
-  !    write(iunit_h,'(4a6,a15)') 'iorb', 'jorb', 'ik', 'spin', 'hamiltonian'
-  !    write(iunit_s,'(3a6,a15)') 'iorb', 'jorb', 'spin', 'overlap'
-  !    write(iunit_e,'(4a6,a15)') 'ieig', 'jorb', 'ik', 'spin', 'coefficient'
-  !  endif
-  !endif
+  if(this%debug) then
+    iunit_h = io_open(file=trim(STATIC_DIR)//'lcao_hamiltonian', action='write')
+    iunit_s = io_open(file=trim(STATIC_DIR)//'lcao_overlap', action='write')
+    iunit_o = io_open(file=trim(STATIC_DIR)//'lcao_orbitals', action='write')
+    iunit_e = io_open(file=trim(STATIC_DIR)//'lcao_eigenvectors', action='write')
+    if(mpi_grp_is_root(mpi_world)) then
+      write(iunit_h,'(4a6,a15)') 'iorb', 'jorb', 'ik', 'spin', 'hamiltonian'
+      write(iunit_s,'(3a6,a15)') 'iorb', 'jorb', 'spin', 'overlap'
+      write(iunit_o,'(7a6)') 'iorb', 'atom', 'level', 'i', 'l', 'm', 'spin'
+      write(iunit_e,'(4a6,a15)') 'ieig', 'jorb', 'ik', 'spin', 'coefficient'
+    endif
+  endif
+#endif
 
+  ! FIXME: these loops should not be over st%d%spin_channels but rather 1 unless spin-polarized in which case 2.
   do n1 = 1, this%norbs
     
     do ispin = 1, st%d%spin_channels
       call X(get_ao)(this, st, gr%mesh, geo, n1, ispin, lcaopsi(:, :, ispin), use_psi = .true.)
     end do
+
+#ifdef LCAO_DEBUG
+    if(this%debug .and. mpi_grp_is_root(mpi_world)) then
+      call species_iwf_ilm(geo%atom(this%atom(n1))%spec, this%level(n1), this%ddim(n1), ii, ll, mm)
+      write(iunit_o,'(7i6)') n1, this%atom(n1), this%level(n1), ii, ll, mm, this%ddim(n1)
+    endif
+#endif
 
     do ik = kstart, kend
       ispin = states_dim_get_spin_index(st%d, ik)
@@ -146,16 +158,20 @@ subroutine X(lcao_wf)(this, st, gr, geo, hm, start)
 
         overlap(n1, n2, ispin) = X(mf_dotp)(gr%mesh, st%d%dim, lcaopsi(:, :, ispin), lcaopsi2)
         overlap(n2, n1, ispin) = R_CONJ(overlap(n1, n2, ispin))
-!        if(this%write_matrices .and. mpi_grp_is_root(mpi_world)) &
-!          write(iunit_s,'(3i6,2f15.6)') n1, n2, ispin, overlap(n1, n2, ispin)
+#ifdef LCAO_DEBUG
+        if(this%debug .and. mpi_grp_is_root(mpi_world)) &
+          write(iunit_s,'(3i6,2f15.6)') n1, n2, ispin, overlap(n1, n2, ispin)
+#endif
 
         do ik = kstart, kend
           if(ispin /= states_dim_get_spin_index(st%d, ik)) cycle
           hamilt(n1, n2, ik) = X(mf_dotp)(gr%mesh, st%d%dim, hpsi(:, :, ik), lcaopsi2)
           hamilt(n2, n1, ik) = R_CONJ(hamilt(n1, n2, ik))
 
-!          if(this%write_matrices .and. mpi_grp_is_root(mpi_world)) &
-!            write(iunit_h,'(4i6,2f15.6)') n1, n2, ik, ispin, units_from_atomic(units_out%energy, hamilt(n1, n2, ik))
+#ifdef LCAO_DEBUG
+          if(this%debug .and. mpi_grp_is_root(mpi_world)) &
+            write(iunit_h,'(4i6,2f15.6)') n1, n2, ik, ispin, units_from_atomic(units_out%energy, hamilt(n1, n2, ik))
+#endif
         end do
       end do
       
@@ -190,19 +206,22 @@ subroutine X(lcao_wf)(this, st, gr, geo, hm, start)
     end if
   end do
 
-!  if(this%write_matrices .and. mpi_grp_is_root(mpi_world)) then
-!    do ik =  kstart, kend
-!      do n2 = 1, this%norbs
-!        do n1 = 1, this%norbs
-!          write(iunit_e,'(4i6,2f15.6)') n2, n1, ik, ispin, hamilt(n1, n2, ik)
-!        enddo
-!      enddo
-!    enddo
-!
-!    call io_close(iunit_h)
-!    call io_close(iunit_s)
-!    call io_close(iunit_e)
-!  endif
+#ifdef LCAO_DEBUG
+  if(this%debug .and. mpi_grp_is_root(mpi_world)) then
+    do ik =  kstart, kend
+      do n2 = 1, this%norbs
+        do n1 = 1, this%norbs
+          write(iunit_e,'(4i6,2f15.6)') n2, n1, ik, ispin, hamilt(n1, n2, ik)
+        enddo
+      enddo
+    enddo
+
+    call io_close(iunit_h)
+    call io_close(iunit_s)
+    call io_close(iunit_o)
+    call io_close(iunit_e)
+  endif
+#endif
 
 #ifdef HAVE_MPI
   if(st%d%kpt%parallel) then
@@ -402,13 +421,15 @@ subroutine X(lcao_alt_init_orbitals)(this, st, gr, geo, start)
     ! initialize the radial grid
     call submesh_init_sphere(this%sphere(iatom), gr%mesh%sb, gr%mesh, geo%atom(iatom)%x, this%radius(iatom))
     INCR(dof, this%sphere(iatom)%np*this%mult*norbs)
+    ! FIXME: the second argument should be dim = st%d%dim, not 1!
     call batch_init(this%orbitals(iatom), 1, this%mult*norbs)
   end do
 
   if(this%keep_orb) then
-    write(message(1), '(a,f10.2,a)') &
-      'Info: LCAO requires', dof*CNST(8.0)/CNST(1024.0)**2, ' Mb of memory for atomic orbitals.'
-    call messages_info(1)
+    call messages_write('Info: LCAO requires')
+    call messages_write(dof*CNST(8.0), units = unit_megabytes, fmt = '(f10.1)')
+    call messages_write(' of memory for atomic orbitals.')
+    call messages_info()
   end if
 
   POP_SUB(X(lcao_alt_init_orbitals))
@@ -592,6 +613,8 @@ subroutine X(lcao_alt_wf) (this, st, gr, geo, hm, start)
       ! set the eigenvalues
       st%eigenval(1:nev, ik) = eval(1:nev)
       st%eigenval(this%nbasis + 1:st%nst, ik) = HUGE(M_ONE)
+      ! FIXME: we should calculate expectation values of the Hamiltonian here.
+      ! The output will show ******* for the eigenvalues which looks like something horrible has gone wrong.
 
       ibasis = 1
       do iatom = 1, geo%natoms
@@ -600,6 +623,7 @@ subroutine X(lcao_alt_wf) (this, st, gr, geo, hm, start)
         call lcao_alt_get_orbital(this%orbitals(iatom), this%sphere(iatom), geo, ispin, iatom, this%norb_atom(iatom))
 
         do ib = st%block_start, st%block_end
+          ! FIXME: this call handles spinors incorrectly.
           call X(submesh_batch_add_matrix)(this%sphere(iatom), evec(ibasis:, states_block_min(st, ib):), &
             this%orbitals(iatom), st%psib(ib, ik))
         end do

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: exponential.F90 9451 2012-09-19 18:21:48Z acastro $
+!! $Id: exponential.F90 9643 2012-11-16 06:02:32Z dstrubbe $
 
 #include "global.h"
 
@@ -579,13 +579,13 @@ contains
   end subroutine exponential_apply
 
   subroutine exponential_apply_batch(te, der, hm, psib, ik, deltat, time, Imdeltat, Imtime)
-    type(exponential_t), intent(inout) :: te
-    type(derivatives_t), intent(inout) :: der
-    type(hamiltonian_t), intent(inout) :: hm
-    integer,             intent(in)    :: ik
-    type(batch_t),       intent(inout) :: psib
-    FLOAT,               intent(in)    :: deltat
-    FLOAT,               intent(in)    :: time
+    type(exponential_t),   intent(inout) :: te
+    type(derivatives_t),   intent(inout) :: der
+    type(hamiltonian_t),   intent(inout) :: hm
+    integer,               intent(in)    :: ik
+    type(batch_t), target, intent(inout) :: psib
+    FLOAT,                 intent(in)    :: deltat
+    FLOAT,                 intent(in)    :: time
     FLOAT, optional,     intent(in)    :: Imdeltat
     FLOAT, optional,     intent(in)    :: Imtime
     

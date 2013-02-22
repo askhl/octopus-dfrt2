@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: states.F90 9619 2012-11-13 20:58:51Z dstrubbe $
+!! $Id: states.F90 10042 2013-02-20 23:04:47Z dstrubbe $
 
 #include "global.h"
 
@@ -41,7 +41,7 @@ module states_m
   use kpoints_m
   use lalg_adv_m
   use lalg_basic_m
-  use loct_m
+  use loct_pointer_m
   use math_m
   use mesh_m
   use mesh_function_m
@@ -313,9 +313,9 @@ contains
 
   ! ---------------------------------------------------------
   subroutine states_init(st, gr, geo)
-    type(states_t),    intent(inout) :: st
-    type(grid_t),      intent(in)    :: gr
-    type(geometry_t),  intent(in)    :: geo
+    type(states_t), target, intent(inout) :: st
+    type(grid_t),           intent(in)    :: gr
+    type(geometry_t),       intent(in)    :: geo
 
     FLOAT :: excess_charge
     integer :: nempty, ierr, il, ntot, default, nthreads
@@ -327,39 +327,6 @@ contains
     st%fromScratch = .true. ! this will be reset if restart_read is called
     call states_null(st)
 
-    !%Variable StatesBlockSize
-    !%Type integer
-    !%Section Execution::Optimization
-    !%Description
-    !% Some routines work over blocks of eigenfunctions, which
-    !% generally improves performance at the expense of increased
-    !% memory consumption. This variable selects the size of the
-    !% blocks to be used. If OpenCl is enabled, the default is 32;
-    !% otherwise it is max(4, 2*nthreads).
-    !%End
-
-    nthreads = 1
-#ifdef HAVE_OPENMP
-    !$omp parallel
-    !$omp master
-    nthreads = omp_get_num_threads()
-    !$omp end master
-    !$omp end parallel
-#endif    
-
-    if(opencl_is_enabled()) then
-      default = 32
-    else
-      default = max(4, 2*nthreads)
-    end if
-
-    call parse_integer(datasets_check('StatesBlockSize'), default, st%d%block_size)
-    if(st%d%block_size < 1) then
-      message(1) = "The variable 'StatesBlockSize' must be greater than 0."
-      call messages_fatal(1)
-    end if
-
-    ASSERT(st%d%block_size > 0)
 
     !%Variable SpinComponents
     !%Type integer
@@ -378,7 +345,7 @@ contains
     !% wavefunctions necessary for a spin-unpolarized calculation.
     !%Option non_collinear 3
     !%Option spinors 3
-    !% The spin-orbitals are two-component spinors. This effectively allows the spin-density to
+    !% (Synonym: <tt>non_collinear</tt>.) The spin-orbitals are two-component spinors. This effectively allows the spin-density to
     !% be oriented non-collinearly: <i>i.e.</i> the magnetization vector is allowed to take different
     !% directions at different points. This vector is always in 3D regardless of <tt>Dimensions</tt>.
     !%End
@@ -550,7 +517,7 @@ contains
       st%d%nspin = 4
       st%d%spin_channels = 2
     end select
-     
+    
     if(ntot > 0) then
       if(ntot < st%nst) then
         message(1) = 'TotalStates is smaller than the number of states required by the system.'
@@ -562,6 +529,45 @@ contains
 
     st%nst = st%nst + nempty
 
+    !%Variable StatesBlockSize
+    !%Type integer
+    !%Section Execution::Optimization
+    !%Description
+    !% Some routines work over blocks of eigenfunctions, which
+    !% generally improves performance at the expense of increased
+    !% memory consumption. This variable selects the size of the
+    !% blocks to be used. If OpenCl is enabled, the default is 32;
+    !% otherwise it is max(4, 2*nthreads).
+    !%End
+
+    nthreads = 1
+#ifdef HAVE_OPENMP
+    !$omp parallel
+    !$omp master
+    nthreads = omp_get_num_threads()
+    !$omp end master
+    !$omp end parallel
+#endif    
+
+    if(opencl_is_enabled()) then
+      default = 32
+    else
+      default = max(4, 2*nthreads)
+    end if
+
+    if(default > pad_pow2(st%nst)) default = pad_pow2(st%nst)
+
+    ASSERT(default > 0)
+
+    call parse_integer(datasets_check('StatesBlockSize'), default, st%d%block_size)
+    if(st%d%block_size < 1) then
+      call messages_write("The variable 'StatesBlockSize' must be greater than 0.")
+      call messages_fatal()
+    end if
+
+    ASSERT(st%d%block_size > 0)
+
+    conf%target_states_block_size = st%d%block_size
 
     ! FIXME: For now, open-boundary calculations are only possible for
     ! continuum states, i.e. for those states treated by the Lippmann-
@@ -1072,10 +1078,12 @@ contains
 
     call smear_init(st%smear, st%d%ispin, st%fixed_occ, integral_occs)
 
-    if(.not. smear_is_semiconducting(st%smear) .and. .not. st%smear%method == SMEAR_FIXED_OCC &
-       .and. st%nst * st%smear%el_per_state .le. st%qtot) then
-      call messages_write('Smearing needs unoccupied states (via ExtraStates) to be useful.')
-      call messages_warning()
+    if(.not. smear_is_semiconducting(st%smear) .and. .not. st%smear%method == SMEAR_FIXED_OCC) then
+      if((st%d%ispin /= SPINORS .and. st%nst * 2 .le. st%qtot) .or. &
+         (st%d%ispin == SPINORS .and. st%nst .le. st%qtot)) then
+        call messages_write('Smearing needs unoccupied states (via ExtraStates) to be useful.')
+        call messages_warning()
+      endif
     endif
 
     ! sanity check
@@ -1502,9 +1510,9 @@ contains
 
   ! ---------------------------------------------------------
   subroutine states_densities_init(st, gr, geo)
-    type(states_t),    intent(inout) :: st
-    type(grid_t),      intent(in)    :: gr
-    type(geometry_t),  intent(in)    :: geo
+    type(states_t), target, intent(inout) :: st
+    type(grid_t),           intent(in)    :: gr
+    type(geometry_t),       intent(in)    :: geo
 
     FLOAT :: size
 
@@ -1677,8 +1685,8 @@ contains
 
   ! ---------------------------------------------------------
   subroutine states_copy(stout, stin)
-    type(states_t), intent(inout) :: stout
-    type(states_t), intent(in)    :: stin
+    type(states_t), target, intent(inout) :: stout
+    type(states_t),         intent(in)    :: stin
 
     PUSH_SUB(states_copy)
 
@@ -2454,7 +2462,7 @@ contains
 
     spin(1) = M_TWO*z
     spin(2) = M_TWO*aimag(z)
-    spin(3) = zmf_dotp(mesh, f1(:, 1), f1(:, 1)) - zmf_dotp(mesh, f1(:, 2), f1(:, 2))
+    spin(3) = zmf_nrm2(mesh, f1(:, 1))**2 - zmf_nrm2(mesh, f1(:, 2))**2
     spin = M_HALF*spin ! spin is half the sigma matrix.
 
     POP_SUB(state_spin)

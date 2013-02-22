@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: stencil_starplus.F90 8805 2012-01-25 12:38:37Z joseba $
+!! $Id: stencil_starplus.F90 9701 2012-12-01 19:32:19Z dstrubbe $
 
 #include "global.h"
 
@@ -210,7 +210,7 @@ contains
 
     integer :: i, n, j
 
-    PUSH_SUB(stencil_star_get_grad)
+    PUSH_SUB(stencil_starplus_get_grad)
 
     call stencil_allocate(this, stencil_starplus_size_grad(dim, order))
 
@@ -229,7 +229,7 @@ contains
 
     call stencil_init_center(this)
 
-    POP_SUB(stencil_star_get_grad)
+    POP_SUB(stencil_starplus_get_grad)
   end subroutine stencil_starplus_get_grad
 
 

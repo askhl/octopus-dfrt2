@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 03-helium_atom.test 8321 2011-09-25 00:10:12Z xavier $
+# $Id: 03-helium_atom.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : 1D-Helium
 Programs   : octopus; octopus_mpi
-TestGroups : short-run
+TestGroups : short-run, finite_systems_2d
 Enabled    : Yes
 
 # The following tests do not describe the calculation of a two-dimensional

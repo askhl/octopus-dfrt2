@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: phonons_fd.F90 9337 2012-09-05 19:42:23Z dstrubbe $
+!! $Id: phonons_fd.F90 9915 2013-01-31 23:03:15Z dstrubbe $
 
 #include "global.h"
 
@@ -89,7 +89,7 @@ contains
     vib%disp = units_to_atomic(units_inp%length, vib%disp)
 
     ! calculate dynamical matrix
-    call get_dyn_matrix(sys%gr, sys%geo, sys%st, sys%ks, hm, sys%outp, vib)
+    call get_dyn_matrix(sys%gr, sys%mc, sys%geo, sys%st, sys%ks, hm, sys%outp, vib)
 
     call vibrations_output(vib)
     
@@ -122,8 +122,9 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine get_dyn_matrix(gr, geo, st, ks, hm, outp, vib)
+  subroutine get_dyn_matrix(gr, mc, geo, st, ks, hm, outp, vib)
     type(grid_t), target, intent(inout) :: gr
+    type(multicomm_t),    intent(in)    :: mc
     type(geometry_t),     intent(inout) :: geo
     type(states_t),       intent(inout) :: st
     type(v_ks_t),         intent(inout) :: ks
@@ -148,10 +149,10 @@ contains
 
     do iatom = 1, geo%natoms
       do alpha = 1, mesh%sb%dim
-        write(message(1), '(a,i3,3a)') 'Info: Moving atom ', iatom, ' in the ', index2axis(alpha), '-direction.'
-        call messages_info(1)
-
         imat = vibrations_get_index(vib, iatom, alpha)
+
+        write(message(1), '(a,i3,3a)') 'Info: Moving atom ', iatom, ' in the +', index2axis(alpha), '-direction.'
+        call messages_info(1)
 
         ! move atom iatom in direction alpha by dist
         geo%atom(iatom)%x(alpha) = geo%atom(iatom)%x(alpha) + vib%disp
@@ -161,10 +162,13 @@ contains
         call density_calc(st, gr, st%rho)
         call v_ks_calc(ks, hm, st, calc_eigenval=.true.)
         call energy_calc_total (hm, gr, st)
-        call scf_run(scf, gr, geo, st, ks, hm, outp, gs_run=.false., verbosity = VERB_COMPACT)
+        call scf_run(scf, mc, gr, geo, st, ks, hm, outp, gs_run=.false., verbosity = VERB_COMPACT)
         do jatom = 1, geo%natoms
           forces0(jatom, 1:mesh%sb%dim) = geo%atom(jatom)%f(1:mesh%sb%dim)
         end do
+
+        write(message(1), '(a,i3,3a)') 'Info: Moving atom ', iatom, ' in the -', index2axis(alpha), '-direction.'
+        call messages_info(1)
 
         geo%atom(iatom)%x(alpha) = geo%atom(iatom)%x(alpha) - M_TWO*vib%disp
 
@@ -173,7 +177,7 @@ contains
         call density_calc(st, gr, st%rho)
         call v_ks_calc(ks, hm, st, calc_eigenval=.true.)
         call energy_calc_total(hm, gr, st)
-        call scf_run(scf, gr, geo, st, ks, hm, outp, gs_run=.false., verbosity = VERB_COMPACT)
+        call scf_run(scf, mc, gr, geo, st, ks, hm, outp, gs_run=.false., verbosity = VERB_COMPACT)
         do jatom = 1, geo%natoms
           forces(jatom, 1:mesh%sb%dim) = geo%atom(jatom)%f(1:mesh%sb%dim)
         end do

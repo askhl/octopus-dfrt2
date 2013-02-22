@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 03-sodium_chain.02-ground_state_disp.inp 8273 2011-09-09 17:42:49Z xavier $
+# $Id: 03-sodium_chain.02-ground_state_disp.inp 9947 2013-02-09 01:39:41Z xavier $
 
 Units = ev_angstrom
 
@@ -44,3 +44,5 @@ LCAODimension = 9
 unocc_LCAOStart = lcao_none
 
 NumberUnoccStates = 1
+
+ExperimentalFeatures = yes

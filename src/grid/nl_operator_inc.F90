@@ -15,18 +15,18 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: nl_operator_inc.F90 9446 2012-09-18 19:00:12Z dstrubbe $
+!! $Id: nl_operator_inc.F90 10030 2013-02-20 14:58:40Z dstrubbe $
 
 ! ---------------------------------------------------------
 
 subroutine X(nl_operator_operate_batch)(op, fi, fo, ghost_update, profile, points, factor)
-  type(nl_operator_t), intent(in)    :: op
-  type(batch_t),       intent(inout) :: fi
-  type(batch_t),       intent(inout) :: fo
-  logical, optional,   intent(in)    :: ghost_update
-  logical, optional,   intent(in)    :: profile
-  integer, optional,   intent(in)    :: points
-  FLOAT,   optional,   intent(in)    :: factor
+  type(nl_operator_t), target, intent(in)    :: op
+  type(batch_t),       target, intent(inout) :: fi
+  type(batch_t),               intent(inout) :: fo !< this should be target, but old ifort 9.1 segfaults with it
+  logical,         optional,   intent(in)    :: ghost_update
+  logical,         optional,   intent(in)    :: profile
+  integer,         optional,   intent(in)    :: points
+  FLOAT,           optional,   intent(in)    :: factor
 
   integer :: ist, points_
   real(8) :: cop
@@ -102,7 +102,7 @@ subroutine X(nl_operator_operate_batch)(op, fi, fo, ghost_update, profile, point
 #endif
       
       if(batch_is_packed(fi) .and. batch_is_packed(fo)) then
-        call operate_ri_vec(op%stencil%size, wre(1), nri_loc, ri(1, ini), imin(ini), imax(ini), &
+        call X(operate_ri_vec)(op%stencil%size, wre(1), nri_loc, ri(1, ini), imin(ini), imax(ini), &
           fi%pack%X(psi)(1, 1), log2(fi%pack%size_real(1)), fo%pack%X(psi)(1, 1))
       else
         do ist = 1, fi%nst_linear
@@ -114,7 +114,7 @@ subroutine X(nl_operator_operate_batch)(op, fi, fo, ghost_update, profile, point
 #else
 #define LOGLDF 1
 #endif
-          call operate_ri_vec(op%stencil%size, wre(1), nri_loc, ri(1, ini), imin(ini), imax(ini), pfi(1), LOGLDF, pfo(1))
+          call X(operate_ri_vec)(op%stencil%size, wre(1), nri_loc, ri(1, ini), imin(ini), imax(ini), pfi(1), LOGLDF, pfo(1))
 #undef LOGLDF
         end do
       end if
@@ -355,9 +355,9 @@ end subroutine X(nl_operator_operate_batch)
 
 ! ---------------------------------------------------------
 subroutine X(nl_operator_operate)(op, fi, fo, ghost_update, profile, points)
-  R_TYPE,              intent(inout) :: fi(:)  ! fi(op%np_part)
+  R_TYPE,              intent(inout) :: fi(:)  !< fi(op%np_part)
   type(nl_operator_t), intent(in)    :: op
-  R_TYPE,              intent(out)   :: fo(:)  ! fo(op%np)
+  R_TYPE,  target,     intent(out)   :: fo(:)  !< fo(op%np). target for batch_add_state
   logical, optional,   intent(in)    :: ghost_update
   logical, optional,   intent(in)    :: profile
   integer, optional,   intent(in)    :: points

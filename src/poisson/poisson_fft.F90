@@ -63,8 +63,8 @@ module poisson_fft_m
        POISSON_FFT_KERNEL_CORRECTED =  4
 
   type poisson_fft_t
-    type(fourier_space_op_t) :: coulb
-    integer                  :: kernel
+    type(fourier_space_op_t) :: coulb  !< object for Fourier space operations
+    integer                  :: kernel !< choice of kernel, one of options above
   end type poisson_fft_t
 contains
 
@@ -87,6 +87,9 @@ contains
         call poisson_fft_build_1d_0d(this, mesh, cube, soft_coulb_param)
       case(POISSON_FFT_KERNEL_NOCUT)
         call poisson_fft_build_1d_1d(this, mesh, cube, soft_coulb_param)
+      case default
+        message(1) = "Invalid Poisson FFT kernel for 1D."
+        call messages_fatal(1)
       end select
 
     case(2)
@@ -97,6 +100,9 @@ contains
         call poisson_fft_build_2d_1d(this, mesh, cube)
       case(POISSON_FFT_KERNEL_NOCUT)
         call poisson_fft_build_2d_2d(this, mesh, cube)
+      case default
+        message(1) = "Invalid Poisson FFT kernel for 2D."
+        call messages_fatal(1)
       end select
       
     case(3)
@@ -112,7 +118,10 @@ contains
         
       case(POISSON_FFT_KERNEL_NOCUT)
         call poisson_fft_build_3d_3d(this, mesh, cube)
-        
+
+      case default
+        message(1) = "Invalid Poisson FFT kernel for 3D."
+        call messages_fatal(1)        
       end select
     end select
 
@@ -120,6 +129,27 @@ contains
   end subroutine poisson_fft_init
 
   !-----------------------------------------------------------------
+
+  subroutine get_cutoff(default_r_c, r_c)
+    FLOAT, intent(in)  :: default_r_c
+    FLOAT, intent(out) :: r_c
+
+    call parse_float(datasets_check('PoissonCutoffRadius'), default_r_c, r_c, units_inp%length)
+    
+    call messages_write('Info: Poisson Cutoff Radius     =')
+    call messages_write(r_c, units = units_out%length, fmt = '(f6.1)')
+    call messages_info()
+    
+    if ( r_c > default_r_c + M_EPSILON) then
+      call messages_write('Poisson cutoff radius is larger than cell size.', new_line = .true.)
+      call messages_write('You can see electrons in neighboring cell(s).')
+      call messages_warning()
+    end if
+    
+  end subroutine get_cutoff
+
+  !-----------------------------------------------------------------
+
   subroutine poisson_fft_build_3d_3d(this, mesh, cube)
     type(poisson_fft_t), intent(inout) :: this
     type(mesh_t),        intent(inout) :: mesh
@@ -177,6 +207,7 @@ contains
 
 
   !-----------------------------------------------------------------
+  !> C. A. Rozzi et al., Phys. Rev. B 73, 205119 (2006), Table I
   subroutine poisson_fft_build_3d_2d(this, mesh, cube)
     type(poisson_fft_t), intent(inout) :: this
     type(mesh_t),        intent(inout) :: mesh
@@ -184,26 +215,26 @@ contains
 
     integer :: ix, iy, iz, ixx(3), db(3), idim
     FLOAT :: temp(3), modg2
-    FLOAT :: gpar, gx, gz, r_c, gg(3)
-    FLOAT :: DELTA_R = CNST(1.0e-12)
+    FLOAT :: gpar, gz, r_c, gg(3), default_r_c
     FLOAT, allocatable :: fft_coulb_FS(:,:,:)
 
     PUSH_SUB(poisson_fft_build_3d_2d)
 
     db(1:3) = cube%rs_n_global(1:3)
 
-    call parse_float(datasets_check('PoissonCutoffRadius'),&
-      maxval(db(1:3)*mesh%spacing(1:3)/M_TWO), r_c, units_inp%length)
+    !%Variable PoissonCutoffRadius
+    !%Type float
+    !%Section Hamiltonian::Poisson
+    !%Description
+    !% When <tt>PoissonSolver = fft</tt> and <tt>PoissonFFTKernel</tt> is neither <tt>multipole_corrections</tt>
+    !% nor <tt>fft_nocut</tt>,
+    !% this variable controls the distance after which the electron-electron interaction goes to zero.
+    !% A warning will be written if the value is too large and will cause spurious interactions between images.
+    !% The default is half of the FFT box max dimension in a finite direction.
+    !%End
 
-    write(message(1),'(3a,f12.6)')'Info: Poisson Cutoff Radius [',  &
-      trim(units_abbrev(units_out%length)), '] = ',       &
-      units_from_atomic(units_out%length, r_c)
-    call messages_info(1)
-    if ( r_c > maxval(db(1:3)*mesh%spacing(1:3)/M_TWO) + DELTA_R) then
-      message(1) = 'Poisson cutoff radius is larger than cell size.'
-      message(2) = 'You can see electrons in neighboring cell(s).'
-      call messages_warning(2)
-    end if
+    default_r_c = db(1)*mesh%spacing(1)/M_TWO
+    call get_cutoff(default_r_c, r_c)
 
     ! store the fourier transform of the Coulomb interaction
     SAFE_ALLOCATE(fft_Coulb_FS(1:cube%fs_n_global(1), 1:cube%fs_n_global(2), 1:cube%fs_n_global(3)))
@@ -213,7 +244,6 @@ contains
 
     do ix = 1, cube%fs_n_global(1)
       ixx(1) = pad_feq(ix, db(1), .true.)
-      gx = temp(1)*ixx(1)
       do iy = 1, cube%fs_n_global(2)
         ixx(2) = pad_feq(iy, db(2), .true.)
         do iz = 1, cube%fs_n_global(3)
@@ -231,6 +261,7 @@ contains
           if(abs(modg2) > M_EPSILON) then
             gz = abs(gg(3))
             gpar = hypot(gg(1), gg(2))
+            ! note: if gpar = 0, then modg2 = gz**2
             fft_Coulb_FS(ix, iy, iz) = poisson_cutoff_3D_2D(gpar,gz,r_c)/modg2
           else
             fft_Coulb_FS(ix, iy, iz) = -M_HALF*r_c**2
@@ -253,6 +284,7 @@ contains
 
 
   !-----------------------------------------------------------------
+  !> C. A. Rozzi et al., Phys. Rev. B 73, 205119 (2006), Table I
   subroutine poisson_fft_build_3d_1d(this, mesh, cube)
     type(poisson_fft_t), intent(inout) :: this
     type(mesh_t),        intent(inout) :: mesh
@@ -262,26 +294,15 @@ contains
     FLOAT, allocatable :: x(:), y(:)
     integer :: ix, iy, iz, ixx(3), db(3), k, ngp, idim
     FLOAT :: temp(3), modg2, xmax
-    FLOAT :: gperp, gx, gy, gz, r_c, gg(3)
-    FLOAT :: DELTA_R = CNST(1.0e-12)
+    FLOAT :: gperp, gx, gy, gz, r_c, gg(3), default_r_c
     FLOAT, allocatable :: fft_coulb_FS(:,:,:)
 
     PUSH_SUB(poisson_fft_build_3d_1d)
 
     db(1:3) = cube%rs_n_global(1:3)
 
-    call parse_float(datasets_check('PoissonCutoffRadius'),&
-      maxval(db(1:3)*mesh%spacing(1:3)/M_TWO), r_c, units_inp%length)
-
-    write(message(1),'(3a,f12.6)')'Info: Poisson Cutoff Radius [',  &
-      trim(units_abbrev(units_out%length)), '] = ',       &
-      units_from_atomic(units_out%length, r_c)
-    call messages_info(1)
-    if ( r_c > maxval(db(1:3)*mesh%spacing(1:3)/M_TWO) + DELTA_R) then
-      message(1) = 'Poisson cutoff radius is larger than cell size.'
-      message(2) = 'You can see electrons in neighboring cell(s).'
-      call messages_warning(2)
-    end if
+    default_r_c = maxval(db(2:3)*mesh%spacing(2:3)/M_TWO)
+    call get_cutoff(default_r_c, r_c)
 
     ! store the fourier transform of the Coulomb interaction
     SAFE_ALLOCATE(fft_Coulb_FS(1:cube%fs_n_global(1), 1:cube%fs_n_global(2), 1:cube%fs_n_global(3)))
@@ -375,6 +396,7 @@ contains
 
 
   !-----------------------------------------------------------------
+  !> C. A. Rozzi et al., Phys. Rev. B 73, 205119 (2006), Table I
   subroutine poisson_fft_build_3d_0d(this, mesh, cube, kernel)
     type(poisson_fft_t), intent(inout) :: this
     type(mesh_t),        intent(inout) :: mesh
@@ -383,8 +405,7 @@ contains
 
     integer :: ix, iy, iz, ixx(3), db(3), idim, lx, ly, lz, n1, n2, n3
     FLOAT :: temp(3), modg2
-    FLOAT :: gx, r_c, gg(3)
-    FLOAT :: DELTA_R = CNST(1.0e-12)
+    FLOAT :: r_c, gg(3), default_r_c
     FLOAT, allocatable :: fft_coulb_FS(:,:,:)
 
     PUSH_SUB(poisson_fft_build_3d_0d)
@@ -392,18 +413,8 @@ contains
     db(1:3) = cube%rs_n_global(1:3)
 
     if (kernel .ne. POISSON_FFT_KERNEL_CORRECTED) then
-      call parse_float(datasets_check('PoissonCutoffRadius'),&
-        maxval(db(1:3)*mesh%spacing(1:3)/M_TWO), r_c, units_inp%length)
-
-      write(message(1),'(3a,f12.6)')'Info: Poisson Cutoff Radius [',  &
-        trim(units_abbrev(units_out%length)), '] = ',       &
-        units_from_atomic(units_out%length, r_c)
-      call messages_info(1)
-      if ( r_c > maxval(db(1:3)*mesh%spacing(1:3)/M_TWO) + DELTA_R) then
-        message(1) = 'Poisson cutoff radius is larger than cell size.'
-        message(2) = 'You can see electrons in neighboring cell(s).'
-        call messages_warning(2)
-      end if
+      default_r_c = maxval(db(1:3)*mesh%spacing(1:3)/M_TWO)
+      call get_cutoff(default_r_c, r_c)
     end if
 
     n1 = max(1, cube%fs_n(1))
@@ -419,7 +430,6 @@ contains
     do lx = 1, n1
       ix = cube%fs_istart(1) + lx - 1
       ixx(1) = pad_feq(ix, db(1), .true.)
-      gx = temp(1)*ixx(1)
       do ly = 1, n2
         iy = cube%fs_istart(2) + ly - 1
         ixx(2) = pad_feq(iy, db(2), .true.)
@@ -466,6 +476,7 @@ contains
 
 
   !-----------------------------------------------------------------
+  !> A. Castro et al., Phys. Rev. B 80, 033102 (2009)
   subroutine poisson_fft_build_2d_0d(this, mesh, cube)
     type(poisson_fft_t), intent(inout) :: this
     type(mesh_t),        intent(in)    :: mesh
@@ -473,8 +484,7 @@ contains
 
     type(spline_t) :: besselintf
     integer :: i, ix, iy, ixx(2), db(2), npoints
-    FLOAT :: temp(2), vec, r_c, maxf, dk
-    FLOAT :: DELTA_R = CNST(1.0e-12)
+    FLOAT :: temp(2), vec, r_c, maxf, dk, default_r_c
     FLOAT, allocatable :: x(:), y(:)
     FLOAT, allocatable :: fft_coulb_FS(:,:,:)
 
@@ -482,18 +492,9 @@ contains
 
     db(1:2) = cube%rs_n_global(1:2)
 
-    call parse_float(datasets_check('PoissonCutoffRadius'),&
-      maxval(db(1:2)*mesh%spacing(1:2)/M_TWO), r_c, units_inp%length)
+    default_r_c = maxval(db(1:2)*mesh%spacing(1:2)/M_TWO)
+    call get_cutoff(default_r_c, r_c)
 
-    write(message(1),'(3a,f12.6)')'Info: Poisson Cutoff Radius [',  &
-      trim(units_abbrev(units_out%length)), '] = ',       &
-      units_from_atomic(units_out%length, r_c)
-    call messages_info(1)
-    if ( r_c > maxval(db(1:2)*mesh%spacing(1:2)/M_TWO) + DELTA_R) then
-      message(1) = 'Poisson cutoff radius is larger than cell size.'
-      message(2) = 'You can see electrons in neighboring cell(s).'
-      call messages_warning(2)
-    end if
     call spline_init(besselintf)
 
     ! store the fourier transform of the Coulomb interaction
@@ -539,20 +540,22 @@ contains
     
 
   !-----------------------------------------------------------------
+  !> A. Castro et al., Phys. Rev. B 80, 033102 (2009)
   subroutine poisson_fft_build_2d_1d(this, mesh, cube)
     type(poisson_fft_t), intent(inout) :: this
     type(mesh_t),        intent(in)    :: mesh
     type(cube_t),        intent(inout) :: cube
 
     integer :: ix, iy, ixx(2), db(2)
-    FLOAT :: temp(2), vec, r_c, gx, gy
+    FLOAT :: temp(2), r_c, gx, gy, default_r_c
     FLOAT, allocatable :: fft_coulb_FS(:,:,:)
 
     PUSH_SUB(poisson_fft_build_2d_1d)
 
     db(1:2) = cube%rs_n_global(1:2)
 
-    r_c = M_TWO * mesh%sb%lsize(2)
+    default_r_c = db(2)*mesh%spacing(2)/M_TWO
+    call get_cutoff(default_r_c, r_c)
 
     ! store the fourier transform of the Coulomb interaction
     SAFE_ALLOCATE(fft_Coulb_FS(1:cube%fs_n_global(1), 1:cube%fs_n_global(2), 1:cube%fs_n_global(3)))
@@ -573,7 +576,6 @@ contains
       do iy = 1, db(2)
         ixx(2) = pad_feq(iy, db(2), .true.)
         gy = temp(2)*ixx(2)
-        vec = sqrt( (temp(1)*ixx(1))**2 + (temp(2)*ixx(2))**2)
         fft_coulb_fs(ix, iy, 1) = poisson_cutoff_2d_1d(gy, gx, r_c)
       end do
     end do
@@ -588,6 +590,7 @@ contains
 
 
   !-----------------------------------------------------------------
+  !> A. Castro et al., Phys. Rev. B 80, 033102 (2009)
   subroutine poisson_fft_build_2d_2d(this, mesh, cube)
     type(poisson_fft_t), intent(inout) :: this
     type(mesh_t),        intent(in)    :: mesh
@@ -661,14 +664,15 @@ contains
     FLOAT,               intent(in)    :: poisson_soft_coulomb_param
 
     integer            :: box(1), ixx(1), ix
-    FLOAT              :: temp(1), g, r_c
+    FLOAT              :: temp(1), g, r_c, default_r_c
     FLOAT, allocatable :: fft_coulb_fs(:, :, :)
 
     PUSH_SUB(poisson_fft_build_1d_0d)
 
     box(1:1) = cube%rs_n_global(1:1)
 
-    r_c = box(1)*mesh%spacing(1)/M_TWO
+    default_r_c = box(1)*mesh%spacing(1)/M_TWO
+    call get_cutoff(default_r_c, r_c)
 
     SAFE_ALLOCATE(fft_coulb_fs(1:cube%fs_n_global(1), 1:cube%fs_n_global(2), 1:cube%fs_n_global(3)))
     fft_coulb_fs = M_ZERO
@@ -709,7 +713,7 @@ contains
     FLOAT,                          intent(out)   :: pot(:)
     FLOAT,                          intent(in)    :: rho(:)
     type(mesh_cube_parallel_map_t), intent(in)    :: mesh_cube_map
-    logical, optional, intent(in)                 :: average_to_zero
+    logical,              optional, intent(in)    :: average_to_zero !< default is false
 
     logical :: average_to_zero_
     FLOAT :: average

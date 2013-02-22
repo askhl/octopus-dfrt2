@@ -1,4 +1,4 @@
-!! Copyright (C) 2005-2006 Florian Lorenzen, Heiko Appel, J. Alberdi
+!! Copyright (C) 2005-2006 Florian Lorenzen, Heiko Appel, J. Alberdi-Rodriguez
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: par_vec.F90 9550 2012-11-05 19:24:25Z dstrubbe $
+!! $Id: par_vec.F90 9888 2013-01-24 17:39:22Z joseba $
 
 #include "global.h"
  

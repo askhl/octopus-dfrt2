@@ -26,7 +26,7 @@ subroutine X(modelmb_sym_state)(eigenval, iunit, gr, mm, &
   integer,                  intent(in)    :: mm
   type(modelmb_particle_t), intent(in)    :: modelmbparticles
   integer,                  intent(in)    :: ncombo
-  integer,                  intent(inout) :: young_used(1:ncombo)
+  integer,                  intent(inout) :: young_used(:) !< (1:ncombo)
   R_TYPE,                   intent(inout) :: wf(:) !< will be antisymmetrized on output
   logical,                  intent(out)   :: symmetries_satisfied
   logical,                  intent(in)    :: tproj_1yd
@@ -107,7 +107,7 @@ subroutine X(modelmb_sym_state)(eigenval, iunit, gr, mm, &
     ! skip diagram combinations already used in present degenerate subspace
     if (young_used (idiagram_combo) > 0) cycle
 
-    call X(modelmb_sym_state_1diag)(eigenval, gr, mm, &
+    call X(modelmb_sym_state_1diag)(gr, &
        modelmbparticles, dg_combo_ndown(:, idiagram_combo), &
        dg_combo_iy(:, idiagram_combo), &
        antisymwf, sym_ok_alltypes, norm, youngstring)
@@ -153,18 +153,15 @@ end subroutine X(modelmb_sym_state)
 
 ! ---------------------------------------------------------
 !> project out states for a single combination of Young diagrams (1 diagram for each particle type)
-subroutine X(modelmb_sym_state_1diag)(eigenval, gr, mm, &
+subroutine X(modelmb_sym_state_1diag)(gr, &
            modelmbparticles, nspindown_in, iyoung_in, &
            antisymwf, sym_ok_alltypes, norm, youngstring)
-  FLOAT,                    intent(in)    :: eigenval
   type(modelmb_particle_t), intent(in)    :: modelmbparticles
   type(grid_t),             intent(in)    :: gr
-  integer,                  intent(in)    :: mm
-  integer,                  intent(in)    :: nspindown_in(1:modelmbparticles%ntype_of_particle)
-  integer,                  intent(in)    :: iyoung_in(1:modelmbparticles%ntype_of_particle)
-
+  integer,                  intent(in)    :: nspindown_in(:) !< (1:modelmbparticles%ntype_of_particle)
+  integer,                  intent(in)    :: iyoung_in(:) !< (1:modelmbparticles%ntype_of_particle)
   R_TYPE,                   intent(inout) :: antisymwf(:,:,:) !< will be antisymmetrized on output
-  integer,                  intent(out)   :: sym_ok_alltypes(1:modelmbparticles%ntype_of_particle)
+  integer,                  intent(out)   :: sym_ok_alltypes(:) !< (1:modelmbparticles%ntype_of_particle)
   FLOAT,                    intent(out)   :: norm
   character(len=500),       intent(out)   :: youngstring
 
@@ -423,7 +420,7 @@ subroutine X(modelmb_antisym_1spin) (n1spin, perms_1spin, ndimmb, npptype, ofst,
   SAFE_ALLOCATE(antisymwf_acc(1:gr%mesh%np, 1, 1))
   ! for each permutation of particles of this type
   !  antisymmetrize the up labeled spins, amongst themselves
-  antisymwf_acc = M_z0
+  antisymwf_acc = R_TOTYPE(M_ZERO)
   do iperm_1spin = 1, perms_1spin%npermutations
 
     do ip = 1, gr%mesh%np_global

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: ps.F90 9413 2012-09-14 17:10:39Z micael $
+!! $Id: ps.F90 10039 2013-02-20 20:29:23Z dstrubbe $
 
 #include "global.h"
 
@@ -163,9 +163,14 @@ contains
       ps%kbc    = 1     ! only one projector per angular momentum
       ps%l_loc  = lloc  ! the local part of the pseudo
 
-      ps%l_max  = min(ps_psf%ps_grid%no_l_channels - 1, lmax) ! Maybe the file has not enough components.
+      ps%l_max  = min(ps_psf%ps_grid%no_l_channels - 1, lmax) ! Maybe the file does not have enough components.
       ps%conf%p = ps_psf%ps_grid%no_l_channels
       if(ps%l_max == 0) ps%l_loc = 0 ! Vanderbilt is not acceptable if ps%l_max == 0.
+
+      if(lmax /= ps%l_max) then
+        message(1) = "lmax in Species block for " // trim(label) // " is larger than number available in pseudopotential."
+        call messages_fatal(1)
+      endif
 
       call ps_psf_process(ps_psf, lmax, ps%l_loc)
       call logrid_copy(ps_psf%ps_grid%g, ps%g)
@@ -183,8 +188,13 @@ contains
       ps%kbc    = 1     ! only one projector per angular momentum
       ps%l_loc  = lloc  ! the local part of the pseudo
 
-      ps%l_max  = min(ps%conf%p - 1, lmax)   ! Maybe the file has not enough components.
+      ps%l_max  = min(ps%conf%p - 1, lmax)   ! Maybe the file does not have enough components.
       if(ps%l_max == 0) ps%l_loc = 0 ! Vanderbilt is not acceptable if ps%l_max == 0.
+
+      if(lmax /= ps%l_max) then
+        message(1) = "lmax in Species block for " // trim(label) // " is larger than number available in pseudopotential."
+        call messages_fatal(1)
+      endif
 
       call ps_cpi_process(ps_cpi, ps%l_loc)
       call logrid_copy(ps_cpi%ps_grid%g, ps%g)
@@ -202,8 +212,13 @@ contains
       ps%kbc    = 1     ! only one projector per angular momentum
       ps%l_loc  = lloc  ! the local part of the pseudo
 
-      ps%l_max  = min(ps%conf%p - 1, lmax)   ! Maybe the file has not enough components.
+      ps%l_max  = min(ps%conf%p - 1, lmax)   ! Maybe the file does not have enough components.
       if(ps%l_max == 0) ps%l_loc = 0 ! Vanderbilt is not acceptable if ps%l_max == 0.
+
+      if(lmax /= ps%l_max) then
+        message(1) = "lmax in Species block for " // trim(label) // " is larger than number available in pseudopotential."
+        call messages_fatal(1)
+      endif
 
       call ps_fhi_process(ps_fhi, lmax, ps%l_loc)
       call logrid_copy(ps_fhi%ps_grid%g, ps%g)

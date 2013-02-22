@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: system.F90 9578 2012-11-08 20:09:23Z dstrubbe $
+!! $Id: system.F90 9687 2012-11-23 16:47:37Z joseba $
 
 #include "global.h"
 
@@ -73,8 +73,10 @@ contains
   subroutine system_init(sys)
     type(system_t), intent(out) :: sys
 
+    type(profile_t), save :: prof
     PUSH_SUB(system_init)
-
+    call profiling_in(prof,"SYSTEM_INIT")
+    
     SAFE_ALLOCATE(sys%gr)
     SAFE_ALLOCATE(sys%st)
 
@@ -114,6 +116,7 @@ contains
     !print the mesh information if it is required
     call print_r()
 
+    call profiling_out(prof)
     POP_SUB(system_init)
 
   contains

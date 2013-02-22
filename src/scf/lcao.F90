@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: lcao.F90 9620 2012-11-13 22:42:20Z dstrubbe $
+!! $Id: lcao.F90 10064 2013-02-22 03:39:17Z dstrubbe $
 
 #include "global.h"
 
@@ -34,6 +34,7 @@ module lcao_m
   use lalg_basic_m
   use lapack_m
   use loct_m
+  use magnetic_m
   use math_m
   use mesh_m
   use mesh_function_m
@@ -62,13 +63,14 @@ module lcao_m
   implicit none
 
   private
-  public ::            &
-    lcao_t,            &
-    lcao_init,         &
-    lcao_wf,           &
-    lcao_run,          &
-    lcao_end,          &
-    lcao_is_available, &
+  public ::             &
+    lcao_t,             &
+    lcao_init,          &
+    lcao_init_orbitals, &
+    lcao_wf,            &
+    lcao_run,           &
+    lcao_end,           &
+    lcao_is_available,  &
     lcao_num_orbitals
 
   integer, public, parameter ::     &
@@ -79,7 +81,7 @@ module lcao_m
   type lcao_t
     private
     integer           :: mode
-    logical           :: write_matrices !< whether to output H and S to file
+    logical           :: debug !< whether to output extra info to file
     logical           :: initialized !< are k, s and v1 matrices filled?
     integer           :: norbs   !< number of orbitals used
     integer           :: maxorbs !< largest number of orbitals that could be used
@@ -157,21 +159,29 @@ contains
 
     this%initialized = .true.
 
-    ! The initial LCAO calculation is done by default if we have pseudopotentials.
+    ! The initial LCAO calculation is done by default if we have species representing atoms.
     ! Otherwise, it is not the default value and has to be enforced in the input file.
     mode_default = LCAO_START_FULL
     if(geo%only_user_def) mode_default = LCAO_START_NONE
     
     !%Variable LCAOStart
     !%Type integer
-    !%Section SCF
+    !%Section SCF::LCAO
     !%Description
     !% Before starting a SCF calculation, <tt>Octopus</tt> can perform
-    !% a LCAO calculation. These can provide <tt>Octopus</tt> with a good set
+    !% a linear combination of atomic orbitals (LCAO) calculation.
+    !% These can provide <tt>Octopus</tt> with a good set
     !% of initial wavefunctions and with a new guess for the density.
     !% (Up to the current version, only a minimal basis set is used.)
-    !% The default is <tt>lcao_full</tt> unless all species are user-defined, in which case
-    !% the default is <tt>lcao_none</tt>.
+    !% The default is <tt>lcao_full</tt> if at least one species representing an atom is present.
+    !% The default is <tt>lcao_none</tt> if all species are <tt>spec_user_defined</tt>,
+    !% <tt>spec_charge_density</tt>, <tt>species_from_file</tt>, or <tt>spec_jelli_slab</tt>.
+    !% The initial guess densities for LCAO are from the pseudopotential for PSF, HGH, UPF, PSPIO species;
+    !% from the natural charge density for <tt>spec_charge_density</tt>, <tt>spec_point</tt>,
+    !% <tt>spec_jelli</tt>, and <tt>spec_jelli_slab</tt>;
+    !% or uniform for CPI and FHI pseudopotentials, <tt>spec_full_delta</tt>, <tt>spec_full_gaussian</tt>,
+    !% <tt>spec_user_defined</tt>, or <tt>species_from_file</tt>.
+    !% (Non-pseudopotential species use Hermite polynomials as orbitals.)
     !%Option lcao_none 0
     !% Do not perform a LCAO calculation before the SCF cycle. Instead use random wavefunctions.
     !%Option lcao_states 2
@@ -201,21 +211,33 @@ contains
     !%Description
     !% If this variable is set, the LCAO procedure will use an
     !% alternative (and experimental) implementation. It is faster for
-    !% large systems and parallel in states.
+    !% large systems and parallel in states. It is not working for spinors, however.
     !%End
     call parse_logical(datasets_check('LCAOAlternative'), .false., this%alternative)
+    ! DAS: For spinors, you will always get magnetization in (1, 0, 0) direction, and the
+    ! eigenvalues will be incorrect.
+    if(st%d%ispin == SPINORS .and. this%alternative) then
+      message(1) = "LCAOAlternative is not working for spinors."
+      call messages_fatal(1)
+    endif
 
-    !!%Variable LCAOWriteMatrices
+! uncomment below to use LCAODebug
+!#define LCAO_DEBUG
+
+    !!%Variable LCAODebug
     !!%Type logical
     !!%Default false
     !!%Section SCF::LCAO
     !!%Description
-    !!% If this variable is set, the LCAO Hamiltonian and overlap matrices will be written to files
-    !!% <tt>lcao_hamiltonian</tt> and <tt>lcao_overlap</tt> in the <tt>static</tt> directory.
+    !!% If this variable is set, detailed information about LCAO will be written to the <tt>static</tt>
+    !!% directory: Hamiltonian matrix (<tt>lcao_hamiltonian</tt>), overlap matrix (<tt>lcao_overlap</tt>),
+    !!% eigenvectors after diagonalization (<tt>lcao_eigenvectors</tt>), and orbital indices (<tt>lcao_orbitals</tt>).
     !!%End
-    !call parse_logical(datasets_check('LCAOWriteMatrices'), .false., this%write_matrices)
-! The code to do this exists but is commented out, in src/scf/lcao_inc.F90, because it causes
+#ifdef LCAO_DEBUG
+    call parse_logical(datasets_check('LCAODebug'), .false., this%debug)
+! The code to do this exists but is hidden by ifdefs, in src/scf/lcao_inc.F90, because it causes
 ! mysterious problems with optimization on PGI 12.4.0.
+#endif
 
     if(.not. this%alternative) then
 
@@ -294,8 +316,12 @@ contains
       !% (Only applies if <tt>LCAOAlternative = no</tt>.)
       !% Before starting the SCF cycle, an initial LCAO calculation can be performed
       !% in order to obtain reasonable initial guesses for spin-orbitals and densities.
-      !% For this purpose, the code calculates a number of atomic orbitals -- this
-      !% number depends on the given species. The default dimension for the LCAO basis
+      !% For this purpose, the code calculates a number of atomic orbitals.
+      !% The number available for a species described by a pseudopotential is all the
+      !% orbitals up the maximum angular momentum being used, minus any orbitals that
+      !% are found to be unbound. For non-pseudopotential species, the number is equal to
+      !% twice the valence charge.
+      !% The default dimension for the LCAO basis
       !% set will be the sum of all these numbers, or twice the number of required orbitals
       !% for the full calculation, whichever is less.
       !%
@@ -370,7 +396,7 @@ contains
       !%Default false
       !%Section SCF::LCAO
       !%Description
-      !% Only applies if <tt>LCAOAlternative = true</tt>.
+      !% Only applies if <tt>LCAOAlternative = true</tt>, and all species are pseudopotentials.
       !% (experimental) If this variable is set to yes, the LCAO
       !% procedure will add an extra set of numerical orbitals (by
       !% using the derivative of the radial part of the original
@@ -522,10 +548,11 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine lcao_run(sys, hm, st_start)
+  subroutine lcao_run(sys, hm, st_start, lmm_r)
     type(system_t),      intent(inout) :: sys
     type(hamiltonian_t), intent(inout) :: hm
     integer, optional,   intent(in)    :: st_start !< use for unoccupied-states run
+    FLOAT,   optional,   intent(in)    :: lmm_r !< used only if not present(st_start)
 
     type(lcao_t) :: lcao
     integer :: s1, s2, k1, k2, is, ik, ip, idim
@@ -560,6 +587,11 @@ contains
     if (.not. present(st_start)) then
       call lcao_guess_density(lcao, sys%st, sys%gr, sys%gr%sb, sys%geo, sys%st%qtot, sys%st%d%nspin, &
         sys%st%d%spin_channels, sys%st%rho)
+
+      if(sys%st%d%ispin > UNPOLARIZED) then
+        ASSERT(present(lmm_r))
+        call write_magnetic_moments(stdout, sys%gr%fine%mesh, sys%st, sys%geo, lmm_r)
+      endif
       
       ! set up Hamiltonian (we do not call system_h_setup here because we do not want to
       ! overwrite the guess density)
@@ -587,7 +619,13 @@ contains
         call states_write_eigenvalues(stdout, sys%st%nst, sys%st, sys%gr%sb)
         
         ! Update the density and the Hamiltonian
-        if (lcao%mode == LCAO_START_FULL) call system_h_setup(sys, hm, calc_eigenval = .false.)
+        if (lcao%mode == LCAO_START_FULL) then
+          call system_h_setup(sys, hm, calc_eigenval = .false.)
+          if(sys%st%d%ispin > UNPOLARIZED) then
+            ASSERT(present(lmm_r))
+            call write_magnetic_moments(stdout, sys%gr%fine%mesh, sys%st, sys%geo, lmm_r)
+          endif
+        endif
       endif
     else
       if(.not. present(st_start)) call init_states(sys%st, sys%gr%mesh, sys%geo)
@@ -861,14 +899,14 @@ contains
   ! ---------------------------------------------------------
 
   subroutine lcao_atom_density(this, st, gr, sb, geo, iatom, spin_channels, rho)
-    type(lcao_t),      intent(inout) :: this
-    type(states_t),    intent(in)    :: st
-    type(grid_t),      intent(in)    :: gr
-    type(simul_box_t), intent(in)    :: sb
-    type(geometry_t),  intent(in)    :: geo
-    integer,           intent(in)    :: iatom
-    integer,           intent(in)    :: spin_channels
-    FLOAT,             intent(inout) :: rho(:, :) !< (gr[%fine]%mesh%np, spin_channels)
+    type(lcao_t),             intent(inout) :: this
+    type(states_t),           intent(in)    :: st
+    type(grid_t),             intent(in)    :: gr
+    type(simul_box_t),        intent(in)    :: sb
+    type(geometry_t), target, intent(in)    :: geo
+    integer,                  intent(in)    :: iatom
+    integer,                  intent(in)    :: spin_channels
+    FLOAT,                    intent(inout) :: rho(:, :) !< (gr[%fine]%mesh%np, spin_channels)
     
     FLOAT, allocatable :: dorbital(:, :)
     CMPLX, allocatable :: zorbital(:, :)
@@ -987,7 +1025,7 @@ contains
       !%Variable GuessMagnetDensity
       !%Type integer
       !%Default ferromagnetic
-      !%Section SCF
+      !%Section SCF::LCAO
       !%Description
       !% The guess density for the SCF cycle is just the sum of all the atomic densities.
       !% When performing spin-polarized or non-collinear-spin calculations this option sets 
@@ -1077,7 +1115,7 @@ contains
       
       !%Variable AtomsMagnetDirection
       !%Type block
-      !%Section Hamiltonian
+      !%Section SCF::LCAO
       !%Description
       !% This option is only used when <tt>GuessMagnetDensity</tt> is
       !% set to <tt>user_defined</tt>. It provides a direction for the
@@ -1090,7 +1128,9 @@ contains
       !%
       !% For spin-polarized calculations, the vectors should have only
       !% one component; for non-collinear-spin calculations, they
-      !% should have three components.
+      !% should have three components. If the norm of the vector is greater
+      !% than the number of valence electrons in the atom, it will be rescaled
+      !% to this number, which is the maximum possible magnetization.
       !%End
       if(parse_block(datasets_check('AtomsMagnetDirection'), blk) < 0) then
         message(1) = "AtomsMagnetDirection block is not defined."
@@ -1190,6 +1230,7 @@ contains
 
 #ifdef HAVE_MPI
     if(geo%atoms_dist%parallel .and. parallelized_in_atoms) then
+      ! NOTE: if random or user_defined are made parallelized in atoms, below should be st%d%nspin instead of spin_channels
       do is = 1, spin_channels
         atom_rho(1:gr%fine%mesh%np, 1) = rho(1:gr%fine%mesh%np, is)
         call MPI_Allreduce(atom_rho(1, 1), rho(1, is), gr%fine%mesh%np, &

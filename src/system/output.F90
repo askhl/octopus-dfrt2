@@ -188,8 +188,10 @@ contains
     !% Example: <tt>density + potential</tt>
     !%Option potential 1
     !% Outputs Kohn-Sham potential, separated by parts. File names are <tt>v0</tt> for 
-    !% the local part, <tt>vc</tt> for the classical potential (if it exists), <tt>vh</tt> for the
-    !% Hartree potential, and <tt>vxc-</tt> for the exchange-correlation potentials.
+    !% the local part of the ionic potential, <tt>vc</tt> for the classical potential (if it exists),
+    !% <tt>vh</tt> for the Hartree potential, <tt>vks</tt> for the local part of the Kohn-Sham potential, and
+    !% <tt>vxc-</tt> for the exchange-correlation potentials. For <tt>vks</tt> and <tt>vxc</tt>,
+    !% a suffix for spin is added in the spin-polarized case.
     !%Option density 2
     !% Outputs density. The output file is called <tt>density-</tt>, or <tt>lr_density-</tt> in linear response.
     !%Option wfs 4
@@ -475,8 +477,9 @@ contains
     !%Section Output
     !%Description
     !% The output is saved when the iteration number is a multiple of the
-    !% <tt>OutputEvery</tt> variable. This works for the ground-state and
-    !% time-dependent runs.
+    !% <tt>OutputEvery</tt> variable. For <tt>CalculationMode = gs</tt> or <tt>unocc</tt>,
+    !% this variable controls writing of restart files. For <tt>td</tt> and <tt>opt_control</tt>,
+    !% this variable also controls the writing of the output requested by the variable <tt>Output</tt>.
     !%End
     call parse_integer(datasets_check('OutputEvery'), 50, outp%iter)
 
@@ -564,9 +567,7 @@ contains
 
     PUSH_SUB(output_localization_funct)
     
-    mpi_grp = gr%mesh%mpi_grp
-    if(st%parallel_in_states) mpi_grp = st%mpi_grp
-    if(st%d%kpt%parallel) mpi_grp = st%d%kpt%mpi_grp
+    mpi_grp = st%dom_st_kpt_mpi_grp
 
     ! if SPIN_POLARIZED, the ELF contains one extra channel: the total ELF
     imax = st%d%nspin
@@ -825,24 +826,31 @@ contains
     type(hamiltonian_t), intent(inout) :: hm
     type(geometry_t),    intent(in)    :: geo
 
+#ifdef HAVE_BERKELEYGW
     integer :: ik, is, ikk, ist, itran, iunit, iatom, mtrx(3, 3, 48), FFTgrid(3)
     integer, pointer :: ifmin(:,:), ifmax(:,:), atyp(:), ngk(:)
-    character*3 :: sheader
+    character(len=3) :: sheader
     FLOAT :: adot(3,3), bdot(3,3), recvol, tnp(3, 48)
     FLOAT, pointer :: energies(:,:,:), occupations(:,:,:), apos(:,:), vxc(:,:), dpsi(:,:)
     CMPLX, pointer :: field_g(:,:), zpsi(:,:)
     type(cube_t) :: cube
     type(cube_function_t) :: cf
     type(fourier_shell_t) :: shell
+#endif
 
     PUSH_SUB(output_berkeleygw)
+
+    if(gr%mesh%sb%dim /= 3) then
+      message(1) = "BerkeleyGW output only available in 3D."
+      call messages_fatal(1)
+    endif
 
 #ifdef HAVE_BERKELEYGW
 
     SAFE_ALLOCATE(vxc(gr%mesh%np, st%d%nspin))
     vxc(:,:) = M_ZERO
     ! we should not include core rho here. that is why we do not just use hm%vxc
-    call xc_get_vxc(gr%der, xc, st, st%rho, st%d%ispin, -minval(st%eigenval(st%nst, :)), st%qtot, vxc = vxc)
+    call xc_get_vxc(gr%der, xc, st, st%rho, st%d%ispin, -minval(st%eigenval(st%nst, :)), st%qtot, vxc)
 
     if(bgw%calc_exchange) then
       message(1) = "BerkeleyGW output: vxc.dat and x.dat"
@@ -971,8 +979,8 @@ contains
     subroutine bgw_setup_header()
       PUSH_SUB(output_berkeleygw.bgw_setup_header)
 
-      adot(:,:) = matmul(gr%sb%rlattice, gr%sb%rlattice)
-      bdot(:,:) = matmul(gr%sb%klattice, gr%sb%klattice)
+      adot(1:3, 1:3) = matmul(gr%sb%rlattice(1:3, 1:3), gr%sb%rlattice(1:3, 1:3))
+      bdot(1:3, 1:3) = matmul(gr%sb%klattice(1:3, 1:3), gr%sb%klattice(1:3, 1:3))
       recvol = (M_TWO * M_PI)**3 / gr%sb%rcell_volume
       
       ! symmetry is not analyzed by Octopus for finite systems, but we only need it for periodic ones

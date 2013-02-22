@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: energy_calc_inc.F90 9390 2012-09-10 20:27:48Z dstrubbe $
+!! $Id: energy_calc_inc.F90 9803 2012-12-28 21:56:11Z xavier $
 
 
 ! ---------------------------------------------------------
@@ -90,10 +90,11 @@ subroutine X(calculate_eigenvalues)(hm, der, st, time)
 
     end do
     
-    st%eigenval(st%st_start:st%st_end, ik) = real(eigen(st%st_start:st%st_end))
+    st%eigenval(st%st_start:st%st_end, ik) = real(eigen(st%st_start:st%st_end), REAL_PRECISION)
 #ifdef R_TCOMPLEX    
-    if(cmplxscl) st%zeigenval%Im(st%st_start:st%st_end, ik) = aimag(eigen(st%st_start:st%st_end))
+    if(cmplxscl) st%zeigenval%Im(st%st_start:st%st_end, ik) = aimag(eigen(st%st_start:st%st_end)) ! not REAL_PRECISION?
 #endif
+
   end do
 
   SAFE_DEALLOCATE_A(hpsi)

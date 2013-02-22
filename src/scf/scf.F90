@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: scf.F90 9545 2012-11-03 00:15:14Z dstrubbe $
+!! $Id: scf.F90 9939 2013-02-06 22:04:16Z dstrubbe $
 
 #include "global.h"
 
@@ -45,6 +45,7 @@ module scf_m
   use mpi_m
   use mpi_lib_m
   use multigrid_m
+  use multicomm_m
   use ob_lippmann_schwinger_m
   use parser_m
   use preconditioners_m
@@ -96,6 +97,7 @@ module scf_m
     ! several convergence criteria
     FLOAT :: conv_abs_dens, conv_rel_dens, conv_abs_ev, conv_rel_ev, conv_abs_force
     FLOAT :: abs_dens, rel_dens, abs_ev, rel_ev, abs_force
+    logical :: conv_eigen_error
 
     integer :: mix_field
     logical :: lcao_restricted
@@ -115,7 +117,7 @@ contains
     type(grid_t),        intent(inout) :: gr
     type(geometry_t),    intent(in)    :: geo
     type(states_t),      intent(in)    :: st
-    type(hamiltonian_t), intent(inout) :: hm
+    type(hamiltonian_t), intent(in)    :: hm
     FLOAT, optional,     intent(in)    :: conv_force
 
     FLOAT :: rmin
@@ -131,7 +133,7 @@ contains
     !% Maximum number of SCF iterations. The code will stop even if convergence
     !% has not been achieved. -1 means unlimited.
     !%End
-    call parse_integer  (datasets_check('MaximumIter'), 200, scf%max_iter)
+    call parse_integer(datasets_check('MaximumIter'), 200, scf%max_iter)
 
     !%Variable MaximumIterBerry
     !%Type integer
@@ -144,7 +146,7 @@ contains
     !% has not been achieved. -1 means unlimited.
     !%End
     if(associated(hm%vberry)) then
-      call parse_integer  (datasets_check('MaximumIterBerry'), 10, scf%max_iter_berry)
+      call parse_integer(datasets_check('MaximumIterBerry'), 10, scf%max_iter_berry)
       if(scf%max_iter_berry < 0) scf%max_iter_berry = huge(scf%max_iter_berry)
     end if
 
@@ -229,6 +231,16 @@ contains
       message(3) = "MaximumIter | ConvAbsDens | ConvRelDens | ConvAbsEv | ConvRelEv | ConvForce "
       call messages_fatal(3)
     end if
+
+    !%Variable ConvEigenError
+    !%Type logical
+    !%Default false
+    !%Section SCF::Convergence
+    !%Description
+    !% If true, the calculation will not be considered converged unless all states have
+    !% individual errors less than <tt>EigensolverTolerance</tt>.
+    !%End
+    call parse_logical(datasets_check('ConvEigenError'), .false., scf%conv_eigen_error)
 
     if(scf%max_iter < 0) scf%max_iter = huge(scf%max_iter)
 
@@ -318,9 +330,11 @@ contains
     !%End
     call parse_logical(datasets_check('SCFinLCAO'), .false., scf%lcao_restricted)
     if(scf%lcao_restricted) then
+      call messages_experimental('SCFinLCAO')
       message(1) = 'Info: SCF restricted to LCAO subspace.'
       call messages_info(1)
     end if
+
 
     !%Variable SCFCalculateForces
     !%Type logical
@@ -395,8 +409,9 @@ contains
 
 
   ! ---------------------------------------------------------
-  subroutine scf_run(scf, gr, geo, st, ks, hm, outp, gs_run, verbosity, iters_done)
+  subroutine scf_run(scf, mc, gr, geo, st, ks, hm, outp, gs_run, verbosity, iters_done)
     type(scf_t),          intent(inout) :: scf !< self consistent cycle
+    type(multicomm_t),    intent(in)    :: mc
     type(grid_t),         intent(inout) :: gr !< grid
     type(geometry_t),     intent(inout) :: geo !< geometry
     type(states_t),       intent(inout) :: st !< States
@@ -452,6 +467,7 @@ contains
         message(1) = 'LCAO is not available. Cannot do SCF in LCAO.'
         call messages_fatal(1)
       end if
+      call lcao_init_orbitals(lcao, st, gr, geo)
     end if
 
     nspin = st%d%nspin
@@ -528,6 +544,10 @@ contains
     itime = loct_clock()
     do iter = 1, scf%max_iter
       call profiling_in(prof, "SCF_CYCLE")
+
+      ! this initialization seems redundant but avoids improper optimization at -O3 by PGI 7 on chum,
+      ! which would cause a failure of testsuite/linear_response/04-vib_modes.03-vib_modes_fd.inp
+      scf%eigens%converged = 0
 
       if(scf%lcao_restricted) then
         call lcao_wf(lcao, st, gr, geo, hm)
@@ -639,7 +659,8 @@ contains
         (scf%conv_rel_dens  <= M_ZERO .or. scf%rel_dens  <= scf%conv_rel_dens)  .and. &
         (scf%conv_abs_force <= M_ZERO .or. scf%abs_force <= scf%conv_abs_force) .and. &
         (scf%conv_abs_ev    <= M_ZERO .or. scf%abs_ev    <= scf%conv_abs_ev)    .and. &
-        (scf%conv_rel_ev    <= M_ZERO .or. scf%rel_ev    <= scf%conv_rel_ev)
+        (scf%conv_rel_ev    <= M_ZERO .or. scf%rel_ev    <= scf%conv_rel_ev)    .and. &
+        (.not. scf%conv_eigen_error .or. all(scf%eigens%converged == st%nst))
 
       etime = loct_clock() - itime
       itime = etime + itime
@@ -678,7 +699,7 @@ contains
       end select
 
       ! Are we asked to stop? (Whenever Fortran is ready for signals, this should go away)
-      forced_finish = clean_stop()
+      forced_finish = clean_stop(mc%master_comm)
 
       if(gs_run_) then 
         ! save restart information
@@ -840,7 +861,7 @@ contains
         endif
 
         if(st%d%ispin > UNPOLARIZED) then
-          call write_magnetic_moments(stdout, gr%mesh, st)
+          call write_magnetic_moments(stdout, gr%mesh, st, geo, scf%lmm_r)
         end if
 
         write(message(1),'(a)') ''
@@ -935,7 +956,7 @@ contains
 
       if(mpi_grp_is_root(mpi_world)) write(iunit, '(1x)')
       if(st%d%ispin > UNPOLARIZED) then
-        call write_magnetic_moments(iunit, gr%mesh, st)
+        call write_magnetic_moments(iunit, gr%mesh, st, geo, scf%lmm_r)
         if(mpi_grp_is_root(mpi_world)) write(iunit, '(1x)')
       end if
 
@@ -1046,53 +1067,6 @@ contains
 
       POP_SUB(scf_run.write_dipole)
     end subroutine write_dipole
-
-
-    ! ---------------------------------------------------------
-    subroutine write_magnetic_moments(iunit, mesh, st)
-      integer,        intent(in) :: iunit
-      type(mesh_t),   intent(in) :: mesh
-      type(states_t), intent(in) :: st
-
-      integer :: ia
-      FLOAT :: mm(max(mesh%sb%dim, 3))
-      FLOAT, allocatable :: lmm(:,:)
-
-      PUSH_SUB(scf_run.write_magnetic_moments)
-
-      call magnetic_moment(mesh, st, st%rho, mm)
-      SAFE_ALLOCATE(lmm(1:max(mesh%sb%dim, 3), 1:geo%natoms))
-      call magnetic_local_moments(mesh, st, geo, st%rho, scf%lmm_r, lmm)
-
-      if(mpi_grp_is_root(mpi_world)) then
-
-        write(iunit, '(a)') 'Total Magnetic Moment:'
-        if(st%d%ispin == SPIN_POLARIZED) then ! collinear spin
-          write(iunit, '(a,f10.6)') ' mz = ', mm(3)
-        else if(st%d%ispin == SPINORS) then ! non-collinear
-          write(iunit, '(1x,3(a,f10.6,3x))') 'mx = ', mm(1),'my = ', mm(2),'mz = ', mm(3)
-        end if
-
-        write(iunit, '(a,a,a,f7.3,a)') 'Local Magnetic Moments (sphere radius [', &
-             trim(units_abbrev(units_out%length)),'] = ', units_from_atomic(units_out%length, scf%lmm_r), '):'
-        if(st%d%ispin == SPIN_POLARIZED) then ! collinear spin
-          write(iunit,'(a,6x,14x,a)') ' Ion','mz'
-          do ia = 1, geo%natoms
-            write(iunit,'(i4,a10,f15.6)') ia, trim(species_label(geo%atom(ia)%spec)), lmm(3, ia)
-          end do
-        else if(st%d%ispin == SPINORS) then ! non-collinear
-          write(iunit,'(a,8x,13x,a,13x,a,13x,a)') ' Ion','mx','my','mz'
-          do ia = 1, geo%natoms
-            write(iunit,'(i4,a10,9f15.6)') ia, trim(species_label(geo%atom(ia)%spec)), lmm(1:mesh%sb%dim, ia)
-          end do
-        end if
-
-      end if
-      
-      SAFE_DEALLOCATE_A(lmm)
-
-      POP_SUB(scf_run.write_magnetic_moments)
-    end subroutine write_magnetic_moments
 
   end subroutine scf_run
 

@@ -42,6 +42,7 @@ module eigen_rmmdiis_m
   use states_m
   use states_calc_m
   use subspace_m
+  use types_m
 
   implicit none
 
@@ -55,6 +56,8 @@ module eigen_rmmdiis_m
   type batch_pointer_t
     type(batch_t), pointer :: batch
   end type batch_pointer_t
+
+  type(profile_t), save :: prof_iter
 
   contains
 

@@ -32,6 +32,7 @@ module opencl_m
   use datasets_m
   use global_m
   use io_m
+  use loct_m
   use messages_m
   use mpi_m
   use types_m
@@ -189,7 +190,7 @@ module opencl_m
     subroutine opencl_init(base_grp)
       type(mpi_grp_t),  intent(inout) :: base_grp
 
-      logical  :: disable, default
+      logical  :: disable, default, run_benchmark
       integer  :: device_type
       integer  :: idevice, iplatform, ndevices, idev, cl_status, ret_devices, nplatforms, iplat
       character(len=256) :: device_name
@@ -368,6 +369,21 @@ module opencl_m
 
       ! now get a list of the selected type
       call clGetDeviceIDs(opencl%platform_id, device_type, alldevices, ret_devices, cl_status)
+      
+      if(ret_devices < 1) then
+        ! we didnt find a device of the selected type, we ask for the default device
+        call clGetDeviceIDs(opencl%platform_id, CL_DEVICE_TYPE_DEFAULT, alldevices, ret_devices, cl_status)
+
+        if(ret_devices < 1) then
+          ! if this does not work, we ask for all devices
+          call clGetDeviceIDs(opencl%platform_id, CL_DEVICE_TYPE_ALL, alldevices, ret_devices, cl_status)
+        end if
+        
+        if(ret_devices < 1) then
+          call messages_write('Cannot find an OpenCL device')
+          call messages_fatal()
+        end if
+      end if
 
       ! the number of devices can be smaller
       ndevices = ret_devices
@@ -483,6 +499,22 @@ module opencl_m
 
       call profiling_out(prof_init)
 #endif
+      !%Variable OpenCLBenchmark
+      !%Type logical
+      !%Default no
+      !%Section Execution::OpenCL
+      !%Description
+      !% If this variable is set to yes, Octopus will run some
+      !% routines to benchmark the performance of the OpenCL device.
+      !%End
+
+      call parse_logical(datasets_check('OpenCLBenchmark'), .false., run_benchmark)
+
+      if(run_benchmark) then
+#ifdef HAVE_OPENCL
+        call opencl_check_bandwidth()
+#endif
+      end if
 
       call messages_print_stress(stdout)
 
@@ -557,32 +589,27 @@ module opencl_m
 
         call clGetDeviceInfo(opencl%device, CL_DEVICE_GLOBAL_MEM_SIZE, val, cl_status)
         call messages_write('      Device memory          :')
-        call messages_write(val/(1024**2))
-        call messages_write(' Mb')
+        call messages_write(val, units = unit_megabytes)
         call messages_new_line()
 
         call clGetDeviceInfo(opencl%device, CL_DEVICE_MAX_MEM_ALLOC_SIZE, val, cl_status)
         call messages_write('      Max alloc size         :')
-        call messages_write(val/(1024**2))
-        call messages_write(' Mb')
+        call messages_write(val, units = unit_megabytes)
         call messages_new_line()
 
         call clGetDeviceInfo(opencl%device, CL_DEVICE_GLOBAL_MEM_CACHE_SIZE, val, cl_status)
         call messages_write('      Device cache           :')
-        call messages_write(val/1024)
-        call messages_write(' Kb')
+        call messages_write(val, units = unit_kilobytes)
         call messages_new_line()
 
         call clGetDeviceInfo(opencl%device, CL_DEVICE_LOCAL_MEM_SIZE, val, cl_status)
         call messages_write('      Local memory           :')
-        call messages_write(val/1024)
-        call messages_write(' Kb')
+        call messages_write(val, units = unit_kilobytes)
         call messages_new_line()
 
         call clGetDeviceInfo(opencl%device, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, val, cl_status)
         call messages_write('      Constant memory        :')
-        call messages_write(val/1024)
-        call messages_write(' Kb')
+        call messages_write(val, units = unit_kilobytes)
         call messages_new_line()
 
         call clGetDeviceInfo(opencl%device, CL_DEVICE_MAX_WORK_GROUP_SIZE, val, cl_status)
@@ -621,7 +648,9 @@ module opencl_m
     ! ------------------------------------------
 
     subroutine opencl_end()
+#ifdef HAVE_OPENCL
       integer :: ierr
+#endif
 
       PUSH_SUB(opencl_end)
 
@@ -1256,7 +1285,7 @@ module opencl_m
       nval_real = nval*types_get_size(type)/8
 
       call opencl_set_kernel_arg(set_zero, 0, nval_real)
-      call opencl_set_kernel_arg(set_zero, 1, optional_default(offset, 0))
+      call opencl_set_kernel_arg(set_zero, 1, optional_default(offset, 0)*types_get_size(type)/8)
       call opencl_set_kernel_arg(set_zero, 2, buffer)
 
       bsize = opencl_kernel_workgroup_size(set_zero)
@@ -1269,6 +1298,65 @@ module opencl_m
 
     ! ----------------------------------------------------
     
+    subroutine opencl_check_bandwidth()
+      integer :: itime
+      integer, parameter :: times = 10
+      integer :: size
+      real(8) :: time, stime
+      real(8) :: read_bw, write_bw
+      type(opencl_mem_t) :: buff
+      FLOAT, allocatable :: data(:)
+
+      call messages_new_line()
+      call messages_write('Info: Benchmarking the bandwidth between main memory and device memory')
+      call messages_new_line()
+      call messages_info()
+
+      call messages_write(' Buffer size   Read bw  Write bw')
+      call messages_new_line()
+      call messages_write('       [MiB]   [MiB/s]   [MiB/s]')
+      call messages_info()
+
+      size = 15000
+      do 
+        SAFE_ALLOCATE(data(1:size))
+        call opencl_create_buffer(buff, CL_MEM_READ_WRITE, TYPE_FLOAT, size)
+        
+        stime = loct_clock()
+        do itime = 1, times
+          call opencl_write_buffer(buff, size, data)
+          call opencl_finish()
+        end do
+        time = (loct_clock() - stime)/dble(times)
+
+        write_bw = dble(size)*8.0_8/time
+        
+        stime = loct_clock()
+        do itime = 1, times
+          call opencl_read_buffer(buff, size, data)
+        end do
+        call opencl_finish()
+
+        time = (loct_clock() - stime)/dble(times)
+        read_bw = dble(size)*8.0_8/time
+
+        call messages_write(size*8.0_8/1024.0**2)
+        call messages_write(write_bw/1024.0**2, fmt = '(f10.1)')
+        call messages_write(read_bw/1024.0**2, fmt = '(f10.1)')
+        call messages_info()
+
+        call opencl_release_buffer(buff)
+
+        SAFE_DEALLOCATE_A(data)
+
+        size = int(size*2.0)
+        
+        if(size > 50000000) exit
+      end do
+    end subroutine opencl_check_bandwidth
+
+
+
 #include "undef.F90"
 #include "real.F90"
 #include "opencl_inc.F90"

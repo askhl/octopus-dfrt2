@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: simul_box.F90 9599 2012-11-12 22:35:04Z dstrubbe $
+!! $Id: simul_box.F90 10059 2013-02-22 00:56:52Z dstrubbe $
 
 #include "global.h"
 
@@ -62,7 +62,8 @@ module simul_box_m
     simul_box_in_box_vec,       &
     simul_box_atoms_in_box,     &
     simul_box_copy,             &
-    simul_box_complex_boundaries
+    simul_box_complex_boundaries,   &
+    simul_box_periodic_atom_in_box 
 
   integer, parameter, public :: &
     SPHERE         = 1,         &
@@ -242,6 +243,8 @@ contains
       !%Description
       !% Define how many directions are to be considered periodic. It has to be a number
       !% between zero and <tt>Dimensions</tt>.
+      !% (WARNING: For systems that are periodic in 1D and  2D, interaction between ions is assumed to be periodic in 3D.
+      !% This affects the calculation of total energy and forces.)
       !%Option 0
       !% No direction is periodic (molecule).
       !%Option 1
@@ -254,6 +257,17 @@ contains
       call parse_integer(datasets_check('PeriodicDimensions'), 0, sb%periodic_dim)
       if ((sb%periodic_dim < 0) .or. (sb%periodic_dim > MAX_DIM) .or. (sb%periodic_dim > sb%dim)) &
         call input_error('PeriodicDimensions')
+
+      if(sb%periodic_dim > 0 .and. sb%periodic_dim < sb%dim) then
+        call messages_experimental('Support for mixed periodicity systems')
+      end if
+
+      if(sb%periodic_dim == 1 .or. sb%periodic_dim == 2) then
+        call messages_write('For systems that  are periodic in 1D and  2D, interaction between', new_line = .true.)
+        call messages_write('ions is assumed to be periodic in 3D. This affects the calculation', new_line = .true.)
+        call messages_write('of total energy and forces.')
+        call messages_warning()
+      end if
 
       !%Variable ComplexBoundaries
       !%Type logical
@@ -476,21 +490,23 @@ contains
         if(parse_block(datasets_check('Lsize'), blk) == 0) then
           if(parse_block_cols(blk,0) < sb%dim) call input_error('Lsize')
           do idir = 1, sb%dim
-            call parse_block_float(blk, 0, idir - 1, sb%lsize(idir))
+            call parse_block_float(blk, 0, idir - 1, sb%lsize(idir), units_inp%length)
+            if(def_rsize > M_ZERO .and. sb%periodic_dim < idir) &
+              call messages_check_def(sb%lsize(idir), .false., def_rsize, 'Lsize', units_out%length)
           end do
           call parse_block_end(blk)
         else
-          call parse_float(datasets_check('Lsize'), -M_ONE, sb%lsize(1))
+          call parse_float(datasets_check('Lsize'), -M_ONE, sb%lsize(1), units_inp%length)
           if(sb%lsize(1) .eq. -M_ONE) then
             call input_error('Lsize')
           end if
+          if(def_rsize > M_ZERO .and. sb%periodic_dim < sb%dim) &
+            call messages_check_def(sb%lsize(1), .false., def_rsize, 'Lsize', units_out%length)
           sb%lsize(1:sb%dim) = sb%lsize(1)
         end if
-        sb%lsize = units_to_atomic(units_inp%length, sb%lsize)
 
         do idir = 1, sb%dim
-          if(def_rsize > M_ZERO .and. sb%periodic_dim < idir) &
-            call messages_check_def(sb%lsize(idir), .false., def_rsize, 'Lsize', units_out%length)
+
         end do
       end if
 
@@ -659,16 +675,17 @@ contains
       !%Default simple cubic
       !%Section Mesh::Simulation Box
       !%Description
-      !% Primitive lattice vectors. Vectors are stored in rows.
-      !% Note that these vectors will be normalized to 1 after being read.
+      !% (Experimental) Primitive lattice vectors. Vectors are stored in rows.
+      !% Note that these vectors will be normalized.
       !% Default:
       !% <tt>%LatticeVectors
       !% <br>&nbsp;&nbsp;1.0 | 0.0 | 0.0
       !% <br>&nbsp;&nbsp;0.0 | 1.0 | 0.0
       !% <br>&nbsp;&nbsp;0.0 | 0.0 | 1.0
       !% <br>%</tt>
+      !%
+      !% Note: This version of Octopus does not support non-orthogonal cells.
       !%End
-
       sb%rlattice_primitive = M_ZERO
       forall(idim = 1:sb%dim) sb%rlattice_primitive(idim, idim) = M_ONE
 
@@ -678,6 +695,9 @@ contains
             call parse_block_float(blk, idim - 1,  jdim - 1, sb%rlattice_primitive(jdim, idim))
           end do
         end do
+        
+        call messages_not_implemented('Non-orthogonal cells support')
+
       end if
     end if
 
@@ -788,6 +808,44 @@ contains
     POP_SUB(simul_box_atoms_in_box)
   end subroutine simul_box_atoms_in_box
 
+  ! --------------------------------------------------------
+  
+  subroutine simul_box_periodic_atom_in_box(sb, geo, ratom)
+    type(simul_box_t), intent(in)    :: sb
+    type(geometry_t),  intent(inout) :: geo
+    FLOAT,             intent(inout) :: ratom(:)
+
+    FLOAT :: xx(1:MAX_DIM)
+    integer :: pd, idir
+
+    pd = sb%periodic_dim
+
+    if (simul_box_is_periodic(sb)) then
+      if(.not. geo%reduced_coordinates) then
+        !convert the position to the orthogonal space
+        xx(1:pd) = matmul(ratom(1:pd) - sb%box_offset(1:pd), sb%klattice_primitive(1:pd, 1:pd))
+        xx(1:pd) = xx(1:pd)/(M_TWO*sb%lsize(1:pd))
+      else
+        ! in this case coordinates are already in reduced space
+        xx(1:pd) = ratom(1:pd)
+      end if
+      
+      xx(1:pd) = xx(1:pd) + M_HALF
+      do idir = 1, pd
+        if(xx(idir) >= M_ZERO) then
+          xx(idir) = xx(idir) - aint(xx(idir))
+        else
+          xx(idir) = xx(idir) - aint(xx(idir)) + M_ONE
+        end if
+      end do
+      ASSERT(all(xx(1:pd) >= M_ZERO))
+      xx(1:pd) = (xx(1:pd) - M_HALF)*M_TWO*sb%lsize(1:pd) 
+
+      ratom(1:pd) = matmul(sb%klattice_primitive(1:pd, 1:pd), xx(1:pd) + sb%box_offset(1:pd))
+
+    end if
+
+  end subroutine simul_box_periodic_atom_in_box
 
   !--------------------------------------------------------------
   subroutine reciprocal_lattice(rv, kv, volume, dim)

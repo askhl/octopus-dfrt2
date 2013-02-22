@@ -1,4 +1,5 @@
-!! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio, G. Bertsch, M. Oliveira
+!! Copyright (C) 2002-2011 M. Marques, A. Castro, A. Rubio,
+!! G. Bertsch, M. Oliveira
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -15,7 +16,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: poisson.F90 9539 2012-10-29 17:20:10Z joseba $
+!! $Id: poisson.F90 10066 2013-02-22 11:11:57Z joseba $
 
 #include "global.h"
 
@@ -46,6 +47,7 @@ module poisson_m
   use poisson_isf_m
   use poisson_fft_m
   use poisson_fmm_m
+  use poisson_libisf_m
   use poisson_multigrid_m
   use poisson_sete_m
   use profiling_m
@@ -81,16 +83,15 @@ module poisson_m
     poisson_is_async
 
   integer, public, parameter ::         &
-    POISSON_DIRECT_SUM_1D = -1,         &
-    POISSON_DIRECT_SUM_2D = -2,         &
-    POISSON_DIRECT_SUM_3D = -3,         &  
+    POISSON_DIRECT_SUM    = -1,         &
     POISSON_FMM           = -4,         &
     POISSON_FFT           =  0,         &
     POISSON_CG            =  5,         &
     POISSON_CG_CORRECTED  =  6,         &
     POISSON_MULTIGRID     =  7,         &
     POISSON_ISF           =  8,         &
-    POISSON_SETE          =  9
+    POISSON_SETE          =  9,         &
+    POISSON_LIBISF        = 10
   
   type poisson_t
     type(derivatives_t), pointer :: der
@@ -105,6 +106,7 @@ module poisson_m
     type(poisson_corr_t) :: corrector
     type(poisson_sete_t) :: sete_solver
     type(poisson_isf_t)  :: isf_solver
+    type(poisson_libisf_t) :: libisf_solver
     type(poisson_fmm_t)  :: params_fmm
     integer :: nslaves
 #ifdef HAVE_MPI2
@@ -160,35 +162,38 @@ contains
     !%Type integer
     !%Section Hamiltonian::Poisson
     !%Description
-    !% Defines which method to use to solve the Poisson equation. Defaults:
+    !% Defines which method to use to solve the Poisson equation. Some incompatibilities apply depending on
+    !% dimensionality, periodicity, etc.
+    !% For comparison of accuracy and performance of the methods in Octopus, see http://arxiv.org/abs/1211.2092. 
+    !% Defaults:
     !% <br> 1D and 2D: <tt>fft</tt>.
     !% <br> 3D: <tt>cg_corrected</tt> if curvilinear, <tt>isf</tt> if not periodic, <tt>fft</tt> if periodic.
     !%Option NoPoisson -999
-    !% do not use a Poisson solver at all
+    !% Do not use a Poisson solver at all.
     !%Option FMM -4
     !% Fast multipole method.                                  
-    !%Option direct3D -3                                      
-    !% Direct evaluation of the Hartree potential (in 3D).   
-    !%Option direct2D -2
-    !% Direct evaluation of the Hartree potential (in 2D).
-    !%Option direct1D -1
-    !% Direct evaluation of the Hartree potential (in 1D).
+    !%Option direct_sum -1                                      
+    !% Direct evaluation of the Hartree potential (only for finite systems).
     !%Option fft 0
     !% The Poisson equation is solved using FFTs. A cutoff technique
     !% for the Poisson kernel is selected so the proper boundary
     !% conditions are imposed according to the periodicity of the
-    !% system. This can be overridden by the PoissonFFTKernel
+    !% system. This can be overridden by the <tt>PoissonFFTKernel</tt>
     !% variable.
     !%Option cg 5
     !% Conjugate gradients.
     !%Option cg_corrected 6
-    !% Corrected conjugate gradients.
+    !% Conjugate gradients, corrected for boundary conditions (only for finite systems).
     !%Option multigrid 7
     !% Multigrid method.
     !%Option isf 8
     !% Interpolating Scaling Functions Poisson solver.
     !%Option sete 9
-    !% (Experimental) SETE solver.
+    !% (Experimental) SETE solver. Complex boundaries are required.
+    !%Option libisf 10
+    !% (Experimental) Meant to be exactly the same as Interpolating
+    !% Scaling Functions Poisson solver, but using an external
+    !% library, taken from BigDFT 1.6.0
     !%End
 
     default_solver = POISSON_FFT
@@ -208,9 +213,9 @@ contains
     if(der%mesh%use_curvilinear) then
       select case(der%mesh%sb%dim)
       case(1)
-        default_solver = POISSON_DIRECT_SUM_1D
+        default_solver = POISSON_DIRECT_SUM
       case(2)
-        default_solver = POISSON_DIRECT_SUM_2D
+        default_solver = POISSON_DIRECT_SUM
       case(3)
         default_solver = POISSON_CG_CORRECTED
       end select
@@ -230,19 +235,26 @@ contains
       !%Section Hamiltonian::Poisson
       !%Description
       !% Defines which kernel is used to impose the correct boundary
-      !% condition when using FFTs to solve the Poisson equation. The
+      !% conditions when using FFTs to solve the Poisson equation. The
       !% default is selected depending on the dimensionality and
-      !% periodicity of the system.
+      !% periodicity of the system:
+      !% <br>In 1D, <tt>spherical</tt> if finite, <tt>fft_nocut</tt> if periodic.
+      !% <br>In 2D, <tt>spherical</tt> if finite, <tt>cylindrical</tt> if 1D-periodic, <tt>fft_nocut</tt> if 2D-periodic.
+      !% <br>In 3D, <tt>spherical</tt> if finite, <tt>cylindrical</tt> if 1D-periodic, <tt>planar</tt> if 2D-periodic,
+      !% <tt>fft_nocut</tt> if 3D-periodic.
+      !% See C. A. Rozzi et al., <i>Phys. Rev. B</i> <b>73</b>, 205119 (2006) for 3D implementation and
+      !% A. Castro et al., <i>Phys. Rev. B</i> <b>80</b>, 033102 (2009) for 2D implementation.
       !%Option spherical 0
       !% FFTs using spherical cutoff (in 2D or 3D).
       !%Option cylindrical 1
-      !% FFTs using cylindrical cutoff (in 3D).
+      !% FFTs using cylindrical cutoff (in 2D or 3D).
       !%Option planar 2
       !% FFTs using planar cutoff (in 3D).
       !%Option fft_nocut 3
-      !% FFTs without using a cutoff (in 3D).
+      !% FFTs without using a cutoff (for fully periodic systems).
       !%Option multipole_correction 4
-      !% The boundary conditions are imposed by using a multipole expansion.
+      !% The boundary conditions are imposed by using a multipole expansion. Only appropriate for finite systems.
+      !% Further specification occurs with variables <tt>PoissonSolverBoundaries</tt> and <tt>PoissonSolverMaxMultipole</tt>.
       !%End
 
       select case(der%mesh%sb%dim)
@@ -253,7 +265,9 @@ contains
           default_kernel = POISSON_FFT_KERNEL_NOCUT
         end if
       case(2)
-        if (der%mesh%sb%periodic_dim > 0) then 
+        if (der%mesh%sb%periodic_dim == 2) then
+          default_kernel = POISSON_FFT_KERNEL_NOCUT
+        else if (der%mesh%sb%periodic_dim > 0) then
           default_kernel = der%mesh%sb%periodic_dim
         else
           default_kernel = POISSON_FFT_KERNEL_SPH
@@ -269,44 +283,55 @@ contains
 
     end if
 
+    if(der%mesh%sb%periodic_dim > 0 .and. this%method == POISSON_DIRECT_SUM) then
+      message(1) = 'A periodic system may not use the direct_sum Poisson solver.'
+      call messages_fatal(1)
+    end if
+
+    if(der%mesh%sb%periodic_dim > 0 .and. this%method == POISSON_CG_CORRECTED) then
+      message(1) = 'A periodic system may not use the cg_corrected Poisson solver.'
+      call messages_fatal(1)
+    end if
+
     select case(der%mesh%sb%dim)
     case(1)
 
       select case(der%mesh%sb%periodic_dim)
       case(0)
-        if( (this%method /= POISSON_FFT) .and. (this%method /= POISSON_DIRECT_SUM_1D)) then
-          call input_error('PoissonSolver')
+        if( (this%method /= POISSON_FFT) .and. (this%method /= POISSON_DIRECT_SUM)) then
+          message(1) = 'A finite 1D system may only use fft or direct_sum Poisson solvers.'
+          call messages_fatal(1)
         end if
       case(1)
-        if( (this%method /= POISSON_FFT) ) call input_error('PoissonSolver')
+        if(this%method /= POISSON_FFT) then
+          message(1) = 'A periodic 1D system may only use the fft Poisson solver.'
+          call messages_fatal(1)
+        endif
       end select
 
-      if(der%mesh%use_curvilinear .and. this%method /= POISSON_DIRECT_SUM_1D) then
+      if(der%mesh%use_curvilinear .and. this%method /= POISSON_DIRECT_SUM) then
         message(1) = 'If curvilinear coordinates are used in 1D, then the only working'
-        message(2) = 'Poisson solver is <tt>direct1D</tt>.'
+        message(2) = 'Poisson solver is direct_sum.'
         call messages_fatal(2)
       end if
 
     case(2)
 
-      if( (this%method /= POISSON_FFT) .and. (this%method /= POISSON_DIRECT_SUM_2D) ) then
-        call input_error('PoissonSolver')
+      if( (this%method /= POISSON_FFT) .and. (this%method /= POISSON_DIRECT_SUM) ) then
+        message(1) = 'A 2D system may only use fft or direct_sum Poisson solvers.'
+        call messages_fatal(1)
       end if
 
-      if(der%mesh%use_curvilinear .and. (this%method /= POISSON_DIRECT_SUM_2D) ) then
+      if(der%mesh%use_curvilinear .and. (this%method /= POISSON_DIRECT_SUM) ) then
         message(1) = 'If curvilinear coordinates are used in 2D, then the only working'
-        message(2) = 'Poisson solver is <tt>direct2D</tt>.'
+        message(2) = 'Poisson solver is direct_sum.'
         call messages_fatal(2)
       end if
 
     case(3)
       
-      if(this%method == POISSON_DIRECT_SUM_1D .or. this%method == POISSON_DIRECT_SUM_2D) then
-        call input_error('PoissonSolver')
-      end if
-
       if(der%mesh%sb%periodic_dim > 0 .and. this%method == POISSON_FMM) then
-        write(message(1), '(a,i1,a)')'FMM is not ready to deal with periodic boundaries at present, '
+        write(message(1), '(a,i1,a)')'FMM is not ready to deal with periodic boundaries at present.'
         call messages_warning(1)
       end if
 
@@ -316,11 +341,16 @@ contains
       end if
 
       if(der%mesh%sb%periodic_dim > 0 .and. this%method == POISSON_FFT .and. &
-        this%kernel /= der%mesh%sb%periodic_dim) then
+        this%kernel /= der%mesh%sb%periodic_dim .and. this%kernel >=0 .and. this%kernel <=3) then
         write(message(1), '(a,i1,a)')'The system is periodic in ', der%mesh%sb%periodic_dim ,' dimension(s),'
         write(message(2), '(a,i1,a)')'but Poisson solver is set for ', this%kernel, ' dimensions.'
-        message(3) =                 'You know what you are doing, right?'
-        call messages_warning(3)
+        call messages_warning(2)
+      end if
+
+      if(der%mesh%sb%periodic_dim > 0 .and. this%method == POISSON_FFT .and. &
+        this%kernel == POISSON_FFT_KERNEL_CORRECTED) then
+        write(message(1), '(a,i1,a)')'PoissonFFTKernel = multipole_correction cannot be used for periodic systems.'
+        call messages_fatal(1)
       end if
 
       if(der%mesh%use_curvilinear .and. (this%method/=POISSON_CG_CORRECTED)) then
@@ -341,23 +371,26 @@ contains
         call messages_experimental('SETE poisson solver')
 
         if(.not. simul_box_complex_boundaries(der%mesh%sb)) then
-          message(1) = 'Complex boundaries must be enabled to use the SETE poisson solver.'
+          message(1) = 'Complex boundaries must be enabled to use the SETE Poisson solver.'
           message(2) = 'Use ComplexBoundaries = yes in your input file.'
           call messages_fatal(2)
         end if
       end if
 
       if (this%method == POISSON_FMM) then
-        call messages_experimental('FMM poisson solver')
+        call messages_experimental('FMM Poisson solver')
       end if
 
+      if (this%method == POISSON_LIBISF) then
+        call messages_experimental('LIBISF Poisson solver')
+      end if
     end select
 
     ! Now that we know the method, we check if we need a cube and its dimentions
     need_cube = .false.
     fft_type = FFT_REAL
 
-    if (this%method == POISSON_ISF) then
+    if (this%method == POISSON_ISF .or. this%method == POISSON_LIBISF) then
       fft_type = FFT_NONE
       box(:) = der%mesh%idx%ll(:)
       need_cube = .true.
@@ -393,9 +426,13 @@ contains
         case(POISSON_FFT_KERNEL_SPH) 
           call mesh_double_box(der%mesh%sb, der%mesh, box)
           box(:) = maxval(box)
+        case(POISSON_FFT_KERNEL_CYL) 
+          call mesh_double_box(der%mesh%sb, der%mesh, box)
+          box(2) = maxval(box(2:3)) ! max of finite directions
+          box(3) = maxval(box(2:3)) ! max of finite directions
         case(POISSON_FFT_KERNEL_CORRECTED)
           box(:) = der%mesh%idx%ll(:)
-        case(POISSON_FFT_KERNEL_CYL, POISSON_FFT_KERNEL_PLA, POISSON_FFT_KERNEL_NOCUT)
+        case(POISSON_FFT_KERNEL_PLA, POISSON_FFT_KERNEL_NOCUT)
           call mesh_double_box(der%mesh%sb, der%mesh, box)
         end select
 
@@ -452,12 +489,13 @@ contains
       call poisson_isf_end(this%isf_solver)
       has_cube = .true.
 
+    case(POISSON_LIBISF)
+      call poisson_libisf_end(this%libisf_solver)
+      has_cube = .true.
+
     case(POISSON_SETE)
       call poisson_sete_end(this%sete_solver)
 
-    ! We should clean up and release
-    ! case(POISSON_DIRECT_SUM_3D)  
-    ! call poisson_direct_sum_end
     case(POISSON_FMM)
       call poisson_fmm_end(this%params_fmm)
 
@@ -546,53 +584,12 @@ contains
 
     ASSERT(this%method.ne.-99)
       
-    select case(this%method)
+    if(this%der%mesh%sb%dim == 1 .and. cmplxscl .and. this%method == POISSON_FFT) then
+      call messages_not_implemented('Complex scaled 1D soft coulomb and FFT poisson solver')
+    end if
 
-    case(POISSON_DIRECT_SUM_1D)
-      call zpoisson1D_solve(this, pot, rho, theta_)
-
-    case(POISSON_DIRECT_SUM_2D)
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    case(POISSON_DIRECT_SUM_3D)
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    case(POISSON_FMM)
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    case(POISSON_CG)
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    case(POISSON_CG_CORRECTED)
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    case(POISSON_MULTIGRID)
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    case(POISSON_FFT)
-      if(this%der%mesh%sb%dim == 1 .and. cmplxscl) then
-        call messages_not_implemented('Complex scaled 1D soft coulomb and FFT poisson solver')
-      end if
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    case(POISSON_ISF)
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    case(POISSON_SETE)
-      call zpoisson_solve_1(this, pot, rho, all_nodes)
-      if(cmplxscl) pot = pot * exp(- M_zI * theta_)
-
-    end select
-
-
+    call zpoisson_solve_1(this, pot, rho, all_nodes)
+    if(cmplxscl) pot = pot * exp(- M_zI * theta_)
 
     POP_SUB(zpoisson_solve)
   end subroutine zpoisson_solve
@@ -602,7 +599,7 @@ contains
   !> Calculates the Poisson equation.
   !! Given the density returns the corresponding potential.
   !!
-  !! Different solvers are available that could be choosen in the input file
+  !! Different solvers are available that can be chosen in the input file
   !! with the "PoissonSolver" parameter
   subroutine dpoisson_solve(this, pot, rho, all_nodes)
     type(poisson_t),      intent(inout) :: this
@@ -646,14 +643,18 @@ contains
     ASSERT(this%method /= -99)
       
     select case(this%method)
-    case(POISSON_DIRECT_SUM_1D)
-      call poisson1d_solve(this, pot, rho)
-
-    case(POISSON_DIRECT_SUM_2D)
-      call poisson2d_solve(this, pot, rho)
-
-    case(POISSON_DIRECT_SUM_3D)
-      call poisson3D_solve_direct(this, pot, rho)
+    case(POISSON_DIRECT_SUM)
+      select case(this%der%mesh%sb%dim)
+      case(1)
+        call poisson1d_solve(this, pot, rho)
+      case(2)
+        call poisson_solve_direct(this, pot, rho)
+      case(3)
+        call poisson_solve_direct(this, pot, rho)
+      case default
+        message(1) = "Direct sum Poisson solver only available for 1, 2, or 3 dimensions."
+        call messages_fatal(1)
+      end select
 
     case(POISSON_FMM)
       call poisson_fmm_solve(this%params_fmm, this%der, pot, rho)
@@ -696,6 +697,15 @@ contains
     case(POISSON_ISF)
       call poisson_isf_solve(this%isf_solver, der%mesh, this%cube, pot, rho, all_nodes_value)
      
+
+    case(POISSON_LIBISF)
+      if (this%libisf_solver%datacode == "G") then
+        ! Global version
+        call poisson_libisf_global_solve(this%libisf_solver, der%mesh, this%cube, pot, rho, all_nodes_value)
+      else ! "D" Distributed version
+        call poisson_libisf_parallel_solve(this%libisf_solver, der%mesh, this%cube, pot, rho, this%mesh_cube_map)
+      end if
+
     case(POISSON_SETE)
 
       nx = der%mesh%idx%nr(2,1) - der%mesh%idx%nr(1,1) + 1 - 2*der%mesh%idx%enlarge(1)
@@ -757,9 +767,12 @@ contains
     FLOAT, allocatable :: rho(:), vh(:), vh_exact(:), rhop(:), xx(:, :)
     FLOAT :: alpha, beta, rr, delta, norm, ralpha, hartree_nrg_num, &
          hartree_nrg_analyt, lcl_hartree_nrg 
-    integer :: ip, idir, ierr, iunit, nn, n_gaussians
+    FLOAT :: total_charge
+    integer :: ip, idir, ierr, iunit, nn, n_gaussians, times, itime
 
     PUSH_SUB(poisson_test)
+
+    call parse_integer(datasets_check('TestRepetitions'), 1, times)
 
     if(mesh%sb%dim == 1) then
       call messages_not_implemented('Poisson test for 1D case')
@@ -805,7 +818,10 @@ contains
         rho(ip) = rho(ip) + rhop(ip)
       end do
     end do
-    write(message(1), '(a,f14.6)') 'Total charge of the Gaussian distribution', dmf_integrate(mesh, rho)
+
+    total_charge = dmf_integrate(mesh, rho)
+
+    write(message(1), '(a,f14.6)') 'Total charge of the Gaussian distribution', total_charge
     call messages_info(1)
 
     ! This builds analytically its potential
@@ -834,7 +850,9 @@ contains
     end do
 
     ! This calculates the numerical potential
-    call dpoisson_solve(psolver, vh, rho)
+    do itime = 1, times
+      call dpoisson_solve(psolver, vh, rho)
+    end do
 
     ! Output results
     iunit = io_open("hartree_results", action='write')
@@ -860,7 +878,7 @@ contains
     hartree_nrg_num = lcl_hartree_nrg
 #endif
 
-    ! Calculate the anallytical Hartree energy (serially, discrete - not exactly exact)
+    ! Calculate the analytical Hartree energy (serially, discrete - not exactly exact)
     lcl_hartree_nrg = M_ZERO
     do ip = 1, mesh%np
       lcl_hartree_nrg = lcl_hartree_nrg + rho(ip) * vh_exact(ip)

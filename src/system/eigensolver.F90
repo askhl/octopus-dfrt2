@@ -83,6 +83,8 @@ module eigensolver_m
     type(subspace_t) :: sdiag
 
     integer :: rmmdiis_minimization_iter
+
+    logical :: save_mem
   end type eigensolver_t
 
 
@@ -107,6 +109,7 @@ contains
 
     integer :: default_iter, default_es
     FLOAT   :: default_tol
+    real(8) :: mem
 
     PUSH_SUB(eigensolver_init)
 
@@ -169,6 +172,7 @@ contains
     end if
 
     call messages_obsolete_variable('EigensolverVerbose')
+    
 
     !%Variable EigensolverSubspaceDiag
     !%Type logical
@@ -221,6 +225,19 @@ contains
 
       call parse_integer(datasets_check('EigensolverMinimizationIter'), 5, eigens%rmmdiis_minimization_iter)
 
+      !%Variable EigensolverSaveMemory
+      !%Type logical
+      !%Default no
+      !%Section SCF::Eigensolver
+      !%Description
+      !% The RMMDIIS eigensolver may require a considerable amount of
+      !% extra memory. When this variable is set to yes, the
+      !% eigensolver will use less memory at the expense of some
+      !% performance. This is specially useful for GPUs. The default is no.
+      !%End
+
+      call parse_logical(datasets_check('EigensolverSaveMemory'), .false., eigens%save_mem)
+
       if(gr%mesh%use_curvilinear) call messages_experimental("RMMDIIS eigensolver for curvilinear coordinates")
 
 #if defined(HAVE_ARPACK) 
@@ -259,6 +276,9 @@ contains
     case default
       call input_error('Eigensolver')
     end select
+
+    call messages_print_stress(stdout, 'Eigensolver')
+
     call messages_print_var_option(stdout, "Eigensolver", eigens%es_type)
 
     call messages_obsolete_variable('EigensolverInitTolerance', 'EigensolverTolerance')
@@ -307,6 +327,7 @@ contains
 
     nullify(eigens%diff)
     SAFE_ALLOCATE(eigens%diff(1:st%nst, 1:st%d%nik))
+    eigens%diff(1:st%nst, 1:st%d%nik) = 0
 
     SAFE_ALLOCATE(eigens%converged(1:st%d%nik))
     eigens%converged(1:st%d%nik) = 0
@@ -318,9 +339,31 @@ contains
       message(1) = "No subspace diagonalization will be done."
       call messages_info(1)
     endif
-        
-    POP_SUB(eigensolver_init)
 
+    ! print memory requirements
+    select case(eigens%es_type)
+    case(RS_RMMDIIS)
+      call messages_write('Info: The rmmdiis eigensolver requires ')
+      mem = (2.0_8*eigens%es_maxiter - 1.0_8)*st%d%block_size*dble(gr%mesh%np_part)
+      if(states_are_real(st)) then
+        mem = mem*CNST(8.0)
+      else
+        mem = mem*CNST(16.0)
+      end if
+      call messages_write(mem, units = unit_megabytes, fmt = '(f9.1)')
+      call messages_write(' of additional')
+      call messages_new_line()
+      call messages_write('      memory.  This amount can be reduced by decreasing the value')
+      call messages_new_line()
+      call messages_write('      of the variable StatesBlockSize (currently set to ')
+      call messages_write(st%d%block_size)
+      call messages_write(').')
+      call messages_info()
+    end select
+
+    call messages_print_stress(stdout)
+      
+    POP_SUB(eigensolver_init)
   end subroutine eigensolver_init
 
 
@@ -351,7 +394,7 @@ contains
     type(states_t),       intent(inout) :: st
     type(hamiltonian_t),  intent(in)    :: hm
     integer,              intent(in)    :: iter
-    logical,    optional, intent(inout) :: conv
+    logical,    optional, intent(out)   :: conv
 
     integer :: maxiter, ik, ns, ist
 #ifdef HAVE_MPI
@@ -413,7 +456,7 @@ contains
             call deigensolver_rmmdiis_min(gr, st, hm, eigens%pre, maxiter, eigens%converged(ik), ik)
           else
             call deigensolver_rmmdiis(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
-              eigens%converged(ik), ik, eigens%diff(:, ik))
+              eigens%converged(ik), ik, eigens%diff(:, ik), eigens%save_mem)
           end if
 #if defined(HAVE_ARPACK)
         case(RS_ARPACK)
@@ -451,7 +494,7 @@ contains
             call zeigensolver_rmmdiis_min(gr, st, hm, eigens%pre, maxiter, eigens%converged(ik), ik)
           else
             call zeigensolver_rmmdiis(gr, st, hm, eigens%pre, eigens%tolerance, maxiter, &
-              eigens%converged(ik), ik,  eigens%diff(:, ik))
+              eigens%converged(ik), ik,  eigens%diff(:, ik), eigens%save_mem)
           end if         
 #if defined(HAVE_ARPACK) 
        	case(RS_ARPACK) 

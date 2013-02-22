@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 04-vib_modes.test 9468 2012-09-25 16:37:12Z dstrubbe $
+# $Id: 04-vib_modes.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : LiH vibrational frequency
 Programs   : octopus; octopus_mpi
-TestGroups : long-run
+TestGroups : long-run, linear_response
 Enabled    : Yes
 
 Processors : 4

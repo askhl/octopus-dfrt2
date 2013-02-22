@@ -15,14 +15,14 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: hamiltonian_inc.F90 9453 2012-09-20 15:36:35Z dstrubbe $
+!! $Id: hamiltonian_inc.F90 10030 2013-02-20 14:58:40Z dstrubbe $
 
 ! ---------------------------------------------------------
 subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, Imtime, terms)
   type(hamiltonian_t),   intent(in)    :: hm
   type(derivatives_t),   intent(in)    :: der
   type(batch_t), target, intent(inout) :: psib
-  type(batch_t),         intent(inout) :: hpsib
+  type(batch_t), target, intent(inout) :: hpsib
   integer,               intent(in)    :: ik
   FLOAT, optional,       intent(in)    :: time
   FLOAT, optional,       intent(in)    :: Imtime
@@ -82,9 +82,9 @@ subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, Imtime, t
 
   if(apply_phase) then
     SAFE_ALLOCATE(epsib)
-    SAFE_ALLOCATE(psi_copy(1:der%mesh%np_part, 1:hm%d%dim, 1:nst))
-    call batch_init(epsib, hm%d%dim, nst)
-    do ii = 1, nst
+    SAFE_ALLOCATE(psi_copy(1:der%mesh%np_part, 1:hm%d%dim, 1:psib%nst))
+    call batch_init(epsib, hm%d%dim, psib%nst)
+    do ii = 1, psib%nst
       call batch_add_state(epsib, psib%states(ii)%ist, psi_copy(:, :, ii))
     end do
     ASSERT(batch_is_ok(epsib))
@@ -106,7 +106,7 @@ subroutine X(hamiltonian_apply_batch) (hm, der, psib, hpsib, ik, time, Imtime, t
       else
         do ii = 1, nst
           call set_pointers()
-          forall(ip = sp:min(sp + bs - 1, der%mesh%np_part)) psi_copy(ip, idim, ii) = hm%phase(ip, ik)*psi(ip)
+          forall(ip = sp:min(sp + bs - 1, der%mesh%np_part)) epsi(ip) = hm%phase(ip, ik)*psi(ip)
         end do
       end if
     end do
@@ -328,7 +328,7 @@ subroutine X(hamiltonian_apply) (hm, der, psi, hpsi, ist, ik, time, terms, Imtim
   integer,             intent(in)    :: ist       !< the index of the state
   integer,             intent(in)    :: ik        !< the index of the k-point
   R_TYPE,   target,    intent(inout) :: psi(:,:)  !< (gr%mesh%np_part, hm%d%dim)
-  R_TYPE,              intent(out)   :: hpsi(:,:) !< (gr%mesh%np, hm%d%dim)
+  R_TYPE,   target,    intent(out)   :: hpsi(:,:) !< (gr%mesh%np, hm%d%dim)
   FLOAT,    optional,  intent(in)    :: time
   integer,  optional,  intent(in)    :: terms
   FLOAT,    optional,  intent(in)    :: Imtime
@@ -485,14 +485,16 @@ subroutine X(oct_exchange_operator_all) (hm, der, st, hst)
   type(states_t),      intent(inout) :: hst
 
   integer :: ik, ist
-  FLOAT,  allocatable :: rho(:), pot(:)
+  integer :: ik2
+  FLOAT,  allocatable :: rho(:, :), pot(:, :)
   R_TYPE, allocatable :: psi(:, :), psi2(:, :), hpsi(:, :)
   integer :: jst, ip
 
   PUSH_SUB(X(oct_exchange_operator_all))
 
-  SAFE_ALLOCATE(rho(1:der%mesh%np))
-  SAFE_ALLOCATE(pot(1:der%mesh%np))
+
+  SAFE_ALLOCATE(rho(1:der%mesh%np, 1:st%d%nspin))
+  SAFE_ALLOCATE(pot(1:der%mesh%np, 1:st%d%nspin))
   SAFE_ALLOCATE(psi(1:der%mesh%np, 1:hm%d%dim))
   SAFE_ALLOCATE(psi2(1:der%mesh%np, 1:hm%d%dim))
   SAFE_ALLOCATE(hpsi(1:der%mesh%np, 1:hm%d%dim))
@@ -507,15 +509,15 @@ subroutine X(oct_exchange_operator_all) (hm, der, st, hst)
       call states_get_state(st, der%mesh, jst, 1, psi)
       call states_get_state(hm%oct_st, der%mesh, jst, 1, psi2)
       forall (ip = 1:der%mesh%np)
-        rho(ip) = rho(ip) + hm%oct_st%occ(jst, 1)*R_AIMAG(R_CONJ(psi2(ip, 1))*psi(ip, 1))
+        rho(ip, 1) = rho(ip, 1) + hm%oct_st%occ(jst, 1)*R_AIMAG(R_CONJ(psi2(ip, 1))*psi(ip, 1))
       end forall
     end do
-    call dpoisson_solve(psolver, pot, rho)
+    call dpoisson_solve(psolver, pot(:, 1), rho(:, 1))
     do ist = st%st_start, st%st_end
       call states_get_state(hst, der%mesh, ist, 1, hpsi)
       call states_get_state(hm%oct_st, der%mesh, ist, 1, psi2)
       forall(ip = 1:der%mesh%np)
-        hpsi(ip, 1) = hpsi(ip, 1) + M_TWO*M_zI*psi2(ip, 1)*(pot(ip) + hm%oct_fxc(ip, 1, 1)*rho(ip))
+        hpsi(ip, 1) = hpsi(ip, 1) + M_TWO*M_zI*psi2(ip, 1)*(pot(ip, 1) + hm%oct_fxc(ip, 1, 1)*rho(ip, 1))
       end forall
       call states_set_state(hst, der%mesh, ist, 1, hpsi)
     end do
@@ -530,18 +532,27 @@ subroutine X(oct_exchange_operator_all) (hm, der, st, hst)
         call states_get_state(st, der%mesh, jst, ik, psi)
         call states_get_state(hm%oct_st, der%mesh, jst, ik, psi2)
         forall (ip = 1:der%mesh%np)
-          rho(ip) = rho(ip) + hm%oct_st%occ(jst, ik)*R_AIMAG(R_CONJ(psi2(ip, 1))*psi(ip, 1))
+          rho(ip, ik) = rho(ip, ik) + hm%oct_st%occ(jst, ik) * R_AIMAG(R_CONJ(psi2(ip, 1))*psi(ip, 1))
         end forall
       end do
     end do
-    call dpoisson_solve(psolver, pot, rho)
+
+    do ik = 1, 2
+      call dpoisson_solve(psolver, pot(:, ik), rho(:, ik))
+    end do
+
     do ik = 1, 2
       do ist = st%st_start, st%st_end
         call states_get_state(hst, der%mesh, ist, ik, hpsi)
         call states_get_state(hm%oct_st, der%mesh, ist, ik, psi2)
-        forall(ip = 1:der%mesh%np)
-          hpsi(ip, 1) = hpsi(ip, 1) + M_TWO*M_zI*psi2(ip, 1)*(pot(ip) + hm%oct_fxc(ip, ik, ik)*rho(ip))
-        end forall
+
+        do ik2 = 1, 2
+          forall(ip = 1:der%mesh%np)
+            hpsi(ip, 1) = hpsi(ip, 1) + M_TWO * M_zI * hm%oct_st%occ(ist, ik) * &
+              psi2(ip, 1) * (pot(ip, ik2) + hm%oct_fxc(ip, ik, ik2)*rho(ip, ik2))
+          end forall
+        end do
+
         call states_set_state(hst, der%mesh, ist, ik, hpsi)
       end do
     end do
@@ -550,6 +561,9 @@ subroutine X(oct_exchange_operator_all) (hm, der, st, hst)
     call messages_not_implemented("Function oct_exchange_operator_all for spin_polarized or spinors")
   end select
 
+  SAFE_DEALLOCATE_A(psi)
+  SAFE_DEALLOCATE_A(psi2)
+  SAFE_DEALLOCATE_A(hpsi)
   SAFE_DEALLOCATE_A(rho)
   SAFE_DEALLOCATE_A(pot)
   POP_SUB(X(oct_exchange_operator_all))

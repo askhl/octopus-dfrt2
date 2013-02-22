@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 01-free_electrons.test 8321 2011-09-25 00:10:12Z xavier $
+# $Id: 01-free_electrons.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : Free Electron Bands in 1D
 Programs   : octopus; octopus_single; octopus_mpi
-TestGroups : short-run
+TestGroups : short-run, periodic_systems
 Enabled    : Yes
 
 Input: 01-free_electrons.01-ground_state.inp

@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: profiling.F90 9479 2012-10-04 22:11:39Z dstrubbe $
+!! $Id: profiling.F90 9918 2013-02-01 17:42:10Z dstrubbe $
 
 #include "global.h"
 
@@ -86,7 +86,7 @@ module profiling_m
     profiling_output
 
   integer, parameter ::                 & 
-       LABEL_LENGTH = 17,               &  !< Max. number of characters of tag label.
+       LABEL_LENGTH = 20,               &  !< Max. number of characters of tag label.
        MAX_PROFILES = 200                  !< Max. number of tags.
   
   type profile_t
@@ -160,7 +160,7 @@ module profiling_m
     logical                  :: all_nodes
   end type profile_vars_t
 
-  type(profile_vars_t), public :: prof_vars
+  type(profile_vars_t), target, public :: prof_vars
 
   !For the moment we will have the profiler objects here, but they
   !should be moved to their respective modules.

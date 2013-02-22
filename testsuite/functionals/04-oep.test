@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 04-oep.test 9012 2012-04-14 04:16:37Z xavier $
+# $Id: 04-oep.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : OEP
 Programs   : octopus; octopus_mpi
-TestGroups : long-run
+TestGroups : long-run, functionals
 Enabled    : Yes
 
 # This input files reproduces results from:

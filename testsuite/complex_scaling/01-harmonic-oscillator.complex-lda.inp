@@ -13,7 +13,7 @@ Spacing = 0.1
 Radius = 6.5
 ExtraStates = 8
 XCFunctional=lda_xc_cmplx
-PoissonSolver=direct1d
+PoissonSolver=direct_sum
 
 # recommended 2 * nstates + 1 or more
 EigenSolverArnoldiVectors = 50

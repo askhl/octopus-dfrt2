@@ -111,7 +111,7 @@ XC(mgga_series_w)(int order, int n, const FLOAT *a, FLOAT t, FLOAT *fw, FLOAT *d
 
 
 static void 
-func(const XC(func_type) *pt, XC(work_mgga_x_params) *r)
+func(const XC(func_type) *pt, XC(mgga_work_x_t) *r)
 {
   const FLOAT alpha = 0.00186726;   /* set alpha of Eq. (4) */
 
@@ -161,7 +161,7 @@ const XC(func_info_type) XC(func_info_mgga_x_m06_hf) = {
   XC_EXCHANGE,
   "M06-HF functional of Minnesota",
   XC_FAMILY_MGGA,
-  "Y Zhao and DG Truhlar, J. Phys. Chem. A 110, 13126 (2006)\n",
+  "Y Zhao and DG Truhlar, J. Phys. Chem. A 110, 13126 (2006)",
   XC_FLAGS_3D | XC_FLAGS_HAVE_EXC | XC_FLAGS_HAVE_VXC,
   MIN_DENS, MIN_GRAD, MIN_TAU, MIN_ZETA,
   mgga_x_m06l_init,
@@ -175,7 +175,7 @@ const XC(func_info_type) XC(func_info_mgga_x_m06) = {
   XC_EXCHANGE,
   "M06 functional of Minnesota",
   XC_FAMILY_MGGA,
-  "Theor. Chem. Acc. 120, 215 (2008)\n",
+  "Y Zhao and DG Truhlar, Theor. Chem. Acc. 120, 215 (2008)",
   XC_FLAGS_3D | XC_FLAGS_HAVE_EXC | XC_FLAGS_HAVE_VXC,
   MIN_DENS, MIN_GRAD, MIN_TAU, MIN_ZETA,
   mgga_x_m06l_init,

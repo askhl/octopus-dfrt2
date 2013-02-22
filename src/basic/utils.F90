@@ -93,10 +93,8 @@ contains
 
 
   ! ---------------------------------------------------------
-  character function index2axis(idir) result(ch)
+  character pure function index2axis(idir) result(ch)
     integer, intent(in) :: idir
-    
-    PUSH_SUB(index2axis)
 
     select case(idir)
       case(1)
@@ -111,9 +109,7 @@ contains
         write(ch,'(i1)') idir
     end select
 
-    POP_SUB(index2axis)
   end function index2axis
-
 
   ! ---------------------------------------------------------
   subroutine output_tensor(iunit, tensor, ndim, unit, write_average)
@@ -132,7 +128,7 @@ contains
     write_average_ = .true.
     if(present(write_average)) write_average_ = write_average
 
-    trace = M_z0
+    trace = M_ZERO
     do jj = 1, ndim
       write(iunit, '(3f20.6)') (units_from_atomic(unit, tensor(jj, kk)), kk=1,ndim)
       trace = trace + tensor(jj, jj)
@@ -205,9 +201,6 @@ contains
 #ifdef HAVE_OPENCL
     message(1) = trim(message(1))//' opencl'
 #endif
-#ifdef HAVE_CLAMDFFT
-    message(1) = trim(message(1))//' clamdfft'
-#endif
 #ifdef HAVE_M128D
     message(1) = trim(message(1))//' sse2'
 #endif
@@ -264,6 +257,12 @@ contains
 #endif
 #ifdef HAVE_PSPIO
     message(2) = trim(message(2))//' pspio'
+#endif
+#ifdef HAVE_CLAMDFFT
+    message(2) = trim(message(2))//' clamdfft'
+#endif
+#ifdef HAVE_CLAMDBLAS
+    message(2) = trim(message(2))//' clamdblas'
 #endif
 
     message(3) = &

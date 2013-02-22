@@ -1,5 +1,5 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 04-oep.01-jellium-lsda.inp 9012 2012-04-14 04:16:37Z xavier $
+# $Id: 04-oep.01-jellium-lsda.inp 10055 2013-02-21 22:18:28Z dstrubbe $
 #
 # This input files reproduces results from:
 # [M. Payami and T. Mahmoodi, J. Phys.: Condens. Matter 18, 75 (2006)].
@@ -40,10 +40,7 @@ Spacing = 0.35
 
 XCFunctional = lda_x + lda_c_pw
 
-
 ConvRelDens = 8e-6
-
-LCAOStart = lcao_none
 
 EigenSolverTolerance = 1e-5
 

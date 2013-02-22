@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_init.F90 9592 2012-11-09 22:16:18Z dstrubbe $
+!! $Id: mesh_init.F90 9988 2013-02-17 17:40:34Z xavier $
 
 #include "global.h"
 
@@ -144,8 +144,8 @@ end subroutine mesh_init_stage_1
 
 ! ---------------------------------------------------------
 subroutine mesh_read_lead(ob_grid, mesh)
-  type(ob_grid_t),  intent(in)    :: ob_grid
-  type(mesh_t),     intent(in)    :: mesh
+  type(ob_grid_t), target, intent(in)    :: ob_grid
+  type(mesh_t),    target, intent(in)    :: mesh
 
   integer :: il, iunit
 
@@ -567,12 +567,33 @@ contains
     !% To improve memory-access locality when calculating derivatives,
     !% <tt>Octopus</tt> arranges mesh points in blocks. This variable
     !% controls the size of this blocks in the different
-    !% directions. The default is | 20 | 20 | 100 |. (This variable only
-    !% affects the performance of <tt>Octopus</tt> and not the
-    !% results.) 
+    !% directions. The default is selected according to the value of
+    !% the StatesBlockSize variable. (This variable only affects the
+    !% performance of <tt>Octopus</tt> and not the results.)
     !%End
-    bsize(1:2) = 20
-    bsize(3) = 100
+
+    select case(conf%target_states_block_size)
+    case(1)
+      bsize(1:3) = (/  2,   1, 200/)
+    case(2)
+      bsize(1:3) = (/ 10,   4, 200/)
+    case(4)
+      bsize(1:3) = (/ 10,   4,  80/)
+    case(8)
+      bsize(1:3) = (/ 10,   2,  30/)
+    case(16)
+      bsize(1:3) = (/ 15,  15,   4/)
+    case(32)
+      bsize(1:3) = (/ 15,  15,   2/)
+    case(64)
+      bsize(1:3) = (/  8,  10,   4/)
+    case(128)
+      bsize(1:3) = (/  8,   6,   2/)
+    case(256)
+      bsize(1:3) = (/  4,   6,   2/)
+    case default
+      bsize(1:3) = (/ 15,  15,   4/)
+    end select
 
     if(parse_block('MeshBlockSize', blk) == 0) then
       nn = parse_block_cols(blk, 0)
@@ -580,7 +601,7 @@ contains
         call parse_block_integer(blk, 0, idir - 1, bsize(idir))
       end do
     end if
-
+    
     ! When using open boundaries we need to have a mesh block-size of 1
     if (parse_block(datasets_check('OpenBoundaries'), blk).eq.0) then
       if (any(bsize > 1)) then
@@ -658,7 +679,7 @@ contains
     logical, allocatable :: nb(:, :)
     integer              :: idx(1:MAX_DIM), jx(1:MAX_DIM)
     integer              :: graph_comm, iedge
-    logical              :: use_topo, reorder
+    logical              :: use_topo, reorder, partition_print
     type(partition_t)    :: partition
     integer              :: ierr
 
@@ -708,10 +729,24 @@ contains
     if (partition%library == GA .or. partition%box_shape == HYPERCUBE)  then
       partition%point_to_part = mesh%vp%part
     end if
-    call partition_build(partition, mesh, stencil, mesh%vp%part)
-    call partition_write_info(partition)      
-    call partition_end(partition)
-    call mesh_partition_messages_debug(mesh)
+    
+    !%Variable PartitionPrint
+    !%Type logical
+    !%Default true
+    !%Section Execution::Parallelization
+    !%Description
+    !% (experimental) If disabled, <tt>Octopus</tt> will not compute
+    !% nor print the partition information, such as local points,
+    !% no. of neighbours, ghost points and boundary points.
+    !%End
+    call parse_logical(datasets_check('PartitionPrint'), .true., partition_print)
+    
+    if (partition_print) then
+      call partition_build(partition, mesh, stencil, mesh%vp%part)
+      call partition_write_info(partition)      
+      call partition_end(partition)
+      call mesh_partition_messages_debug(mesh)
+    end if
 
     !%Variable MeshUseTopology
     !%Type logical
@@ -849,7 +884,7 @@ contains
     SAFE_ALLOCATE(mesh%vol_pp(1:np))
 
     forall(ip = 1:np) mesh%vol_pp(ip) = product(mesh%spacing(1:sb%dim))
-    jj(sb%dim + 1:MAX_DIM) = M_ZERO
+    jj(sb%dim + 1:MAX_DIM) = 0
 
     if(mesh%parallel_in_domains) then
 #if defined(HAVE_MPI)

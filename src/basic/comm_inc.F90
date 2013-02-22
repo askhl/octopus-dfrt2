@@ -52,19 +52,20 @@ subroutine X(comm_allreduce_1)(comm, aa, dim)
   if(present(dim)) dim1 = dim  
 
   ASSERT(ubound(aa, dim = 1) >= dim1)
-  
+
+  if(dim1 > 0) then
+
 #if defined(HAVE_MPI2)
-
-  call MPI_Allreduce(MPI_IN_PLACE, aa(1), dim1, R_MPITYPE, MPI_SUM, comm, mpi_err)
-
+     call MPI_Allreduce(MPI_IN_PLACE, aa(1), dim1, R_MPITYPE, MPI_SUM, comm, mpi_err)
 #elif defined(HAVE_MPI)
-
-  SAFE_ALLOCATE(aac(1:dim1))
-  aac(1:dim1) = aa(1:dim1)
-  call MPI_Allreduce(aac(1), aa(1), dim1, R_MPITYPE, MPI_SUM, comm, mpi_err)
-  SAFE_DEALLOCATE_A(aac)
-
+     
+     SAFE_ALLOCATE(aac(1:dim1))
+     aac(1:dim1) = aa(1:dim1)
+     call MPI_Allreduce(aac(1), aa(1), dim1, R_MPITYPE, MPI_SUM, comm, mpi_err)
+     SAFE_DEALLOCATE_A(aac)
+     
 #endif
+  end if
 
   POP_SUB(X(comm_allreduce_1))
 end subroutine X(comm_allreduce_1)
@@ -74,7 +75,7 @@ end subroutine X(comm_allreduce_1)
 subroutine X(comm_allreduce_2)(comm, aa, dim)
   integer,                          intent(in)    :: comm
   R_TYPE,                           intent(inout) :: aa(:, :)
-  integer, optional,                intent(in)    :: dim(1:2)
+  integer, optional,                intent(in)    :: dim(:) !< (2)
 
   integer :: dim_(1:2), ii
   R_TYPE, allocatable :: aac(:, :)
@@ -85,6 +86,11 @@ subroutine X(comm_allreduce_2)(comm, aa, dim)
   if(present(dim)) dim_ = dim  
 
   ASSERT(all(ubound(aa) >= dim_))
+
+  if(any(dim_(1:2) < 1)) then
+    POP_SUB(X(comm_allreduce_2))
+    return
+  end if
 
   if(ubound(aa, dim = 1) == dim_(1)) then
     ! the array is contiguous in memory
@@ -142,7 +148,7 @@ subroutine X(comm_allreduce_3)(comm, aa)
 #elif defined(HAVE_MPI)
     SAFE_ALLOCATE(aac(1:dim_(1), 1:dim_(2), 1:dim_(3)))
     aac(1:dim_(1), 1:dim_(2), 1:dim_(3)) = aa(1:dim_(1), 1:dim_(2), 1:dim_(3))
-    call MPI_Allreduce(aac(1, 1, 1, 1), aa(1, 1, 1, 1), product(dim_), R_MPITYPE, MPI_SUM, comm, mpi_err)
+    call MPI_Allreduce(aac(1, 1, 1), aa(1, 1, 1), product(dim_), R_MPITYPE, MPI_SUM, comm, mpi_err)
 #endif
 
   SAFE_DEALLOCATE_A(aac)

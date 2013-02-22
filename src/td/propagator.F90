@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: propagator.F90 9539 2012-10-29 17:20:10Z joseba $
+!! $Id: propagator.F90 9803 2012-12-28 21:56:11Z xavier $
 
 #include "global.h"
 
@@ -39,7 +39,7 @@ module propagator_m
   use ion_dynamics_m
   use lalg_basic_m
   use lasers_m
-  use loct_m
+  use loct_pointer_m
   use parser_m
   use math_m
   use mesh_function_m
@@ -634,7 +634,7 @@ contains
     !> Propagator with enforced time-reversal symmetry
     subroutine td_etrs
       FLOAT, allocatable :: vhxc_t1(:,:), vhxc_t2(:,:)
-      integer :: ik, ist, ib
+      integer :: ik, ib
       type(batch_t) :: zpsib_save
       type(density_calc_t) :: dens_calc
 
@@ -720,7 +720,6 @@ contains
     !> Propagator with approximate enforced time-reversal symmetry
     subroutine td_aetrs
       integer :: ik, ispin, ip, ist, ib
-      type(batch_t) :: zpsib
       FLOAT :: vv
       CMPLX :: phase
       type(density_calc_t)  :: dens_calc

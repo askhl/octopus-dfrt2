@@ -12,14 +12,14 @@ CalculationMode = gs
 
 # not enough states for LCAO
 LCAOStart = none
-ExtraStates = 1
+ExtraStates = 4
 
 %Occupations
 0 | 1 
 %
 
 BoxShape = sphere
-Radius  = 15.0
+Radius  = 8.0
 Spacing = 0.46
 CurvMethod = curv_gygi
 CurvGygiA = 0.80
@@ -30,10 +30,6 @@ DerivativesOrder = 3
 ConvAbsDens = 1e-4
 
 TheoryLevel = independent_particles
-
-EigenSolver = cg_new
-EigenSolverTolerance = 1e-4
-EigenSolverMaxIter = 300
 
 %StaticMagneticField
 0.0 | 0.0 | 0.5

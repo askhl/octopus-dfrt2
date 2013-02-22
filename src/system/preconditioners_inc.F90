@@ -15,12 +15,12 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: preconditioners_inc.F90 9346 2012-09-06 00:01:45Z dstrubbe $
+!! $Id: preconditioners_inc.F90 9643 2012-11-16 06:02:32Z dstrubbe $
 
 ! --------------------------------------------------------- 
 subroutine X(preconditioner_apply)(pre, gr, hm, ik, a, b, omega)
   type(preconditioner_t), intent(in)    :: pre
-  type(grid_t),           intent(in)    :: gr
+  type(grid_t), target,   intent(in)    :: gr
   type(hamiltonian_t),    intent(in)    :: hm
   integer,                intent(in)    :: ik
   R_TYPE,                 intent(inout) :: a(:,:)

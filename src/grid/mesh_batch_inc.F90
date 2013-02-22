@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: mesh_batch_inc.F90 9549 2012-11-05 19:16:21Z dstrubbe $
+!! $Id: mesh_batch_inc.F90 10060 2013-02-22 01:07:35Z dstrubbe $
 
 subroutine X(mesh_batch_dotp_matrix)(mesh, aa, bb, dot, symm, reduce)
   type(mesh_t),      intent(in)    :: mesh
@@ -360,6 +360,8 @@ subroutine X(mesh_batch_rotate)(mesh, aa, transf)
   call profiling_in(prof, "BATCH_ROTATE")
   ASSERT(batch_status(aa) == BATCH_NOT_PACKED)
 
+  call batch_pack_was_modified(aa)
+
 #ifdef R_TREAL  
   block_size = max(40, hardware%l2%size/(2*8*aa%nst))
 #else
@@ -409,14 +411,12 @@ subroutine X(mesh_batch_dotp_vector)(mesh, aa, bb, dot, reduce, cproduct)
   logical, optional, intent(in)    :: reduce
   logical, optional, intent(in)    :: cproduct
 
-  integer :: ist, indb, idim, ip, bsize
+  integer :: ist, indb, idim, ip, bsize, status
   logical :: reduce_, cproduct_
   type(profile_t), save :: prof, profcomm
   R_TYPE, allocatable :: tmp(:), cltmp(:, :)
 #ifdef HAVE_OPENCL
   integer :: wgsize, local_mem_size
-  type(octcl_kernel_t), save :: kernel
-  type(cl_kernel)         :: kernel_ref
   type(opencl_mem_t)  :: dot_buffer
   type(profile_t), save :: prof_copy
 #endif
@@ -432,7 +432,19 @@ subroutine X(mesh_batch_dotp_vector)(mesh, aa, bb, dot, reduce, cproduct)
   ASSERT(aa%nst == bb%nst)
   ASSERT(aa%dim == bb%dim)
 
-  select case(batch_status(aa))
+  status = batch_status(aa)
+
+  if(batch_status(bb) /= status) then 
+    if(batch_status(aa) /= BATCH_NOT_PACKED) then
+      ASSERT(batch_is_sync(aa))
+    end if
+    if(batch_status(aa) /= BATCH_NOT_PACKED) then
+      ASSERT(batch_is_sync(bb))
+    end if
+    status = BATCH_NOT_PACKED
+  end if
+
+  select case(status)
   case(BATCH_NOT_PACKED)
     do ist = 1, aa%nst
       dot(ist) = M_ZERO
@@ -526,7 +538,7 @@ subroutine X(mesh_batch_dotp_vector)(mesh, aa, bb, dot, reduce, cproduct)
 #endif
 
     do ip = 2, bsize
-      forall(ist = 1:aa%nst) cltmp(ist, 1) = cltmp(ist, 1) + cltmp(ist, ip)
+      forall(ist = 1:aa%nst_linear) cltmp(ist, 1) = cltmp(ist, 1) + cltmp(ist, ip)
     end do
 
     do ist = 1, aa%nst
@@ -542,7 +554,7 @@ subroutine X(mesh_batch_dotp_vector)(mesh, aa, bb, dot, reduce, cproduct)
 
   if(mesh%parallel_in_domains .and. reduce_) then
     call profiling_in(profcomm, "DOTPV_BATCH_REDUCE")
-    call comm_allreduce(mesh%mpi_grp%comm, dot, aa%nst)
+    call comm_allreduce(mesh%mpi_grp%comm, dot, dim = aa%nst)
     call profiling_out(profcomm)
   end if
 
@@ -569,6 +581,8 @@ subroutine X(mesh_batch_exchange_points)(mesh, aa, forward_map, backward_map)
 #endif
 
   PUSH_SUB(X(mesh_batch_exchange_points))
+
+  call batch_pack_was_modified(aa)
 
   ASSERT(present(backward_map) .neqv. present(forward_map))
   ASSERT(batch_type(aa) == R_TYPE_VAL)
@@ -782,9 +796,6 @@ subroutine X(mesh_batch_nrm2)(mesh, aa, nrm2)
     
     if(.not. mesh%use_curvilinear) then
 
-      scal = M_ZERO
-      ssq  = M_ONE
-
       do ip = 1, mesh%np
         do ist = 1, aa%nst_linear
           a0 = aa%pack%X(psi)(ist, ip)
@@ -799,9 +810,6 @@ subroutine X(mesh_batch_nrm2)(mesh, aa, nrm2)
       end do
 
     else
-
-      scal = M_ZERO
-      ssq  = M_ONE
 
       do ip = 1, mesh%np
         do ist = 1, aa%nst_linear

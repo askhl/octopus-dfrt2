@@ -1,9 +1,9 @@
 # -*- coding: utf-8 mode: shell-script -*-
-# $Id: 02-h2o_pol_lr.test 8321 2011-09-25 00:10:12Z xavier $
+# $Id: 02-h2o_pol_lr.test 9819 2013-01-14 20:49:17Z dstrubbe $
 
 Test       : Linear-Response Polarizabilities
 Programs   : octopus; octopus_mpi
-TestGroups : short-run
+TestGroups : short-run, linear_response
 Enabled    : Yes
 
 Input: 02-h2o_pol_lr.01_h2o_gs.inp

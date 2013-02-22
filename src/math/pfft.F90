@@ -1,4 +1,4 @@
-!! Copyright (C) 2011 J. Alberdi, P. Garcia Risueño, M. Oliveira
+!! Copyright (C) 2011 J. Alberdi-Rodriguez, P. Garcia Risueño, M. Oliveira
 !!
 !! This program is free software; you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 !! Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 !! 02111-1307, USA.
 !!
-!! $Id: pfft.F90 9482 2012-10-05 03:52:12Z dstrubbe $
+!! $Id: pfft.F90 9888 2013-01-24 17:39:22Z joseba $
 
 #include "global.h"
 
@@ -45,6 +45,7 @@ module pfft_m
   use math_m
   use messages_m
   use pfft_params_m
+  use profiling_m
 
   implicit none
 
@@ -311,15 +312,17 @@ contains
     integer,                 intent(in)    :: mpi_comm   !< MPI communicator
     
     integer(ptrdiff_t_kind) :: tmp_n(3)
-
+    type(profile_t), save   :: prof
     PUSH_SUB(pfft_prepare_plan_r2c)
+    call profiling_in(prof,"PFFT_PLAN_R2C")
 
     ASSERT(sign == FFTW_FORWARD)
 
     tmp_n(1:3) = n(1:3)
 
     call PDFFT(plan_dft_r2c_3d) (plan, tmp_n(1), in(1,1,1), out(1,1,1), mpi_comm, sign, PFFT_TRANSPOSED_OUT, flags) 
-
+    
+    call profiling_out(prof)
     POP_SUB(pfft_prepare_plan_r2c)
   end subroutine pfft_prepare_plan_r2c
 
@@ -336,8 +339,9 @@ contains
     integer,                 intent(in)    :: mpi_comm   !< MPI communicator
     
     integer(ptrdiff_t_kind) :: tmp_n(3)
-    
+    type(profile_t), save   :: prof
     PUSH_SUB(pfft_prepare_plan_c2r)
+    call profiling_in(prof,"PFFT_PLAN_C2R")
 
     ASSERT(sign == FFTW_BACKWARD)
 
@@ -345,6 +349,7 @@ contains
 
     call PDFFT(plan_dft_c2r_3d) (plan, tmp_n(1), in(1,1,1), out(1,1,1), mpi_comm, sign, PFFT_TRANSPOSED_IN, flags) 
 
+    call profiling_out(prof)
     POP_SUB(pfft_prepare_plan_c2r)
   end subroutine pfft_prepare_plan_c2r
 
