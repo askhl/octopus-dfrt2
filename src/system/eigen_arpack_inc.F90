@@ -44,24 +44,17 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
 	!!!!WARNING: No support for spinors, yet. 
   PUSH_SUB(eigen_arpack.eigen_solver_arpack)
 
-!#if defined(HAVE_ARPACK)
-
   !Enable debug info
   if(in_debug_mode) call arpack_debug(conf%debug_level)
   
-	mpi_comm = mpi_world%comm
+  mpi_comm = mpi_world%comm
   if (gr%mesh%parallel_in_domains) mpi_comm = gr%mesh%mpi_grp%comm
   
   ncv = arpack%arnoldi_vectors
   n = gr%mesh%np
-!   n = gr%mesh%np_part
-  ldv = gr%mesh%np_global
+  ldv = gr%mesh%np
   nev = st%nst
-!   if(.not. arpack%use_parpack) then
-    lworkl  = 3*ncv**2+6*ncv
-!   else 
-!     lworkl  = 3*ncv**2+5*ncv
-!   end if
+  lworkl  = 3*ncv**2+6*ncv
 
   SAFE_ALLOCATE(d(ncv+1, 3))
   SAFE_ALLOCATE(resid(ldv))       !residual vector 
@@ -70,14 +63,12 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   SAFE_ALLOCATE(workev(3*ncv))
   SAFE_ALLOCATE(workl(lworkl))
   SAFE_ALLOCATE(select(ncv))
-  
   SAFE_ALLOCATE(psi(1:gr%mesh%np_part, 1:st%d%dim))
   
 #if defined(R_TCOMPLEX)
   SAFE_ALLOCATE(rwork(ncv))
   SAFE_ALLOCATE(zd(ncv+1))
 #endif
-
   which = arpack%sort	
   select(:) = .true.
   tol  = tol_
@@ -86,12 +77,8 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
                            ! 1. calculate resid vector 
                            ! 2. resid vector constant = 1 
   
-!   print *,mpi_world%rank,  "tol", tol
-!   print *,mpi_world%rank, "Ncv", ncv, "nev", nev, "n", n
-
-  
-  
   if(info == 1) then !Calculate the residual vector
+    print*, 'eigen_solver_arpack info1, allocate for calculating residual.'
     SAFE_ALLOCATE(hpsi(1:gr%mesh%np_part, 1:st%d%dim))
   
     resid(:) = R_TOTYPE(M_ZERO)
@@ -99,14 +86,16 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
       call states_get_state(st, gr%mesh, ist, ik, psi)      
       do idim = 1, st%d%dim
        call X(hamiltonian_apply) (hm, gr%der, psi, hpsi, idim, ik)
-       if (st%eigenval(ist, ik) > CNST(1e3)) tmp = st%eigenval(ist, ik) -  CNST(1e3) ! compensate the ugly sorting trick
+       ! XXX this will hardly work because tmp is not necessarily written to...
+       ! In fact as of lately, it is never written to as the mentioned sorting trick is not in use
+       !if (st%eigenval(ist, ik) > CNST(1e3)) tmp = st%eigenval(ist, ik) -  CNST(1e3) ! compensate the ugly sorting trick
        resid(1:ldv) = resid(1:ldv) + hpsi(1:ldv, idim) - tmp * psi(1:ldv, idim)
        if(associated(st%zeigenval%Im)) resid(1:ldv) = resid(1:ldv) - M_zI * st%zeigenval%Im(ist, ik) * psi(1:ldv, idim)
       end do
     end do
-    resid(:) = resid(:) !* sqrt(gr%mesh%volume_element)
+    !resid(:) = resid(:) * sqrt(gr%mesh%volume_element)
     SAFE_DEALLOCATE_A(hpsi)
-   
+
     resid_sum = abs(sum(resid(:)**2))
     print *,"residual", resid_sum
     if(resid_sum < M_EPSILON .or. resid_sum > M_HUGE) then
@@ -121,8 +110,6 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
 ! !      resid(i) = sum(st%X(psi)(i, 1, 1:st%nst, ik))*sqrt(gr%mesh%vol_pp(1))
 !       resid(i) = R_TOTYPE(M_ONE)
 !   end do
-
-	
 !   ishfts = 1
 !   maxitr = niter
 !   mode1 = 1
@@ -130,10 +117,6 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   iparam(3) = niter
   iparam(7) = 1
 
-
-  
-  
-  
   do
 #if defined(R_TCOMPLEX)
     if(arpack%use_parpack) then
@@ -169,6 +152,7 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
       
     if( abs(ido).ne.1) exit
     
+    !!!call av (arpack, ldv, workd(ipntr(1)), workd(ipntr(2))) ! calculate H * psi
     call av (arpack, n, workd(ipntr(1)), workd(ipntr(2))) ! calculate H * psi
     
   end do
@@ -257,18 +241,19 @@ subroutine X(eigen_solver_arpack)(arpack, gr, st, hm, tol_, niter, converged, ik
   end do
 
   !Fill unconverged states with (nice) garbage  
-  do j = converged + 1, st%nst
-    do i = 1, gr%mesh%np
-      psi(i,1) = R_TOTYPE(M_ONE) 
-    end do
-    call states_set_state(st, gr%mesh, j, ik, psi)
+  ! or maybe we should go with whatever we have
+  !do j = converged + 1, st%nst
+  !  do i = 1, gr%mesh%np
+  !    psi(i,1) = R_TOTYPE(M_ONE) 
+  !  end do
+  !  call states_set_state(st, gr%mesh, j, ik, psi)
 
-    st%eigenval(j, ik) = M_HUGE
-    if(associated(st%zeigenval%Im))then 
-      st%zeigenval%Im(j, ik) = M_HUGE
-    end if
-    diff(j) = M_HUGE
-  end do
+  !  st%eigenval(j, ik) = M_HUGE
+  !  if(associated(st%zeigenval%Im))then 
+  !    st%zeigenval%Im(j, ik) = M_HUGE
+  !  end if
+  !  diff(j) = M_HUGE
+  !end do
 
 
 
@@ -334,12 +319,6 @@ contains
 
     POP_SUB(X(eigen_solver_arpack).av)
   end subroutine av
-  
-
- 
-
-        
-         
 
 end subroutine X(eigen_solver_arpack)
 

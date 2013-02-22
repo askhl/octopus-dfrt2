@@ -291,21 +291,23 @@ contains
     call parse_float(datasets_check('ComplexScalingPenalizationFactor'), M_TWO, penalizationfactor)
 
     do ik = st%d%kpt%start, st%d%kpt%end
-      cbuf(:) = (st%zeigenval%Re(:, ik) + M_zI * st%zeigenval%Im(:, ik))! * rotatespectrumfactor
-      !buf(:) = aimag(cbuf)
-      !imthreshold = -minval(buf) * M_THREE / M_FOUR
-      !print*, 'imthreshold', imthreshold
-      !buf(:) = real(cbuf)
-      !do ist=1, st%nst
-      !  if (abs(aimag(cbuf(ist))).gt.imthreshold) then
-      !    print*, 'penalize', ist, aimag(cbuf(ist))
-      !    buf(ist) = buf(ist) + CNST(1e9)
-      !  end if
-      !end do
-      buf(:) = real(cbuf) + penalizationfactor * imag(cbuf)**2
+      cbuf(:) = (st%zeigenval%Re(:, ik) + M_zI * st%zeigenval%Im(:, ik))
+      buf(:) = real(cbuf) + penalizationfactor * aimag(cbuf)**2
+      do ist=1, st%nst
+         if(aimag(cbuf(ist)).gt.0) then
+            buf(ist) = buf(ist) + 8.0 * aimag(cbuf(ist))
+         end if
+      end do
       
       call sort(buf, index)
-      cbuf(:) = cbuf(:)! / rotatespectrumfactor
+      if(mpi_grp_is_root(mpi_world)) then
+        write(message(1), *) 'Permutation of states'
+        write(message(2), *) index
+        call messages_info(1)
+        call messages_info(2)
+      end if
+      
+      cbuf(:) = cbuf(:)
       do ist=1, st%nst !reorder the eigenstates error accordingly
         diff(ist, ik) = diff_copy(index(ist),ik)
         st%zeigenval%Re(ist, ik) = real(cbuf(index(ist)))

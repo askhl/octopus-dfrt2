@@ -574,8 +574,6 @@ contains
       ! compute output density, potential (if needed) and eigenvalues sum
       if(cmplxscl) then
         call density_calc(st, gr, st%zrho%Re, st%zrho%Im)
-!         print *,"Density integral", sum(st%zrho%Re(:,1) + M_zI * st%zrho%Im(:,1))*gr%mesh%volume_element
-        print *,"Density integral", zmf_integrate(gr%mesh, st%zrho%Re(:,1) + M_zI * st%zrho%Im(:,1))
       else
         call density_calc(st, gr, st%rho)
       end if

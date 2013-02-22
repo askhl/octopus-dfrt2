@@ -187,8 +187,6 @@ contains
       this%e_fermi = eigenvalues(ist, 1)
     end do
     
-    print*, 'total electrons added', sum(occupations(:, 1))
-
   end subroutine smear_occupy_states_by_ordering
 
 

@@ -76,9 +76,10 @@ use batch_m
     PUSH_SUB(arpack_init)
 #if defined(HAVE_ARPACK)
 
-    rotate_spectrum_angle = M_ZERO
     ! XXX yuck, this parameter is also given in Hamiltonian.  How should it be transferred from there to here
     ! without parsing the parameter again?  For now we'll just parse it again
+    rotate_spectrum_angle = M_ZERO
+
     call parse_float(datasets_check('ComplexScalingRotateSpectrum'), M_ZERO, rotate_spectrum_angle)
     call messages_print_var_value(stdout, "ComplexScalingRotateSpectrum", rotate_spectrum_angle)
 
@@ -165,7 +166,8 @@ use batch_m
     write(message(2), '(a)') 'Provide a different EigenSolver or recompile with p/arpack support.' 
     call messages_fatal(2)     
 
-#endif  #HAVE_ARPACK
+#endif
+!HAVE_ARPACK
   
     POP_SUB(arpack_init)    
   end subroutine arpack_init
@@ -175,7 +177,6 @@ use batch_m
   subroutine arpack_debug(debug_level)
     integer, intent(in) :: debug_level
 
-   
 ! Modified from ARPACK debug.h 
 ! I don't think this is going to change too much.. well at least it didn't since 1997 :)
 !
@@ -196,7 +197,7 @@ use batch_m
              mcaupd, mcaup2, mcaitr, mceigh, mcapps, mcgets, mceupd
 
     PUSH_SUB(arpack_debug)
-    
+      
     ndigit = -3
     logfil = 6
     mnaitr = 0
@@ -212,8 +213,6 @@ use batch_m
     mceigh = 0
     mceupd = debug_level + 1
     mcgets = debug_level + 1
-  
-    
     
     POP_SUB(arpack_debug)
   end subroutine arpack_debug
@@ -418,7 +417,8 @@ use batch_m
     POP_SUB(arpack_check_error)
   end subroutine arpack_check_error
 
-#endif #HAVE_ARPACK  
+#endif
+!HAVE_ARPACK  
 
 #include "real.F90" 
 #include "eigen_arpack_inc.F90" 
