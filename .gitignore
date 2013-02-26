@@ -26,3 +26,5 @@ autom4te.cache/*
 build-aux/*
 .deps
 doc/*
+
+out.chk
