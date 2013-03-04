@@ -504,6 +504,7 @@ contains
     type(unit_system_t) :: file_units, ref_file_units
     type(batch_t) :: dipoleb, sigmab
     logical       :: cmplxscl
+    CMPLX, allocatable :: zdipole(:, :, :)
 
     PUSH_SUB(spectrum_cross_section)
 
@@ -573,7 +574,9 @@ contains
 
 
     if(cmplxscl) then
-      call batch_init(dipoleb, 3, 1, nspin, dipole + M_zI * Imdipole)
+      SAFE_ALLOCATE(zdipole(0:time_steps, 1:3, 1:nspin))
+      zdipole = dipole + M_zI * Imdipole
+      call batch_init(dipoleb, 3, 1, nspin, zdipole)
     else
       call batch_init(dipoleb, 3, 1, nspin, dipole)
     end if
@@ -581,6 +584,7 @@ contains
 
     call signal_damp(spectrum%damp, spectrum%damp_factor, istart + 1, iend + 1, dt, dipoleb, &
 					 kick_time=kick%time)
+
     if(cmplxscl) then
       call fourier_transform(spectrum%method, SPECTRUM_TRANSFORM_EXP, spectrum%noise, &
         istart + 1, iend + 1, kick%time, dt, dipoleb, 1, no_e + 1, spectrum%energy_step, sigmab, spectrum%cmplxscl)
@@ -593,6 +597,7 @@ contains
     call batch_end(sigmab)
 
     SAFE_DEALLOCATE_A(dipole)
+    SAFE_DEALLOCATE_A(zdipole)
     if(present(ref_file)) then
       SAFE_DEALLOCATE_A(ref_dipole)
     end if

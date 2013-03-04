@@ -900,15 +900,21 @@ contains
       else
         call zmf_multipoles(gr%mesh, st%zrho%Re(:,is) + M_zI * st%zrho%Im(:,is), lmax,&
           zmultipole(:,is), cmplxscl_th = st%cmplxscl%theta)
-        multipole (:,is) = real(zmultipole(:,is)) ! it should be real anyways 
       end if 
     end do
-    ! FIXME: with cmplxscl we need to think how to treat 
-    ! the ions dipole moment 
+
     call geometry_dipole(geo, ionic_dipole)
-    do is = 1, st%d%nspin
-      multipole(2:gr%mesh%sb%dim+1, is) = -ionic_dipole(1:gr%mesh%sb%dim)/st%d%nspin - multipole(2:gr%mesh%sb%dim+1, is)
-    end do
+    if(.not. cmplxscl) then
+      do is = 1, st%d%nspin
+        multipole(2:gr%mesh%sb%dim+1, is) = -ionic_dipole(1:gr%mesh%sb%dim)/st%d%nspin - multipole(2:gr%mesh%sb%dim+1, is)
+      end do
+    else
+      ! XXX: I am not completely sure the scaling of the ionic dipole is correct 
+      do is = 1, st%d%nspin
+        zmultipole(2:gr%mesh%sb%dim+1, is) = -ionic_dipole(1:gr%mesh%sb%dim) * exp(M_zI *st%cmplxscl%theta) / st%d%nspin &
+          - zmultipole(2:gr%mesh%sb%dim+1, is)
+      end do      
+    end if
 
     if(mpi_grp_is_root(mpi_world)) then
       call write_iter_start(out_multip)
@@ -916,11 +922,16 @@ contains
         add_lm = 1
         do ll = 0, lmax
           do mm = -ll, ll
-            if(cmplxscl .and. ll > 0 ) then
-              call write_iter_double(out_multip, units_from_atomic(units_out%length**ll,&
-                real(zmultipole(add_lm, is), REAL_PRECISION)), 1)
-              call write_iter_double(out_multip, units_from_atomic(units_out%length**ll,&
-                aimag(zmultipole(add_lm, is))), 1)
+            if(cmplxscl ) then
+              if(ll .eq. 0 ) then
+                call write_iter_double(out_multip, units_from_atomic(units_out%length**ll,&
+                  real(zmultipole(add_lm, is), REAL_PRECISION)), 1)
+              else
+                call write_iter_double(out_multip, units_from_atomic(units_out%length**ll,&
+                  real(zmultipole(add_lm, is), REAL_PRECISION)), 1)
+                call write_iter_double(out_multip, units_from_atomic(units_out%length**ll,&
+                  aimag(zmultipole(add_lm, is))), 1)
+              end if
             else
               call write_iter_double(out_multip, units_from_atomic(units_out%length**ll, multipole(add_lm, is)), 1)
             end if

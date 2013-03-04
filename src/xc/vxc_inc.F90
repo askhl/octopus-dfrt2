@@ -1298,7 +1298,6 @@ subroutine xc_get_vxc_cmplx(der, xcs, ispin, rho, Imrho, vxc, Imvxc, theta, ex, 
   ASSERT(present(ec) .eqv. present(Imec))
   calc_energy = present(ex)
   
-  !ASSERT(present(vxc) .eqv. present(Imvxc))
   ASSERT(present(ex) .eqv. present(Imex))
   ASSERT(present(ec) .eqv. present(Imec))
 
